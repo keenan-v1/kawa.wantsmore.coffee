@@ -1,0 +1,9 @@
+{$DOMAIN:localhost} {
+    reverse_proxy app:5173
+
+    # Enable TLS with automatic certificate from Let's Encrypt
+    # For localhost development, Caddy will use a self-signed certificate
+    tls {
+        on_demand
+    }
+}
