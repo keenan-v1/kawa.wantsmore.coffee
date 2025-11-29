@@ -99,7 +99,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
 import { roleService } from '../services/roleService'
 import { CURRENCIES } from '../types'
-import type { Currency, LocationDisplayMode } from '../types'
+import type { Currency, LocationDisplayMode, Role } from '../types'
 
 const userStore = useUserStore()
 const currencies = CURRENCIES
@@ -109,12 +109,19 @@ const locationDisplayModes: { title: string, value: LocationDisplayMode }[] = [
   { title: 'Mixed (names when available, codes otherwise)', value: 'mixed' }
 ]
 
-const account = ref({
+const account = ref<{
+  profileName: string
+  displayName: string
+  fioUsername: string
+  preferredCurrency: Currency
+  locationDisplayMode: LocationDisplayMode
+  roles: Role[]
+}>({
   profileName: '',
   displayName: '',
   fioUsername: '',
-  preferredCurrency: 'CIS' as Currency,
-  locationDisplayMode: 'names' as LocationDisplayMode,
+  preferredCurrency: 'CIS',
+  locationDisplayMode: 'names',
   roles: []
 })
 
@@ -131,7 +138,10 @@ const passwordForm = ref({
 onMounted(() => {
   const user = userStore.getUser()
   if (user) {
-    account.value = { ...user }
+    account.value = {
+      ...user,
+      locationDisplayMode: user.locationDisplayMode || 'names'
+    }
   }
 })
 

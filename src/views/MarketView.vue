@@ -28,7 +28,7 @@
         <template v-slot:item.location="{ item }">
           {{ locationService.getLocationDisplay(item.location, locationDisplayMode) }}
         </template>
-        <template v-slot:item.actions="{ item }">
+        <template v-slot:item.actions>
           <v-btn size="small" color="primary" variant="text">
             Order
           </v-btn>
@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { MarketListing, Currency } from '../types'
+import type { MarketListing } from '../types'
 import { commodityService } from '../services/commodityService'
 import { locationService } from '../services/locationService'
 import { marketService } from '../services/marketService'

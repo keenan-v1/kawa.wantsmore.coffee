@@ -18,11 +18,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
 
 const router = useRouter()
-const route = useRoute()
 const userStore = useUserStore()
 const isAuthenticated = ref(false)
 
