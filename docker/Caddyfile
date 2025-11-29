@@ -1,9 +1,12 @@
+# Global options
+{
+    # Email for Let's Encrypt certificate notifications
+    email {$ACME_EMAIL:}
+}
+
 {$DOMAIN:localhost} {
     reverse_proxy app:5173
 
-    # Enable TLS with automatic certificate from Let's Encrypt
-    # For localhost development, Caddy will use a self-signed certificate
-    tls {
-        on_demand
-    }
+    # TLS is automatic with Caddy when using a real domain
+    # Let's Encrypt will be used automatically for non-localhost domains
 }
