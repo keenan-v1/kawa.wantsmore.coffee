@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve dist -s -l ${PORT:-8080}"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
+    "serve": "^14.2.0",
     "vue": "^3.4.0",
     "vue-router": "^4.6.3",
     "vuetify": "^3.4.0"
