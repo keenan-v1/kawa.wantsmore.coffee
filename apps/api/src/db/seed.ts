@@ -1,6 +1,6 @@
 // Seed database with initial roles only
 // Commodities and locations will come from FIO API integration
-import { db, roles } from './index'
+import { db, roles } from './index.js'
 import postgres from 'postgres'
 
 // Initial roles for the application

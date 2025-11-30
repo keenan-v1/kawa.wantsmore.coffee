@@ -11,15 +11,26 @@
     "build": "tsoa spec-and-routes && tsc",
     "start": "node dist/index.js",
     "generate": "tsoa spec-and-routes",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:init": "tsx src/scripts/db-init-idempotent.ts",
+    "fio:sync": "tsx src/scripts/sync-fio.ts",
+    "fio:sync:commodities": "tsx src/scripts/sync-fio.ts commodities",
+    "fio:sync:locations": "tsx src/scripts/sync-fio.ts locations",
+    "fio:sync:stations": "tsx src/scripts/sync-fio.ts stations",
+    "admin:create": "tsx src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@kawakawa/types": "workspace:*",
     "@tsoa/runtime": "^6.4.0",
+    "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.44.7",
     "express": "^4.21.0",
     "postgres": "^3.4.7",
@@ -27,13 +38,16 @@
     "tsoa": "^6.4.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.15.6",
     "@types/swagger-ui-express": "^4.1.6",
+    "@vitest/ui": "^4.0.14",
     "concurrently": "^9.1.0",
     "drizzle-kit": "^0.31.7",
     "tsx": "^4.19.0",
-    "typescript": "~5.3.0"
+    "typescript": "~5.3.0",
+    "vitest": "^4.0.14"
   }
 }

@@ -1,14 +1,16 @@
 {
   "name": "KawaKawa Market",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/kawa.wantsmore.coffee",
   "customizations": {
     "vscode": {
       "extensions": [
         "Vue.volar",
         "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "cweijan.vscode-postgresql-client2",
+        "Anthropic.claude-code"
       ],
       "settings": {
         "editor.formatOnSave": true,
@@ -16,7 +18,10 @@
       }
     }
   },
-  "forwardPorts": [3000, 5173, 8080],
-  "postCreateCommand": "npm install -g pnpm && pnpm install",
-  "containerUser": "node"
+  "forwardPorts": [3000, 5173, 8080, 5432, 4983],
+  "postCreateCommand": "pnpm install",
+  "containerUser": "node",
+  "mounts": [
+    "source=${localEnv:HOME}/.claude-code,target=/home/node/.claude-code,type=bind,consistency=cached"
+  ]
 }

@@ -13,6 +13,40 @@ databases:
     name: dev-db
     version: "17"
 
+# Database migration and initialization jobs
+jobs:
+  # Run migrations before deployment
+  - name: db-migrate
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: keenan-v1/kawa.wantsmore.coffee
+    source_dir: /
+    build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api build
+    run_command: cd apps/api && pnpm db:migrate
+    environment_slug: node-js
+    kind: PRE_DEPLOY
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${dev-db.DATABASE_URL}
+
+  # Initialize database with seed data and FIO sync (idempotent - safe to run multiple times)
+  - name: db-init
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: keenan-v1/kawa.wantsmore.coffee
+    source_dir: /
+    build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api build
+    run_command: cd apps/api && pnpm db:init
+    environment_slug: node-js
+    kind: POST_DEPLOY
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${dev-db.DATABASE_URL}
+
 # Static site for the Vue frontend
 static_sites:
   - name: kawa-web

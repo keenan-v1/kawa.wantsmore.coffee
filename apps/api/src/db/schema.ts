@@ -6,7 +6,7 @@ import { relations } from 'drizzle-orm'
 
 // Enums
 export const currencyEnum = pgEnum('currency', ['ICA', 'CIS', 'AIC', 'NCC'])
-export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet', 'Platform', 'Ship'])
+export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet'])
 export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names', 'codes', 'mixed'])
 
 // ==================== ROLES ====================
@@ -51,9 +51,9 @@ export const commodities = pgTable('commodities', {
 export const locations = pgTable('locations', {
   id: varchar('id', { length: 20 }).primaryKey(), // 'BEN', 'UV-351a', 'KW-689c', etc.
   name: varchar('name', { length: 100 }).notNull(), // 'Benton Station', 'Katoa', etc.
-  type: locationTypeEnum('type').notNull(),
-  systemCode: varchar('system_code', { length: 20 }).notNull(), // 'UV-351', 'KW-689', etc.
-  systemName: varchar('system_name', { length: 100 }).notNull(), // 'Benton', 'Shadow Garden', etc.
+  type: locationTypeEnum('type').notNull(), // 'Station' or 'Planet'
+  systemCode: varchar('system_code', { length: 20 }).notNull(), // 'UV-351', 'KW-689', 'TD-203', etc.
+  systemName: varchar('system_name', { length: 100 }).notNull(), // 'Benton', 'Shadow Garden', 'Hubur', etc.
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })

@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspaces/kawa.wantsmore.coffee:cached
+    command: sleep infinity
+    network_mode: service:db
+    environment:
+      - DATABASE_URL=postgresql://kawa:kawa_dev_password@localhost:5432/kawa_market
+      - NODE_ENV=development
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=kawa
+      - POSTGRES_PASSWORD=kawa_dev_password
+      - POSTGRES_DB=kawa_market
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres-data:
