@@ -21,7 +21,7 @@ static_sites:
       deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     source_dir: /
-    build_command: npm install -g pnpm && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/web build
+    build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/web build
     output_dir: apps/web/dist
     environment_slug: node-js
     routes:
@@ -35,7 +35,7 @@ services:
       deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     source_dir: /
-    build_command: npm install -g pnpm && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api build
+    build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api build
     run_command: node apps/api/dist/index.js
     environment_slug: node-js
     http_port: 3000
