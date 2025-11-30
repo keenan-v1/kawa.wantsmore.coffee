@@ -1,4 +1,4 @@
-import express, { json, urlencoded, Request, Response, NextFunction, Router } from 'express'
+import express, { json, urlencoded, Request, Response, NextFunction } from 'express'
 import swaggerUi from 'swagger-ui-express'
 import { RegisterRoutes } from './generated/routes.js'
 import swaggerDocument from './generated/swagger.json' with { type: 'json' }
@@ -8,13 +8,11 @@ const app = express()
 app.use(json())
 app.use(urlencoded({ extended: true }))
 
-// Swagger UI
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
+// Swagger UI - at /docs since DigitalOcean routes /api/* here (stripping /api prefix)
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 
-// Create router for API routes and mount under /api
-const apiRouter = Router()
-RegisterRoutes(apiRouter)
-app.use('/api', apiRouter)
+// Register TSOA routes directly (DigitalOcean strips /api prefix before forwarding)
+RegisterRoutes(app)
 
 // Error handling
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
