@@ -8,14 +8,19 @@ export default createVuetify({
   components,
   directives,
   theme: {
-    defaultTheme: 'dark',
+    defaultTheme: 'kawa',
     themes: {
-      dark: {
+      kawa: {
+        dark: true,
         colors: {
-          primary: '#8B5A2B',
-          secondary: '#D4A574',
-          background: '#1A1A1A',
-          surface: '#2D2D2D'
+          primary: '#0e679a',
+          secondary: '#afafaf',
+          background: '#242b2f',
+          surface: '#2f383d',
+          'surface-bright': '#3a454b',
+          'surface-variant': '#354048',
+          'on-surface': '#afafaf',
+          'on-background': '#afafaf'
         }
       }
     }

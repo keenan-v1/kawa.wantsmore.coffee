@@ -8,8 +8,7 @@
       "extensions": [
         "Vue.volar",
         "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss"
+        "esbenp.prettier-vscode"
       ],
       "settings": {
         "editor.formatOnSave": true,
@@ -17,7 +16,7 @@
       }
     }
   },
-  "forwardPorts": [5173],
-  "postCreateCommand": "npm install",
+  "forwardPorts": [3000, 5173, 8080],
+  "postCreateCommand": "npm install -g pnpm && pnpm install",
   "containerUser": "node"
 }

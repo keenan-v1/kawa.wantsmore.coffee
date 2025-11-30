@@ -1,4 +1,4 @@
-// Application types
+// Shared types for KawaKawa Market
 
 export type Currency = 'ICA' | 'CIS' | 'AIC' | 'NCC'
 
@@ -11,11 +11,11 @@ export interface Commodity {
 }
 
 export interface Location {
-  id: string  // Destination code (e.g., BEN, KW-020c)
-  name: string  // Destination name (e.g., Benton Station, Katoa, KW-689c)
+  id: string // Destination code (e.g., BEN, KW-020c)
+  name: string // Destination name (e.g., Benton Station, Katoa, KW-689c)
   type: 'Station' | 'Planet' | 'Platform' | 'Ship'
-  systemCode: string  // System code (e.g., UV-351, KW-689)
-  systemName: string  // System name (e.g., Benton, Shadow Garden)
+  systemCode: string // System code (e.g., UV-351, KW-689)
+  systemName: string // System name (e.g., Benton, Shadow Garden)
 }
 
 export type LocationDisplayMode = 'names' | 'codes' | 'mixed'
@@ -30,34 +30,34 @@ export interface User {
   displayName: string
   fioUsername: string
   preferredCurrency: Currency
-  locationDisplayMode?: LocationDisplayMode  // Optional, defaults to 'names'
-  roles: Role[]  // One user to many roles
+  locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'names'
+  roles: Role[] // One user to many roles
 }
 
 export interface InventoryItem {
   id: number
-  commodity: string  // ticker
+  commodity: string // ticker
   quantity: number
   price: number
   currency: Currency
-  location: string  // location ID
+  location: string // location ID
 }
 
 export interface Demand {
   id: number
-  commodity: string  // ticker
+  commodity: string // ticker
   quantity: number
   maxPrice: number
   currency: Currency
-  deliveryLocation: string  // location ID
+  deliveryLocation: string // location ID
 }
 
 export interface MarketListing {
   id: number
-  commodity: string  // ticker
+  commodity: string // ticker
   seller: string
   quantity: number
   price: number
   currency: Currency
-  location: string  // location ID
+  location: string // location ID
 }

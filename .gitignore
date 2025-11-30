@@ -1,5 +1,9 @@
+# Claude
+.claude/settings.local.json
+
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # Build output
 dist/
@@ -39,3 +43,13 @@ coverage/
 
 # Vite
 *.local
+
+# Turborepo
+.turbo/
+
+# tsoa generated files
+apps/api/src/generated/
+
+# Generated API client (keep index.ts)
+packages/client/src/*.ts
+!packages/client/src/index.ts
