@@ -55,11 +55,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { api } from '../services/api'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const profileName = ref('')
 const password = ref('')
@@ -81,7 +82,10 @@ const handleLogin = async () => {
       // Store JWT token and user data
       localStorage.setItem('jwt', data.token)
       userStore.setUser(data.user)
-      router.push('/market')
+
+      // Redirect to the intended destination or default to /market
+      const redirectTo = (route.query.redirect as string) || '/market'
+      router.push(redirectTo)
     } else if (response.status === 404) {
       // Account doesn't exist - we can indicate this
       errorMessage.value = 'Account not found. Please check your profile name or register.'

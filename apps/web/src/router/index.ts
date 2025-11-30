@@ -11,7 +11,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/login'
+      redirect: '/market'
     },
     {
       path: '/login',
@@ -46,6 +46,10 @@ const router = createRouter({
       name: 'account',
       component: AccountView,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/market'
     }
   ]
 })
@@ -55,7 +59,12 @@ router.beforeEach((to, _from, next) => {
   const jwt = localStorage.getItem('jwt')
 
   if (to.meta.requiresAuth && !jwt) {
-    next('/login')
+    // Save the intended destination for post-login redirect
+    const redirectPath = to.fullPath !== '/login' ? to.fullPath : '/market'
+    next({
+      path: '/login',
+      query: { redirect: redirectPath }
+    })
   } else {
     next()
   }
