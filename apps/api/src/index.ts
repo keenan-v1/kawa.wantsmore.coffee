@@ -1,4 +1,4 @@
-import express, { json, urlencoded, Request, Response, NextFunction } from 'express'
+import express, { json, urlencoded, Request, Response, NextFunction, Router } from 'express'
 import swaggerUi from 'swagger-ui-express'
 import { RegisterRoutes } from './generated/routes.js'
 import swaggerDocument from './generated/swagger.json' with { type: 'json' }
@@ -11,8 +11,10 @@ app.use(urlencoded({ extended: true }))
 // Swagger UI
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 
-// Register tsoa routes
-RegisterRoutes(app)
+// Create router for API routes and mount under /api
+const apiRouter = Router()
+RegisterRoutes(apiRouter)
+app.use('/api', apiRouter)
 
 // Error handling
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
