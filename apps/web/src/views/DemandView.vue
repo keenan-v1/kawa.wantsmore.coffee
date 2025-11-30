@@ -19,7 +19,7 @@
             item-value="id"
           >
             <template v-slot:item.commodity="{ item }">
-              {{ commodityService.getCommodityDisplay(item.commodity) }}
+              {{ commodityService.getCommodityDisplay(item.commodity, commodityDisplayMode) }}
             </template>
             <template v-slot:item.maxPrice="{ item }">
               {{ formatPrice(item) }}
@@ -149,8 +149,9 @@ const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const loading = ref(false)
 
-// Get location options based on user's display preference
+// Get display preferences
 const locationDisplayMode = userStore.getLocationDisplayMode()
+const commodityDisplayMode = userStore.getCommodityDisplayMode()
 const locationOptions = ref<Array<{ title: string; value: string }>>([])
 
 const headers = [
@@ -195,7 +196,7 @@ onMounted(async () => {
   // Set default currency from user preference
   newDemand.value.currency = userStore.getPreferredCurrency()
   // Load commodity and location options
-  commodityOptions.value = await commodityService.getCommodityOptions()
+  commodityOptions.value = await commodityService.getCommodityOptions(commodityDisplayMode)
   locationOptions.value = await locationService.getLocationOptions(locationDisplayMode)
   // Load demands from backend
   await loadDemands()

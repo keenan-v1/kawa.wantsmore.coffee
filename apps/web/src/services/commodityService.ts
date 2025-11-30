@@ -1,6 +1,7 @@
 // Commodity service - fetches from backend API
 
-import type { Commodity } from '../types'
+import type { Commodity, CommodityDisplayMode } from '../types'
+import { camelCaseToHumanReadable } from '../utils/formatting'
 
 // Cache for commodities to avoid repeated API calls
 let cachedCommodities: Commodity[] | null = null
@@ -38,23 +39,35 @@ export const commodityService = {
     return commodities.find(c => c.ticker === ticker)
   },
 
-  // Get commodity display name (ticker - name)
-  getCommodityDisplay: (ticker: string): string => {
+  // Get commodity display with flexible mode
+  // ticker-only: "RAT"
+  // name-only: "Basic Rations"
+  // both: "RAT - Basic Rations"
+  getCommodityDisplay: (ticker: string, mode: CommodityDisplayMode = 'both'): string => {
     // Synchronous fallback for display - shows ticker until data loads
     if (!cachedCommodities) {
       return ticker
     }
     const commodity = cachedCommodities.find(c => c.ticker === ticker)
-    return commodity ? `${commodity.ticker} - ${commodity.name}` : ticker
+    if (!commodity) return ticker
+
+    if (mode === 'ticker-only') {
+      return commodity.ticker
+    } else if (mode === 'name-only') {
+      return camelCaseToHumanReadable(commodity.name)
+    } else {
+      // both: ticker - name
+      return `${commodity.ticker} - ${camelCaseToHumanReadable(commodity.name)}`
+    }
   },
 
   // Get commodities for dropdown (returns array of { title, value })
-  getCommodityOptions: async () => {
+  getCommodityOptions: async (mode: CommodityDisplayMode = 'both') => {
     const commodities = await fetchCommodities()
     return commodities
       .sort((a, b) => a.ticker.localeCompare(b.ticker))
       .map(c => ({
-        title: `${c.ticker} - ${c.name}`,
+        title: commodityService.getCommodityDisplay(c.ticker, mode),
         value: c.ticker
       }))
   },

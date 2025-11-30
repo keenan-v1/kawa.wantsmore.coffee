@@ -20,7 +20,7 @@
         item-value="id"
       >
         <template v-slot:item.commodity="{ item }">
-          {{ commodityService.getCommodityDisplay(item.commodity) }}
+          {{ commodityService.getCommodityDisplay(item.commodity, commodityDisplayMode) }}
         </template>
         <template v-slot:item.price="{ item }">
           {{ formatPrice(item) }}
@@ -52,6 +52,7 @@ const loading = ref(false)
 
 // Get location display mode from user preferences
 const locationDisplayMode = userStore.getLocationDisplayMode()
+const commodityDisplayMode = userStore.getCommodityDisplayMode()
 
 const headers = [
   { title: 'Commodity', key: 'commodity', sortable: true },

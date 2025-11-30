@@ -18,7 +18,9 @@ export interface Location {
   systemName: string // System name (e.g., Benton, Shadow Garden)
 }
 
-export type LocationDisplayMode = 'names' | 'codes' | 'mixed'
+export type LocationDisplayMode = 'names-only' | 'natural-ids-only' | 'both'
+
+export type CommodityDisplayMode = 'ticker-only' | 'name-only' | 'both'
 
 export interface Role {
   id: string
@@ -30,7 +32,8 @@ export interface User {
   displayName: string
   fioUsername: string
   preferredCurrency: Currency
-  locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'names'
+  locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
+  commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
   roles: Role[] // One user to many roles
 }
 

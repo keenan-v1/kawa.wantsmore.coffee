@@ -39,10 +39,15 @@ export const locationService = {
   },
 
   // Get location display with flexible mode
-  // names: "Benton Station (Benton)" or "Katoa (Benton)" or "KW-689c (KW-689)"
-  // codes: "BEN (UV-351)" or "UV-351a (UV-351)" or "KW-689c (KW-689)"
-  // mixed: uses names for named locations, codes for unnamed ones
-  getLocationDisplay: (id: string, mode: LocationDisplayMode = 'names'): string => {
+  // For planets:
+  //   names-only: "Katoa"
+  //   natural-ids-only: "UV-351a"
+  //   both: "Katoa (UV-351a)"
+  // For stations:
+  //   names-only: "Benton Station"
+  //   natural-ids-only: "BEN"
+  //   both: "Benton Station (BEN)"
+  getLocationDisplay: (id: string, mode: LocationDisplayMode = 'names-only'): string => {
     // Synchronous fallback for display - shows ID until data loads
     if (!cachedLocations) {
       return id
@@ -50,23 +55,20 @@ export const locationService = {
     const location = cachedLocations.find(l => l.id === id)
     if (!location) return id
 
-    if (mode === 'codes') {
-      return `${location.id} (${location.systemCode})`
-    } else if (mode === 'names') {
-      return `${location.name} (${location.systemName})`
+    if (mode === 'natural-ids-only') {
+      // Show only the natural ID (destination code)
+      return location.id
+    } else if (mode === 'names-only') {
+      // Show only the name
+      return location.name
     } else {
-      // mixed mode - use names if available, otherwise codes
-      const hasCustomName = location.name !== location.id
-      if (hasCustomName) {
-        return `${location.name} (${location.systemName})`
-      } else {
-        return `${location.id} (${location.systemCode})`
-      }
+      // both: show name with natural ID in parentheses
+      return `${location.name} (${location.id})`
     }
   },
 
   // Get locations for dropdown (returns array of { title, value })
-  getLocationOptions: async (mode: LocationDisplayMode = 'names') => {
+  getLocationOptions: async (mode: LocationDisplayMode = 'names-only') => {
     const locations = await fetchLocations()
     return locations
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -103,7 +105,7 @@ export const locationService = {
   },
 
   // Get stations only (for dropdowns)
-  getStationOptions: async (mode: LocationDisplayMode = 'names') => {
+  getStationOptions: async (mode: LocationDisplayMode = 'names-only') => {
     const locations = await fetchLocations()
     return locations
       .filter(l => l.type === 'Station')
@@ -115,7 +117,7 @@ export const locationService = {
   },
 
   // Get planets only (for dropdowns)
-  getPlanetOptions: async (mode: LocationDisplayMode = 'names') => {
+  getPlanetOptions: async (mode: LocationDisplayMode = 'names-only') => {
     const locations = await fetchLocations()
     return locations
       .filter(l => l.type === 'Planet')

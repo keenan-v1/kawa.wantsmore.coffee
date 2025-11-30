@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Put, Route, Security, Tags } from 'tsoa'
-import type { Currency, LocationDisplayMode, Role } from '@kawakawa/types'
+import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '@kawakawa/types'
 
 interface UserProfile {
   profileName: string
@@ -7,6 +7,7 @@ interface UserProfile {
   fioUsername: string
   preferredCurrency: Currency
   locationDisplayMode: LocationDisplayMode
+  commodityDisplayMode: CommodityDisplayMode
   roles: Role[]
 }
 
@@ -15,6 +16,7 @@ interface UpdateProfileRequest {
   fioUsername?: string
   preferredCurrency?: Currency
   locationDisplayMode?: LocationDisplayMode
+  commodityDisplayMode?: CommodityDisplayMode
 }
 
 interface ChangePasswordRequest {
@@ -34,7 +36,8 @@ export class AccountController extends Controller {
       displayName: '',
       fioUsername: '',
       preferredCurrency: 'CIS',
-      locationDisplayMode: 'names',
+      locationDisplayMode: 'both',
+      commodityDisplayMode: 'both',
       roles: [],
     }
   }
@@ -47,7 +50,8 @@ export class AccountController extends Controller {
       displayName: body.displayName || '',
       fioUsername: body.fioUsername || '',
       preferredCurrency: body.preferredCurrency || 'CIS',
-      locationDisplayMode: body.locationDisplayMode || 'names',
+      locationDisplayMode: body.locationDisplayMode || 'both',
+      commodityDisplayMode: body.commodityDisplayMode || 'both',
       roles: [],
     }
   }

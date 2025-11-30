@@ -7,7 +7,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "concurrently \"tsoa spec-and-routes\" \"tsx watch src/index.ts\"",
+    "dev": "concurrently \"tsoa spec-and-routes\" \"tsx watch --env-file-if-exists=.env src/index.ts\"",
+    "dev:debug": "concurrently \"tsoa spec-and-routes\" \"tsx watch --inspect --env-file-if-exists=.env src/index.ts\"",
     "build": "tsoa spec-and-routes && tsc",
     "start": "node dist/index.js",
     "generate": "tsoa spec-and-routes",
@@ -19,13 +20,13 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/db/seed.ts",
-    "db:init": "tsx src/scripts/db-init-idempotent.ts",
-    "fio:sync": "tsx src/scripts/sync-fio.ts",
-    "fio:sync:commodities": "tsx src/scripts/sync-fio.ts commodities",
-    "fio:sync:locations": "tsx src/scripts/sync-fio.ts locations",
-    "fio:sync:stations": "tsx src/scripts/sync-fio.ts stations",
-    "admin:create": "tsx src/scripts/create-admin.ts"
+    "db:seed": "tsx --env-file-if-exists=.env src/db/seed.ts",
+    "db:init": "tsx --env-file-if-exists=.env src/scripts/db-init-idempotent.ts",
+    "fio:sync": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts",
+    "fio:sync:commodities": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts commodities",
+    "fio:sync:locations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts locations",
+    "fio:sync:stations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts stations",
+    "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@kawakawa/types": "workspace:*",

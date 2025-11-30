@@ -1,6 +1,6 @@
 // User store for managing user state across the application
 import { ref } from 'vue'
-import type { User, Currency, LocationDisplayMode } from '../types'
+import type { User, Currency, LocationDisplayMode, CommodityDisplayMode } from '../types'
 
 const currentUser = ref<User | null>(null)
 
@@ -50,7 +50,19 @@ export const useUserStore = () => {
 
   const getLocationDisplayMode = (): LocationDisplayMode => {
     const user = getUser()
-    return user?.locationDisplayMode || 'names'
+    return user?.locationDisplayMode || 'both'
+  }
+
+  const updateCommodityDisplayMode = (mode: CommodityDisplayMode) => {
+    if (currentUser.value) {
+      currentUser.value.commodityDisplayMode = mode
+      localStorage.setItem('user', JSON.stringify(currentUser.value))
+    }
+  }
+
+  const getCommodityDisplayMode = (): CommodityDisplayMode => {
+    const user = getUser()
+    return user?.commodityDisplayMode || 'both'
   }
 
   return {
@@ -61,6 +73,8 @@ export const useUserStore = () => {
     clearUser,
     getPreferredCurrency,
     updateLocationDisplayMode,
-    getLocationDisplayMode
+    getLocationDisplayMode,
+    updateCommodityDisplayMode,
+    getCommodityDisplayMode
   }
 }
