@@ -20,6 +20,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
+import { commodityService } from './services/commodityService'
+import { locationService } from './services/locationService'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -41,5 +43,11 @@ onMounted(() => {
   router.afterEach(() => {
     checkAuth()
   })
+
+  // Prefetch commodities and locations data on app startup
+  if (isAuthenticated.value) {
+    commodityService.prefetch().catch(err => console.error('Failed to prefetch commodities:', err))
+    locationService.prefetch().catch(err => console.error('Failed to prefetch locations:', err))
+  }
 })
 </script>

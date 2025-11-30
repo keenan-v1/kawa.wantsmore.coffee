@@ -144,14 +144,14 @@ import { marketService } from '../services/marketService'
 
 const userStore = useUserStore()
 const currencies = CURRENCIES
-const commodityOptions = commodityService.getCommodityOptions()
+const commodityOptions = ref<Array<{ title: string; value: string }>>([])
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const loading = ref(false)
 
 // Get location options based on user's display preference
 const locationDisplayMode = userStore.getLocationDisplayMode()
-const locationOptions = locationService.getLocationOptions(locationDisplayMode)
+const locationOptions = ref<Array<{ title: string; value: string }>>([])
 
 const headers = [
   { title: 'Commodity', key: 'commodity', sortable: true },
@@ -194,6 +194,9 @@ const loadInventory = async () => {
 onMounted(async () => {
   // Set default currency from user preference
   newItem.value.currency = userStore.getPreferredCurrency()
+  // Load dropdown options from API
+  commodityOptions.value = await commodityService.getCommodityOptions()
+  locationOptions.value = await locationService.getLocationOptions(locationDisplayMode)
   // Load inventory from backend
   await loadInventory()
 })

@@ -1,47 +1,41 @@
-// Location service - mock FIO location data
-// Will be replaced with actual FIO API integration
+// Location service - fetches from backend API
 
 import type { Location, LocationDisplayMode } from '../types'
 
-// Mock location data from Prosperous Universe
-const MOCK_LOCATIONS: Location[] = [
-  // Stations
-  { id: 'ANT', name: 'Antares Station', type: 'Station', systemCode: 'ZV-307', systemName: 'Antares' },
-  { id: 'BEN', name: 'Benton Station', type: 'Station', systemCode: 'UV-351', systemName: 'Benton' },
-  { id: 'HRT', name: 'Hortus Station', type: 'Station', systemCode: 'VH-331', systemName: 'Hortus' },
-  { id: 'MOR', name: 'Moria Station', type: 'Station', systemCode: 'YI-320', systemName: 'Moria' },
-  { id: 'PRM', name: 'Prometheus Station', type: 'Station', systemCode: 'ZV-194', systemName: 'Promitor' },
+// Cache for locations to avoid repeated API calls
+let cachedLocations: Location[] | null = null
 
-  // CX Stations (Commodity Exchanges)
-  { id: 'NC1', name: 'Cibus Nictor', type: 'Station', systemCode: 'XH-886', systemName: 'Nictor' },
-  { id: 'IC1', name: 'Fort Ankh', type: 'Station', systemCode: 'XJ-150', systemName: 'Ankh' },
-  { id: 'AI1', name: 'Moria Terminal', type: 'Station', systemCode: 'YI-320', systemName: 'Moria' },
-  { id: 'CI1', name: 'Hortus Junction', type: 'Station', systemCode: 'VH-331', systemName: 'Hortus' },
+// Fetch locations from backend API
+const fetchLocations = async (): Promise<Location[]> => {
+  if (cachedLocations) {
+    return cachedLocations
+  }
 
-  // Planets - various systems
-  { id: 'UV-351a', name: 'Benton', type: 'Planet', systemCode: 'UV-351', systemName: 'Benton' },
-  { id: 'KW-020c', name: 'Katoa', type: 'Planet', systemCode: 'UV-351', systemName: 'Benton' },
-  { id: 'KW-689c', name: 'KW-689c', type: 'Planet', systemCode: 'KW-689', systemName: 'KW-689' },
-  { id: 'RC-040c', name: 'RC-040c', type: 'Planet', systemCode: 'RC-040', systemName: 'RC-040' },
-  { id: 'ZV-194a', name: 'Promitor', type: 'Planet', systemCode: 'ZV-194', systemName: 'Promitor' },
-  { id: 'ZV-194b', name: 'Montem', type: 'Planet', systemCode: 'ZV-194', systemName: 'Promitor' },
-  { id: 'YI-320a', name: 'Moria', type: 'Planet', systemCode: 'YI-320', systemName: 'Moria' },
-  { id: 'YI-320b', name: 'Harmonia', type: 'Planet', systemCode: 'YI-320', systemName: 'Moria' },
-  { id: 'VH-331a', name: 'Hortus', type: 'Planet', systemCode: 'VH-331', systemName: 'Hortus' },
-  { id: 'VH-331b', name: 'Dysnomia', type: 'Planet', systemCode: 'VH-331', systemName: 'Hortus' },
-  { id: 'ZV-307a', name: 'Antares', type: 'Planet', systemCode: 'ZV-307', systemName: 'Antares' },
-  { id: 'ZV-307b', name: 'Kamala', type: 'Planet', systemCode: 'ZV-307', systemName: 'Antares' },
-]
+  try {
+    const response = await fetch('/api/locations')
+    if (!response.ok) {
+      throw new Error(`Failed to fetch locations: ${response.statusText}`)
+    }
+    const data = await response.json()
+    cachedLocations = data
+    return data
+  } catch (error) {
+    console.error('Error fetching locations:', error)
+    return []
+  }
+}
 
 export const locationService = {
   // Get all locations
-  getAllLocations: (): Location[] => {
-    return [...MOCK_LOCATIONS].sort((a, b) => a.name.localeCompare(b.name))
+  getAllLocations: async (): Promise<Location[]> => {
+    const locations = await fetchLocations()
+    return [...locations].sort((a, b) => a.name.localeCompare(b.name))
   },
 
   // Get location by ID
-  getLocationById: (id: string): Location | undefined => {
-    return MOCK_LOCATIONS.find(l => l.id === id)
+  getLocationById: async (id: string): Promise<Location | undefined> => {
+    const locations = await fetchLocations()
+    return locations.find(l => l.id === id)
   },
 
   // Get location display with flexible mode
@@ -49,7 +43,11 @@ export const locationService = {
   // codes: "BEN (UV-351)" or "UV-351a (UV-351)" or "KW-689c (KW-689)"
   // mixed: uses names for named locations, codes for unnamed ones
   getLocationDisplay: (id: string, mode: LocationDisplayMode = 'names'): string => {
-    const location = MOCK_LOCATIONS.find(l => l.id === id)
+    // Synchronous fallback for display - shows ID until data loads
+    if (!cachedLocations) {
+      return id
+    }
+    const location = cachedLocations.find(l => l.id === id)
     if (!location) return id
 
     if (mode === 'codes') {
@@ -68,8 +66,9 @@ export const locationService = {
   },
 
   // Get locations for dropdown (returns array of { title, value })
-  getLocationOptions: (mode: LocationDisplayMode = 'names') => {
-    return MOCK_LOCATIONS
+  getLocationOptions: async (mode: LocationDisplayMode = 'names') => {
+    const locations = await fetchLocations()
+    return locations
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
         title: locationService.getLocationDisplay(l.id, mode),
@@ -78,30 +77,35 @@ export const locationService = {
   },
 
   // Get locations by type
-  getLocationsByType: (type: Location['type']): Location[] => {
-    return MOCK_LOCATIONS.filter(l => l.type === type)
+  getLocationsByType: async (type: Location['type']): Promise<Location[]> => {
+    const locations = await fetchLocations()
+    return locations.filter(l => l.type === type)
   },
 
   // Get locations by system code
-  getLocationsBySystemCode: (systemCode: string): Location[] => {
-    return MOCK_LOCATIONS.filter(l => l.systemCode === systemCode)
+  getLocationsBySystemCode: async (systemCode: string): Promise<Location[]> => {
+    const locations = await fetchLocations()
+    return locations.filter(l => l.systemCode === systemCode)
   },
 
   // Get all system codes
-  getSystemCodes: (): string[] => {
-    const systems = new Set(MOCK_LOCATIONS.map(l => l.systemCode))
+  getSystemCodes: async (): Promise<string[]> => {
+    const locations = await fetchLocations()
+    const systems = new Set(locations.map(l => l.systemCode))
     return Array.from(systems).sort()
   },
 
   // Get all system names
-  getSystemNames: (): string[] => {
-    const systems = new Set(MOCK_LOCATIONS.map(l => l.systemName))
+  getSystemNames: async (): Promise<string[]> => {
+    const locations = await fetchLocations()
+    const systems = new Set(locations.map(l => l.systemName))
     return Array.from(systems).sort()
   },
 
   // Get stations only (for dropdowns)
-  getStationOptions: (mode: LocationDisplayMode = 'names') => {
-    return MOCK_LOCATIONS
+  getStationOptions: async (mode: LocationDisplayMode = 'names') => {
+    const locations = await fetchLocations()
+    return locations
       .filter(l => l.type === 'Station')
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
@@ -111,13 +115,24 @@ export const locationService = {
   },
 
   // Get planets only (for dropdowns)
-  getPlanetOptions: (mode: LocationDisplayMode = 'names') => {
-    return MOCK_LOCATIONS
+  getPlanetOptions: async (mode: LocationDisplayMode = 'names') => {
+    const locations = await fetchLocations()
+    return locations
       .filter(l => l.type === 'Planet')
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
         title: locationService.getLocationDisplay(l.id, mode),
         value: l.id
       }))
+  },
+
+  // Prefetch locations (call this on app startup)
+  prefetch: async (): Promise<void> => {
+    await fetchLocations()
+  },
+
+  // Clear cache (useful for refresh)
+  clearCache: (): void => {
+    cachedLocations = null
   }
 }
