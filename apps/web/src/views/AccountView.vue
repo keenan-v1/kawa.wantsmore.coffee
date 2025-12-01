@@ -2,9 +2,13 @@
   <v-container>
     <h1 class="text-h4 mb-4">Account Management</h1>
 
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
+      {{ snackbar.message }}
+    </v-snackbar>
+
     <v-row>
       <v-col cols="12" md="6">
-        <v-card>
+        <v-card :loading="loading">
           <v-card-title>Profile Information</v-card-title>
           <v-card-text>
             <v-form>
@@ -57,7 +61,12 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn color="primary" @click="saveProfile">
+            <v-btn
+              color="primary"
+              @click="saveProfile"
+              :loading="savingProfile"
+              :disabled="savingProfile || loading"
+            >
               Save Changes
             </v-btn>
           </v-card-actions>
@@ -65,7 +74,7 @@
       </v-col>
 
       <v-col cols="12" md="6">
-        <v-card>
+        <v-card :loading="loading">
           <v-card-title>Change Password</v-card-title>
           <v-card-text>
             <v-form>
@@ -91,7 +100,12 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn color="primary" @click="changePassword">
+            <v-btn
+              color="primary"
+              @click="changePassword"
+              :loading="changingPassword"
+              :disabled="changingPassword || loading"
+            >
               Update Password
             </v-btn>
           </v-card-actions>
@@ -107,6 +121,7 @@ import { useUserStore } from '../stores/user'
 import { roleService } from '../services/roleService'
 import { CURRENCIES } from '../types'
 import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
+import { api } from '../services/api'
 
 const userStore = useUserStore()
 const currencies = CURRENCIES
@@ -149,38 +164,97 @@ const passwordForm = ref({
   confirm: ''
 })
 
-onMounted(() => {
-  const user = userStore.getUser()
-  if (user) {
+const loading = ref(false)
+const savingProfile = ref(false)
+const changingPassword = ref(false)
+const snackbar = ref({
+  show: false,
+  message: '',
+  color: 'success'
+})
+
+const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
+  snackbar.value = {
+    show: true,
+    message,
+    color
+  }
+}
+
+onMounted(async () => {
+  try {
+    loading.value = true
+    const profile = await api.account.getProfile()
     account.value = {
-      ...user,
-      locationDisplayMode: user.locationDisplayMode || 'both',
-      commodityDisplayMode: user.commodityDisplayMode || 'both'
+      ...profile,
+      locationDisplayMode: profile.locationDisplayMode || 'both',
+      commodityDisplayMode: profile.commodityDisplayMode || 'both'
     }
+    userStore.setUser(profile)
+  } catch (error) {
+    console.error('Failed to load profile', error)
+    // Fallback to localStorage
+    const cachedUser = userStore.getUser()
+    if (cachedUser) {
+      account.value = {
+        ...cachedUser,
+        locationDisplayMode: cachedUser.locationDisplayMode || 'both',
+        commodityDisplayMode: cachedUser.commodityDisplayMode || 'both'
+      }
+    }
+    showSnackbar('Failed to load profile from server', 'error')
+  } finally {
+    loading.value = false
   }
 })
 
-const saveProfile = () => {
-  // TODO: Implement backend integration
-  console.log('Saving profile:', account.value)
+const saveProfile = async () => {
+  try {
+    savingProfile.value = true
+    const updated = await api.account.updateProfile({
+      displayName: account.value.displayName,
+      fioUsername: account.value.fioUsername || '',
+      preferredCurrency: account.value.preferredCurrency,
+      locationDisplayMode: account.value.locationDisplayMode,
+      commodityDisplayMode: account.value.commodityDisplayMode
+    })
 
-  // Update user store
-  userStore.setUser(account.value)
-  userStore.updateCurrency(account.value.preferredCurrency)
-  userStore.updateLocationDisplayMode(account.value.locationDisplayMode)
-  userStore.updateCommodityDisplayMode(account.value.commodityDisplayMode)
-
-  alert('Profile updated successfully')
+    userStore.setUser(updated)
+    showSnackbar('Profile updated successfully')
+  } catch (error) {
+    console.error('Failed to update profile', error)
+    showSnackbar('Failed to update profile', 'error')
+  } finally {
+    savingProfile.value = false
+  }
 }
 
-const changePassword = () => {
+const changePassword = async () => {
   if (passwordForm.value.new !== passwordForm.value.confirm) {
-    alert('New passwords do not match')
+    showSnackbar('New passwords do not match', 'error')
     return
   }
-  // TODO: Implement backend integration
-  console.log('Changing password')
-  alert('Password updated successfully')
-  passwordForm.value = { current: '', new: '', confirm: '' }
+
+  if (passwordForm.value.new.length < 8) {
+    showSnackbar('Password must be at least 8 characters', 'error')
+    return
+  }
+
+  try {
+    changingPassword.value = true
+    await api.account.changePassword({
+      currentPassword: passwordForm.value.current,
+      newPassword: passwordForm.value.new
+    })
+
+    showSnackbar('Password updated successfully')
+    passwordForm.value = { current: '', new: '', confirm: '' }
+  } catch (error) {
+    console.error('Failed to change password', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to change password'
+    showSnackbar(errorMessage, 'error')
+  } finally {
+    changingPassword.value = false
+  }
 }
 </script>

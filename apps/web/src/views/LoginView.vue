@@ -92,6 +92,14 @@ const handleLogin = async () => {
     } else if (response.status === 400 || response.status === 401) {
       // Bad credentials - don't indicate which part is wrong
       errorMessage.value = 'Invalid credentials. Please try again.'
+    } else if (response.status === 500) {
+      // Backend returns 500 for auth errors, check message
+      const data = await response.json()
+      if (data.message && data.message.includes('Invalid')) {
+        errorMessage.value = 'Invalid credentials. Please try again.'
+      } else {
+        errorMessage.value = 'An error occurred. Please try again later.'
+      }
     } else {
       errorMessage.value = 'An error occurred. Please try again later.'
     }

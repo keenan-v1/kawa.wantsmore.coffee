@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 // Create an administrator user with a generated password
-// Usage: tsx src/scripts/create-admin.ts <username> [displayName]
+// Usage: tsx src/scripts/create-admin.ts <username> [displayName] [email]
 
-import { db, users, userRoles } from '../db/index.js'
+import { db, users, userRoles, userSettings } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -19,14 +19,14 @@ function generatePassword(length: number = 16): string {
   return password
 }
 
-async function createAdmin(username: string, displayName?: string) {
+async function createAdmin(username: string, displayName?: string, email?: string) {
   console.log('🔑 Creating administrator account...\n')
 
   // Check if user already exists
   const existingUser = await db
     .select()
     .from(users)
-    .where(eq(users.profileName, username))
+    .where(eq(users.username, username))
     .limit(1)
 
   if (existingUser.length > 0) {
@@ -36,25 +36,35 @@ async function createAdmin(username: string, displayName?: string) {
 
   // Generate a secure password
   const password = generatePassword(20)
-  const passwordHash = await bcrypt.hash(password, 10)
+  const passwordHash = await bcrypt.hash(password, 12) // Use 12 rounds like our utility
 
   // Create the user
   const [newUser] = await db
     .insert(users)
     .values({
-      profileName: username,
+      username,
+      email: email || null,
       passwordHash,
       displayName: displayName || username,
-      fioUsername: '',
-      preferredCurrency: 'CIS',
-      locationDisplayMode: 'names',
+      isActive: true,
     })
     .returning()
 
   console.log(`✅ User created:`)
   console.log(`   ID: ${newUser.id}`)
-  console.log(`   Username: ${newUser.profileName}`)
-  console.log(`   Display Name: ${newUser.displayName}\n`)
+  console.log(`   Username: ${newUser.username}`)
+  console.log(`   Display Name: ${newUser.displayName}`)
+  if (newUser.email) {
+    console.log(`   Email: ${newUser.email}`)
+  }
+  console.log()
+
+  // Create default user settings
+  await db.insert(userSettings).values({
+    userId: newUser.id,
+  })
+
+  console.log(`✅ User settings created\n`)
 
   // Assign administrator role
   await db.insert(userRoles).values({
@@ -81,19 +91,21 @@ async function createAdmin(username: string, displayName?: string) {
 const args = process.argv.slice(2)
 
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
-  console.log('Usage: tsx src/scripts/create-admin.ts <username> [displayName]')
+  console.log('Usage: tsx src/scripts/create-admin.ts <username> [displayName] [email]')
   console.log('')
   console.log('Examples:')
   console.log('  tsx src/scripts/create-admin.ts admin')
   console.log('  tsx src/scripts/create-admin.ts admin "System Administrator"')
-  console.log('  pnpm admin:create admin "System Administrator"')
+  console.log('  tsx src/scripts/create-admin.ts admin "System Administrator" admin@example.com')
+  console.log('  pnpm admin:create admin "System Administrator" admin@example.com')
   process.exit(0)
 }
 
 const username = args[0]
 const displayName = args[1]
+const email = args[2]
 
-createAdmin(username, displayName).catch(error => {
+createAdmin(username, displayName, email).catch(error => {
   console.error('❌ Failed to create administrator:', error)
   process.exit(1)
 })

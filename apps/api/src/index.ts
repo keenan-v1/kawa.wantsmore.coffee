@@ -18,7 +18,9 @@ RegisterRoutes(app)
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
     console.error(err)
-    res.status(500).json({
+    // Check if error has a statusCode property (custom HttpError)
+    const statusCode = 'statusCode' in err && typeof err.statusCode === 'number' ? err.statusCode : 500
+    res.status(statusCode).json({
       message: err.message,
     })
   }

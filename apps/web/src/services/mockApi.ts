@@ -145,4 +145,4 @@ export const mockApi = {
 }
 
 // Check if we should use mock API (for development)
-export const USE_MOCK_API = true // Set to false when backend is ready
+export const USE_MOCK_API = false // Backend is ready!

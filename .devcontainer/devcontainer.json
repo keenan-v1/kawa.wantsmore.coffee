@@ -2,7 +2,7 @@
   "name": "KawaKawa Market",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspaces/kawa.wantsmore.coffee",
+  "workspaceFolder": "/workspace",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -18,10 +18,30 @@
       }
     }
   },
-  "forwardPorts": [3000, 5173, 8080, 5432, 4983],
+  "remoteEnv": {
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+  },
+  "forwardPorts": [3000, 5173, 5432],
+  "portsAttributes": {
+    "3000": {
+      "label": "API",
+      "onAutoForward": "notify"
+    },
+    "5173": {
+      "label": "Web App",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "ignore"
+    }
+  },
   "postCreateCommand": "pnpm install",
   "containerUser": "node",
-  "mounts": [
-    "source=${localEnv:HOME}/.claude-code,target=/home/node/.claude-code,type=bind,consistency=cached"
-  ]
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "installDirectlyFromGitHubRelease": true,
+      "version": "latest"
+    }
+  }
 }

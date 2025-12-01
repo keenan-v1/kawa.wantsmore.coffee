@@ -1,5 +1,6 @@
 # Claude
-.claude/settings.local.json
+.claude/
+.claude.json
 
 # Dependencies
 node_modules/
@@ -40,6 +41,9 @@ Thumbs.db
 
 # Testing
 coverage/
+test-results/
+playwright-report/
+.playwright/
 
 # Vite
 *.local

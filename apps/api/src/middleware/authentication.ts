@@ -1,4 +1,5 @@
 import { Request } from 'express'
+import { verifyToken } from '../utils/jwt.js'
 
 export function expressAuthentication(
   request: Request,
@@ -12,12 +13,13 @@ export function expressAuthentication(
       return Promise.reject(new Error('No token provided'))
     }
 
-    // TODO: Implement actual JWT verification
-    // For now, just return a mock user
-    return Promise.resolve({
-      id: 1,
-      username: 'testuser',
-    })
+    try {
+      const decoded = verifyToken(token)
+      // Attach the decoded user info to the request
+      return Promise.resolve(decoded)
+    } catch (error) {
+      return Promise.reject(new Error('Invalid or expired token'))
+    }
   }
 
   return Promise.reject(new Error('Unknown security type'))

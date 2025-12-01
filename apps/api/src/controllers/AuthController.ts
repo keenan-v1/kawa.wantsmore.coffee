@@ -1,4 +1,10 @@
-import { Body, Controller, Post, Route, Tags, SuccessResponse } from 'tsoa'
+import { Body, Controller, Post, Route, Tags, SuccessResponse, Response } from 'tsoa'
+import { eq, and } from 'drizzle-orm'
+import { db, users, userSettings, userRoles, passwordResetTokens } from '../db/index.js'
+import { hashPassword, verifyPassword } from '../utils/password.js'
+import { generateToken } from '../utils/jwt.js'
+import { Unauthorized, Forbidden, BadRequest, NotFound } from '../utils/errors.js'
+import crypto from 'crypto'
 
 interface LoginRequest {
   username: string
@@ -7,16 +13,33 @@ interface LoginRequest {
 
 interface RegisterRequest {
   username: string
+  email?: string
   password: string
   displayName: string
+}
+
+interface RequestPasswordResetRequest {
+  usernameOrEmail: string
+}
+
+interface ResetPasswordRequest {
+  token: string
+  newPassword: string
 }
 
 interface AuthResponse {
   token: string
   user: {
-    profileName: string
+    id: number
+    username: string
     displayName: string
+    email?: string
+    roles: string[]
   }
+}
+
+interface SuccessMessage {
+  message: string
 }
 
 @Route('auth')
@@ -24,28 +47,209 @@ interface AuthResponse {
 export class AuthController extends Controller {
   @Post('login')
   @SuccessResponse('200', 'Login successful')
+  @Response(401, 'Invalid credentials')
+  @Response(403, 'Account is inactive')
   public async login(@Body() body: LoginRequest): Promise<AuthResponse> {
-    // TODO: Implement actual authentication
+    // Find user by username
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, body.username))
+      .limit(1)
+
+    if (!user) {
+      throw Unauthorized('Invalid username or password')
+    }
+
+    // Verify password
+    const isValid = await verifyPassword(body.password, user.passwordHash)
+    if (!isValid) {
+      throw Unauthorized('Invalid username or password')
+    }
+
+    // Check if account is active
+    if (!user.isActive) {
+      throw Forbidden('Account is inactive. Please contact an administrator.')
+    }
+
+    // Get user roles
+    const roles = await db
+      .select({ roleId: userRoles.roleId })
+      .from(userRoles)
+      .where(eq(userRoles.userId, user.id))
+
+    const roleIds = roles.map(r => r.roleId)
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      username: user.username,
+      roles: roleIds,
+    })
+
     return {
-      token: 'jwt-token-here',
+      token,
       user: {
-        profileName: body.username,
-        displayName: body.username,
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        email: user.email || undefined,
+        roles: roleIds,
       },
     }
   }
 
   @Post('register')
   @SuccessResponse('201', 'Registration successful')
+  @Response(400, 'Username already exists')
   public async register(@Body() body: RegisterRequest): Promise<AuthResponse> {
-    this.setStatus(201)
-    // TODO: Implement actual registration
-    return {
-      token: 'jwt-token-here',
-      user: {
-        profileName: body.username,
+    // Check if username already exists
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, body.username))
+      .limit(1)
+
+    if (existing) {
+      throw BadRequest('Username already exists')
+    }
+
+    // Hash password
+    const passwordHash = await hashPassword(body.password)
+
+    // Create user
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        username: body.username,
+        email: body.email,
         displayName: body.displayName,
+        passwordHash,
+        isActive: true,
+      })
+      .returning()
+
+    // Create default user settings
+    await db.insert(userSettings).values({
+      userId: newUser.id,
+    })
+
+    // Assign default 'applicant' role
+    await db.insert(userRoles).values({
+      userId: newUser.id,
+      roleId: 'applicant',
+    })
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: newUser.id,
+      username: newUser.username,
+      roles: ['applicant'],
+    })
+
+    this.setStatus(201)
+    return {
+      token,
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        displayName: newUser.displayName,
+        email: newUser.email || undefined,
+        roles: ['applicant'],
       },
+    }
+  }
+
+  @Post('request-password-reset')
+  @SuccessResponse('200', 'Password reset email sent')
+  @Response(404, 'User not found')
+  public async requestPasswordReset(@Body() body: RequestPasswordResetRequest): Promise<SuccessMessage> {
+    // Find user by username or email
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        body.usernameOrEmail.includes('@')
+          ? eq(users.email, body.usernameOrEmail)
+          : eq(users.username, body.usernameOrEmail)
+      )
+      .limit(1)
+
+    if (!user) {
+      this.setStatus(404)
+      throw new Error('User not found')
+    }
+
+    if (!user.email) {
+      this.setStatus(400)
+      throw new Error('This user has no email address set. Please contact an administrator.')
+    }
+
+    // Generate reset token
+    const token = crypto.randomBytes(32).toString('hex')
+    const expirationHours = parseInt(process.env.PASSWORD_RESET_EXPIRATION_HOURS || '24')
+    const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000)
+
+    // Store reset token
+    await db.insert(passwordResetTokens).values({
+      userId: user.id,
+      token,
+      expiresAt,
+      used: false,
+    })
+
+    // TODO: Send email with reset link (integrate email service like SendGrid, AWS SES)
+    // For now, administrator must generate reset link via admin panel
+
+    return {
+      message: 'Password reset instructions have been sent to your email address.',
+    }
+  }
+
+  @Post('reset-password')
+  @SuccessResponse('200', 'Password reset successful')
+  @Response(400, 'Invalid or expired token')
+  public async resetPassword(@Body() body: ResetPasswordRequest): Promise<SuccessMessage> {
+    // Find reset token
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, body.token),
+          eq(passwordResetTokens.used, false)
+        )
+      )
+      .limit(1)
+
+    if (!resetToken) {
+      this.setStatus(400)
+      throw new Error('Invalid or expired reset token')
+    }
+
+    // Check if token has expired
+    if (new Date() > resetToken.expiresAt) {
+      this.setStatus(400)
+      throw new Error('Reset token has expired')
+    }
+
+    // Hash new password
+    const passwordHash = await hashPassword(body.newPassword)
+
+    // Update user password
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, resetToken.userId))
+
+    // Mark token as used
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.id, resetToken.id))
+
+    return {
+      message: 'Password has been reset successfully. You can now log in with your new password.',
     }
   }
 }

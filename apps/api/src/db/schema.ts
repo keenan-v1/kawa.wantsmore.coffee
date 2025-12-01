@@ -1,13 +1,14 @@
 // Database schema using Drizzle ORM
 // Based on KawaKawa Market types and mock data
 
-import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum, boolean } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Enums
 export const currencyEnum = pgEnum('currency', ['ICA', 'CIS', 'AIC', 'NCC'])
 export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet'])
-export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names', 'codes', 'mixed'])
+export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names-only', 'natural-ids-only', 'both'])
+export const commodityDisplayModeEnum = pgEnum('commodity_display_mode', ['ticker-only', 'name-only', 'both'])
 
 // ==================== ROLES ====================
 export const roles = pgTable('roles', {
@@ -20,14 +21,36 @@ export const roles = pgTable('roles', {
 // ==================== USERS ====================
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  profileName: varchar('profile_name', { length: 100 }).notNull().unique(), // Login username
-  passwordHash: text('password_hash').notNull(), // Hashed password
+  username: varchar('username', { length: 100 }).notNull().unique(), // Login username
+  email: varchar('email', { length: 255 }), // Optional email for password resets
   displayName: varchar('display_name', { length: 100 }).notNull(), // Display name
-  fioUsername: varchar('fio_username', { length: 100 }).notNull().default(''), // FIO game username
-  preferredCurrency: currencyEnum('preferred_currency').notNull().default('CIS'),
-  locationDisplayMode: locationDisplayModeEnum('location_display_mode').default('names'),
+  passwordHash: text('password_hash').notNull(), // Bcrypt hashed password with salt
+  isActive: boolean('is_active').notNull().default(true), // Account active status
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// ==================== USER SETTINGS ====================
+export const userSettings = pgTable('user_settings', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  fioUsername: varchar('fio_username', { length: 100 }), // FIO game username
+  fioApiKey: text('fio_api_key'), // FIO API key (encrypted)
+  preferredCurrency: currencyEnum('preferred_currency').notNull().default('CIS'),
+  locationDisplayMode: locationDisplayModeEnum('location_display_mode').notNull().default('both'),
+  commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode').notNull().default('both'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// ==================== PASSWORD RESET TOKENS ====================
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 255 }).notNull().unique(), // Unique token
+  expiresAt: timestamp('expires_at').notNull(), // Expiration timestamp
+  used: boolean('used').notNull().default(false), // Whether token has been used
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
 // ==================== USER ROLES (Many-to-Many) ====================
@@ -99,11 +122,30 @@ export const marketListings = pgTable('market_listings', {
 
 // ==================== RELATIONS ====================
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
+  settings: one(userSettings, {
+    fields: [users.id],
+    references: [userSettings.userId],
+  }),
   userRoles: many(userRoles),
+  passwordResetTokens: many(passwordResetTokens),
   inventory: many(inventory),
   demands: many(demands),
   marketListings: many(marketListings),
+}))
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [userSettings.userId],
+    references: [users.id],
+  }),
+}))
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordResetTokens.userId],
+    references: [users.id],
+  }),
 }))
 
 export const rolesRelations = relations(roles, ({ many }) => ({

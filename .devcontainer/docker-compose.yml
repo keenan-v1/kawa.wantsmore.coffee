@@ -6,7 +6,8 @@ services:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     volumes:
-      - ..:/workspaces/kawa.wantsmore.coffee:cached
+      - ..:/workspace:rw
+      - node-home:/home/node:rw
     command: sleep infinity
     network_mode: service:db
     environment:
@@ -26,4 +27,5 @@ services:
       - "5432:5432"
 
 volumes:
+  node-home:
   postgres-data:

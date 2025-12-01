@@ -1,5 +1,6 @@
 // API service that switches between mock and real backend
 import { mockApi, USE_MOCK_API } from './mockApi'
+import type { User, Currency, LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
 
 interface LoginRequest {
   profileName: string
@@ -11,6 +12,33 @@ interface RegisterRequest {
   password: string
 }
 
+interface UpdateProfileRequest {
+  displayName?: string
+  fioUsername?: string
+  preferredCurrency?: Currency
+  locationDisplayMode?: LocationDisplayMode
+  commodityDisplayMode?: CommodityDisplayMode
+}
+
+interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
+// Helper to get JWT token from localStorage
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('jwt')
+}
+
+// Helper to create auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken()
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  }
+}
+
 // Real API calls (to be used when backend is ready)
 const realApi = {
   login: async (request: LoginRequest): Promise<Response> => {
@@ -19,7 +47,10 @@ const realApi = {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify({
+        username: request.profileName, // Map profileName to username
+        password: request.password
+      })
     })
   },
 
@@ -29,8 +60,73 @@ const realApi = {
       headers: {
         'Content-Type': 'application/json'
       },
+      body: JSON.stringify({
+        username: request.profileName, // Map profileName to username
+        password: request.password,
+        displayName: request.profileName
+      })
+    })
+  },
+
+  getProfile: async (): Promise<User> => {
+    const response = await fetch('/api/account', {
+      method: 'GET',
+      headers: getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Clear auth and redirect to login
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get profile: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateProfile: async (updates: UpdateProfileRequest): Promise<User> => {
+    const response = await fetch('/api/account', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates)
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to update profile: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  changePassword: async (request: ChangePasswordRequest): Promise<void> => {
+    const response = await fetch('/api/account/password', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
       body: JSON.stringify(request)
     })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        throw new Error('Current password is incorrect')
+      }
+      throw new Error(`Failed to change password: ${response.statusText}`)
+    }
   }
 }
 
@@ -43,5 +139,10 @@ export const api = {
     register: (request: RegisterRequest) => {
       return USE_MOCK_API ? mockApi.register(request) : realApi.register(request)
     }
+  },
+  account: {
+    getProfile: () => realApi.getProfile(),
+    updateProfile: (updates: UpdateProfileRequest) => realApi.updateProfile(updates),
+    changePassword: (request: ChangePasswordRequest) => realApi.changePassword(request)
   }
 }
