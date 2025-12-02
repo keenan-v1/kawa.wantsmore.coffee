@@ -105,6 +105,14 @@
           </v-form>
         </v-card-text>
         <v-card-actions>
+          <v-btn
+            color="warning"
+            variant="outlined"
+            :loading="generatingResetLink"
+            @click="generateResetLink"
+          >
+            Generate Reset Link
+          </v-btn>
           <v-spacer />
           <v-btn text @click="editDialog = false">Cancel</v-btn>
           <v-btn color="primary" :loading="saving" @click="saveUser">
@@ -113,11 +121,41 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Password Reset Link Dialog -->
+    <v-dialog v-model="resetLinkDialog" max-width="600">
+      <v-card>
+        <v-card-title>Password Reset Link Generated</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4">
+            Share this link with <strong>{{ resetLinkData?.username }}</strong> to allow them to reset their password.
+            The password will NOT be changed until they use this link.
+          </v-alert>
+
+          <v-text-field
+            :model-value="resetLinkUrl"
+            label="Reset Link"
+            readonly
+            variant="outlined"
+            append-inner-icon="mdi-content-copy"
+            @click:append-inner="copyResetLink"
+          />
+
+          <v-alert type="warning" variant="tonal" density="compact">
+            This link expires on {{ formatDateTime(resetLinkData?.expiresAt) }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" @click="resetLinkDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Role } from '../types'
 import { api } from '../services/api'
 
@@ -129,6 +167,12 @@ interface AdminUser {
   isActive: boolean
   roles: Role[]
   createdAt: string
+}
+
+interface PasswordResetLinkData {
+  token: string
+  expiresAt: string
+  username: string
 }
 
 const headers = [
@@ -163,6 +207,16 @@ const snackbar = ref({
   color: 'success',
 })
 
+// Password reset link state
+const resetLinkDialog = ref(false)
+const resetLinkData = ref<PasswordResetLinkData | null>(null)
+const generatingResetLink = ref(false)
+
+const resetLinkUrl = computed(() => {
+  if (!resetLinkData.value) return ''
+  return `${window.location.origin}/reset-password?token=${resetLinkData.value.token}`
+})
+
 const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
   snackbar.value = { show: true, message, color }
 }
@@ -180,6 +234,11 @@ const getRoleColor = (roleId: string): string => {
 
 const formatDate = (dateStr: string): string => {
   return new Date(dateStr).toLocaleDateString()
+}
+
+const formatDateTime = (dateStr: string | undefined): string => {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleString()
 }
 
 let searchTimeout: ReturnType<typeof setTimeout>
@@ -240,6 +299,32 @@ const saveUser = async () => {
     showSnackbar(message, 'error')
   } finally {
     saving.value = false
+  }
+}
+
+const generateResetLink = async () => {
+  if (!editingUser.value) return
+
+  try {
+    generatingResetLink.value = true
+    const response = await api.admin.generatePasswordResetLink(editingUser.value.id)
+    resetLinkData.value = response
+    resetLinkDialog.value = true
+  } catch (error) {
+    console.error('Failed to generate reset link', error)
+    const message = error instanceof Error ? error.message : 'Failed to generate reset link'
+    showSnackbar(message, 'error')
+  } finally {
+    generatingResetLink.value = false
+  }
+}
+
+const copyResetLink = async () => {
+  try {
+    await navigator.clipboard.writeText(resetLinkUrl.value)
+    showSnackbar('Reset link copied to clipboard')
+  } catch {
+    showSnackbar('Failed to copy link', 'error')
   }
 }
 

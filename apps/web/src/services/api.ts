@@ -47,6 +47,17 @@ interface UpdateUserRequest {
   roles?: string[]
 }
 
+interface PasswordResetLinkResponse {
+  token: string
+  expiresAt: string
+  username: string
+}
+
+interface ResetPasswordRequest {
+  token: string
+  newPassword: string
+}
+
 // Helper to get JWT token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('jwt')
@@ -249,6 +260,51 @@ const realApi = {
 
     return response.json()
   },
+
+  generatePasswordResetLink: async (userId: number): Promise<PasswordResetLinkResponse> => {
+    const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('User not found')
+      }
+      throw new Error(`Failed to generate reset link: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  resetPassword: async (request: ResetPasswordRequest): Promise<void> => {
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid or expired reset token')
+      }
+      throw new Error(`Failed to reset password: ${response.statusText}`)
+    }
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -259,7 +315,8 @@ export const api = {
     },
     register: (request: RegisterRequest) => {
       return USE_MOCK_API ? mockApi.register(request) : realApi.register(request)
-    }
+    },
+    resetPassword: (request: ResetPasswordRequest) => realApi.resetPassword(request),
   },
   account: {
     getProfile: () => realApi.getProfile(),
@@ -270,5 +327,6 @@ export const api = {
     listUsers: (page?: number, pageSize?: number, search?: string) => realApi.listUsers(page, pageSize, search),
     updateUser: (userId: number, updates: UpdateUserRequest) => realApi.updateUser(userId, updates),
     listRoles: () => realApi.listRoles(),
+    generatePasswordResetLink: (userId: number) => realApi.generatePasswordResetLink(userId),
   }
 }

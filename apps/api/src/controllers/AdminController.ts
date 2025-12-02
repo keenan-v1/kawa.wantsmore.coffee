@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Put, Path, Route, Security, Tags, Request, Query } from 'tsoa'
+import { Body, Controller, Get, Put, Post, Path, Route, Security, Tags, Request, Query } from 'tsoa'
 import type { Role } from '@kawakawa/types'
-import { db, users, userRoles, roles } from '../db/index.js'
+import { db, users, userRoles, roles, passwordResetTokens } from '../db/index.js'
 import { eq, ilike, or, sql, desc } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { NotFound, BadRequest } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'
+import crypto from 'crypto'
 
 interface AdminUser {
   id: number
@@ -26,6 +27,12 @@ interface AdminUserListResponse {
 interface UpdateUserRequest {
   isActive?: boolean
   roles?: string[] // Array of role IDs to assign
+}
+
+interface PasswordResetLinkResponse {
+  token: string
+  expiresAt: Date
+  username: string
 }
 
 @Route('admin')
@@ -229,5 +236,44 @@ export class AdminController extends Controller {
     const roleList = await db.select({ id: roles.id, name: roles.name }).from(roles)
 
     return roleList
+  }
+
+  /**
+   * Generate a password reset link for a user.
+   * The password is NOT changed until the user uses the link.
+   */
+  @Post('users/{userId}/reset-password')
+  public async generatePasswordResetLink(
+    @Path() userId: number
+  ): Promise<PasswordResetLinkResponse> {
+    // Verify user exists
+    const [user] = await db
+      .select({ id: users.id, username: users.username })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    if (!user) {
+      this.setStatus(404)
+      throw NotFound('User not found')
+    }
+
+    // Generate reset token
+    const token = crypto.randomBytes(32).toString('hex')
+    const expirationHours = parseInt(process.env.PASSWORD_RESET_EXPIRATION_HOURS || '24')
+    const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000)
+
+    // Store reset token
+    await db.insert(passwordResetTokens).values({
+      userId: user.id,
+      token,
+      expiresAt,
+      used: false,
+    })
+
+    return {
+      token,
+      expiresAt,
+      username: user.username,
+    }
   }
 }

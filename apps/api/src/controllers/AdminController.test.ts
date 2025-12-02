@@ -29,6 +29,13 @@ vi.mock('../db/index.js', () => ({
     id: 'id',
     name: 'name',
   },
+  passwordResetTokens: {
+    id: 'id',
+    userId: 'userId',
+    token: 'token',
+    expiresAt: 'expiresAt',
+    used: 'used',
+  },
 }))
 
 // Note: Authorization (admin role check) is handled by TSOA's @Security decorator
@@ -291,6 +298,48 @@ describe('AdminController', () => {
 
       expect(result).toHaveLength(3)
       expect(result).toEqual(mockRoles)
+    })
+  })
+
+  describe('generatePasswordResetLink', () => {
+    it('should generate a password reset token for a user', async () => {
+      const mockUser = { id: 5, username: 'testuser' }
+
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([mockUser]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const insertMock = { values: vi.fn().mockResolvedValue(undefined) }
+      vi.mocked(db.insert).mockReturnValue(insertMock as any)
+
+      const result = await controller.generatePasswordResetLink(5)
+
+      expect(result.username).toBe('testuser')
+      expect(result.token).toBeDefined()
+      expect(result.token.length).toBe(64) // 32 bytes hex encoded
+      expect(result.expiresAt).toBeInstanceOf(Date)
+      expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now())
+
+      expect(db.insert).toHaveBeenCalled()
+      expect(insertMock.values).toHaveBeenCalledWith({
+        userId: 5,
+        token: expect.any(String),
+        expiresAt: expect.any(Date),
+        used: false,
+      })
+    })
+
+    it('should return 404 when user not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.generatePasswordResetLink(999)).rejects.toThrow('User not found')
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
   })
 })
