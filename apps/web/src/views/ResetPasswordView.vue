@@ -5,8 +5,16 @@
         <v-card>
           <v-card-title class="text-h5">Reset Password</v-card-title>
           <v-card-text>
+            <!-- Loading state while validating token -->
+            <template v-if="validating">
+              <div class="d-flex justify-center py-8">
+                <v-progress-circular indeterminate color="primary" />
+              </div>
+              <p class="text-center text-body-2">Validating reset link...</p>
+            </template>
+
             <!-- Success state -->
-            <template v-if="success">
+            <template v-else-if="success">
               <v-alert type="success" class="mb-4">
                 Your password has been reset successfully!
               </v-alert>
@@ -38,7 +46,12 @@
               </v-alert>
 
               <p class="text-body-2 mb-4">
-                Enter your new password below.
+                <template v-if="username">
+                  Enter a new password for <strong>{{ username }}</strong>.
+                </template>
+                <template v-else>
+                  Enter your new password below.
+                </template>
               </p>
 
               <v-form @submit.prevent="handleReset">
@@ -92,9 +105,11 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
+const validating = ref(true)
 const success = ref(false)
 const errorMessage = ref('')
 const tokenError = ref('')
+const username = ref('')
 
 const token = computed(() => route.query.token as string | undefined)
 
@@ -115,9 +130,25 @@ const isValid = computed(() => {
   )
 })
 
-onMounted(() => {
+onMounted(async () => {
   if (!token.value) {
     tokenError.value = 'No reset token provided. Please use the link from your administrator.'
+    validating.value = false
+    return
+  }
+
+  try {
+    const result = await api.auth.validateResetToken(token.value)
+    if (!result.valid) {
+      tokenError.value = 'This reset link is invalid or has already been used.'
+    } else {
+      username.value = result.username || ''
+    }
+  } catch (error) {
+    console.error('Token validation error:', error)
+    tokenError.value = 'Unable to validate reset link. Please try again.'
+  } finally {
+    validating.value = false
   }
 })
 

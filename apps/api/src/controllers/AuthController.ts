@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Route, Tags, SuccessResponse, Response } from 'tsoa'
+import { Body, Controller, Get, Post, Query, Route, Tags, SuccessResponse, Response } from 'tsoa'
 import { eq, and } from 'drizzle-orm'
 import type { Role } from '@kawakawa/types'
 import { db, users, userSettings, userRoles, roles, passwordResetTokens } from '../db/index.js'
@@ -41,6 +41,12 @@ interface AuthResponse {
 
 interface SuccessMessage {
   message: string
+}
+
+interface ValidateTokenResponse {
+  valid: boolean
+  username?: string
+  expiresAt?: Date
 }
 
 @Route('auth')
@@ -270,6 +276,53 @@ export class AuthController extends Controller {
 
     return {
       message: 'Password has been reset successfully. You can now log in with your new password.',
+    }
+  }
+
+  @Get('validate-reset-token')
+  @SuccessResponse('200', 'Token validation result')
+  public async validateResetToken(@Query() token: string): Promise<ValidateTokenResponse> {
+    if (!token) {
+      return { valid: false }
+    }
+
+    // Find reset token
+    const [resetToken] = await db
+      .select({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+        expiresAt: passwordResetTokens.expiresAt,
+        used: passwordResetTokens.used,
+      })
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token))
+      .limit(1)
+
+    if (!resetToken) {
+      return { valid: false }
+    }
+
+    // Check if already used
+    if (resetToken.used) {
+      return { valid: false }
+    }
+
+    // Check if expired
+    if (new Date() > resetToken.expiresAt) {
+      return { valid: false }
+    }
+
+    // Get username for display
+    const [user] = await db
+      .select({ username: users.username })
+      .from(users)
+      .where(eq(users.id, resetToken.userId))
+      .limit(1)
+
+    return {
+      valid: true,
+      username: user?.username,
+      expiresAt: resetToken.expiresAt,
     }
   }
 }

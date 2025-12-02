@@ -58,6 +58,12 @@ interface ResetPasswordRequest {
   newPassword: string
 }
 
+interface ValidateTokenResponse {
+  valid: boolean
+  username?: string
+  expiresAt?: string
+}
+
 // Helper to get JWT token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('jwt')
@@ -305,6 +311,18 @@ const realApi = {
       throw new Error(`Failed to reset password: ${response.statusText}`)
     }
   },
+
+  validateResetToken: async (token: string): Promise<ValidateTokenResponse> => {
+    const response = await fetch(`/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
+      method: 'GET',
+    })
+
+    if (!response.ok) {
+      return { valid: false }
+    }
+
+    return response.json()
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -317,6 +335,7 @@ export const api = {
       return USE_MOCK_API ? mockApi.register(request) : realApi.register(request)
     },
     resetPassword: (request: ResetPasswordRequest) => realApi.resetPassword(request),
+    validateResetToken: (token: string) => realApi.validateResetToken(token),
   },
   account: {
     getProfile: () => realApi.getProfile(),
