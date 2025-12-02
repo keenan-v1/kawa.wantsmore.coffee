@@ -48,7 +48,7 @@ async function getCurrentRoles(userId: number): Promise<string[]> {
 export async function expressAuthentication(
   request: Request,
   securityName: string,
-  _scopes?: string[]
+  scopes?: string[]
 ): Promise<unknown> {
   if (securityName === 'jwt') {
     const token = request.headers.authorization?.split(' ')[1]
@@ -63,22 +63,29 @@ export async function expressAuthentication(
       // Get current roles from cache/database
       const currentRoles = await getCurrentRoles(decoded.userId)
 
+      // Determine the payload to use (with current roles if they changed)
+      let payload: JwtPayload = decoded
+
       // Check if roles have changed
       if (!rolesMatch(decoded.roles, currentRoles)) {
         // Generate refreshed token with current roles
-        const refreshedPayload: JwtPayload = {
+        payload = {
           userId: decoded.userId,
           username: decoded.username,
           roles: currentRoles,
         }
-        request.refreshedToken = generateToken(refreshedPayload)
-
-        // Return payload with current roles for this request
-        return Promise.resolve(refreshedPayload)
+        request.refreshedToken = generateToken(payload)
       }
 
-      // Roles match, use original token's payload
-      return Promise.resolve(decoded)
+      // Check scopes (required roles) if specified
+      if (scopes && scopes.length > 0) {
+        const hasRequiredRoles = scopes.every((scope) => payload.roles.includes(scope))
+        if (!hasRequiredRoles) {
+          return Promise.reject(new Error('Insufficient permissions'))
+        }
+      }
+
+      return Promise.resolve(payload)
     } catch (error) {
       return Promise.reject(new Error('Invalid or expired token'))
     }

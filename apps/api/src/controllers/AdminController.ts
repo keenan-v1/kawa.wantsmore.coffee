@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Put, Path, Route, Security, Tags, Request, Query } from 'tsoa'
 import type { Role } from '@kawakawa/types'
-import { db, users, userSettings, userRoles, roles } from '../db/index.js'
+import { db, users, userRoles, roles } from '../db/index.js'
 import { eq, ilike, or, sql, desc } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
-import { Forbidden, NotFound, BadRequest } from '../utils/errors.js'
+import { NotFound, BadRequest } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'
 
 interface AdminUser {
@@ -30,26 +30,18 @@ interface UpdateUserRequest {
 
 @Route('admin')
 @Tags('Admin')
-@Security('jwt')
+@Security('jwt', ['administrator'])
 export class AdminController extends Controller {
-  private assertAdmin(user: JwtPayload): void {
-    if (!user.roles.includes('administrator')) {
-      this.setStatus(403)
-      throw Forbidden('Administrator access required')
-    }
-  }
 
   /**
    * List all users with pagination and optional search
    */
   @Get('users')
   public async listUsers(
-    @Request() request: { user: JwtPayload },
     @Query() page: number = 1,
     @Query() pageSize: number = 20,
     @Query() search?: string
   ): Promise<AdminUserListResponse> {
-    this.assertAdmin(request.user)
 
     const offset = (page - 1) * pageSize
 
@@ -117,11 +109,7 @@ export class AdminController extends Controller {
    * Get a specific user by ID
    */
   @Get('users/{userId}')
-  public async getUser(
-    @Request() request: { user: JwtPayload },
-    @Path() userId: number
-  ): Promise<AdminUser> {
-    this.assertAdmin(request.user)
+  public async getUser(@Path() userId: number): Promise<AdminUser> {
 
     const [user] = await db
       .select({
@@ -165,8 +153,6 @@ export class AdminController extends Controller {
     @Path() userId: number,
     @Body() body: UpdateUserRequest
   ): Promise<AdminUser> {
-    this.assertAdmin(request.user)
-
     // Prevent admins from modifying their own account through admin panel
     if (userId === request.user.userId) {
       this.setStatus(400)
@@ -231,15 +217,14 @@ export class AdminController extends Controller {
     }
 
     // Return updated user
-    return this.getUser(request, userId)
+    return this.getUser(userId)
   }
 
   /**
    * List all available roles
    */
   @Get('roles')
-  public async listRoles(@Request() request: { user: JwtPayload }): Promise<Role[]> {
-    this.assertAdmin(request.user)
+  public async listRoles(): Promise<Role[]> {
 
     const roleList = await db.select({ id: roles.id, name: roles.name }).from(roles)
 

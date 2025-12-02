@@ -31,12 +31,14 @@ vi.mock('../db/index.js', () => ({
   },
 }))
 
+// Note: Authorization (admin role check) is handled by TSOA's @Security decorator
+// via expressAuthentication middleware, not by the controller methods themselves.
+
 describe('AdminController', () => {
   let controller: AdminController
   let setStatusSpy: ReturnType<typeof vi.spyOn>
 
   const adminUser = { userId: 1, username: 'admin', roles: ['administrator'] }
-  const regularUser = { userId: 2, username: 'user', roles: ['member'] }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -45,7 +47,7 @@ describe('AdminController', () => {
   })
 
   describe('listUsers', () => {
-    it('should return paginated list of users for admin', async () => {
+    it('should return paginated list of users', async () => {
       const mockUsers = [
         { id: 1, username: 'user1', email: 'user1@test.com', displayName: 'User 1', isActive: true, createdAt: new Date() },
         { id: 2, username: 'user2', email: null, displayName: 'User 2', isActive: false, createdAt: new Date() },
@@ -74,7 +76,7 @@ describe('AdminController', () => {
           .mockReturnValue(rolesMock),
       } as any)
 
-      const result = await controller.listUsers({ user: adminUser }, 1, 20)
+      const result = await controller.listUsers(1, 20)
 
       expect(result.total).toBe(2)
       expect(result.page).toBe(1)
@@ -82,16 +84,40 @@ describe('AdminController', () => {
       expect(result.users).toHaveLength(2)
     })
 
-    it('should reject non-admin users with 403', async () => {
-      await expect(controller.listUsers({ user: regularUser }, 1, 20)).rejects.toThrow(
-        'Administrator access required'
-      )
-      expect(setStatusSpy).toHaveBeenCalledWith(403)
+    it('should support search filtering', async () => {
+      const mockUsers = [
+        { id: 1, username: 'searchuser', email: 'search@test.com', displayName: 'Search User', isActive: true, createdAt: new Date() },
+      ]
+      const mockRoles = [{ roleId: 'member', roleName: 'Member' }]
+
+      const countMock = { where: vi.fn().mockResolvedValue([{ count: 1 }]) }
+      const usersMock = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        offset: vi.fn().mockResolvedValue(mockUsers),
+      }
+      const rolesMock = {
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue(mockRoles),
+      }
+
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn()
+          .mockReturnValueOnce(countMock)
+          .mockReturnValueOnce(usersMock)
+          .mockReturnValue(rolesMock),
+      } as any)
+
+      const result = await controller.listUsers(1, 20, 'search')
+
+      expect(result.total).toBe(1)
+      expect(result.users).toHaveLength(1)
     })
   })
 
   describe('getUser', () => {
-    it('should return a specific user for admin', async () => {
+    it('should return a specific user', async () => {
       const mockUser = {
         id: 5,
         username: 'testuser',
@@ -114,7 +140,7 @@ describe('AdminController', () => {
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
-      const result = await controller.getUser({ user: adminUser }, 5)
+      const result = await controller.getUser(5)
 
       expect(result.id).toBe(5)
       expect(result.username).toBe('testuser')
@@ -129,15 +155,8 @@ describe('AdminController', () => {
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
-      await expect(controller.getUser({ user: adminUser }, 999)).rejects.toThrow('User not found')
+      await expect(controller.getUser(999)).rejects.toThrow('User not found')
       expect(setStatusSpy).toHaveBeenCalledWith(404)
-    })
-
-    it('should reject non-admin users with 403', async () => {
-      await expect(controller.getUser({ user: regularUser }, 5)).rejects.toThrow(
-        'Administrator access required'
-      )
-      expect(setStatusSpy).toHaveBeenCalledWith(403)
     })
   })
 
@@ -227,13 +246,6 @@ describe('AdminController', () => {
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
 
-    it('should reject non-admin users with 403', async () => {
-      await expect(controller.updateUser({ user: regularUser }, 5, { isActive: false })).rejects.toThrow(
-        'Administrator access required'
-      )
-      expect(setStatusSpy).toHaveBeenCalledWith(403)
-    })
-
     it('should return 400 for invalid role IDs', async () => {
       const selectMock = {
         from: vi.fn().mockReturnThis(),
@@ -264,7 +276,7 @@ describe('AdminController', () => {
   })
 
   describe('listRoles', () => {
-    it('should return all available roles for admin', async () => {
+    it('should return all available roles', async () => {
       const mockRoles = [
         { id: 'applicant', name: 'Applicant' },
         { id: 'member', name: 'Member' },
@@ -275,17 +287,10 @@ describe('AdminController', () => {
         from: vi.fn().mockResolvedValue(mockRoles),
       } as any)
 
-      const result = await controller.listRoles({ user: adminUser })
+      const result = await controller.listRoles()
 
       expect(result).toHaveLength(3)
       expect(result).toEqual(mockRoles)
-    })
-
-    it('should reject non-admin users with 403', async () => {
-      await expect(controller.listRoles({ user: regularUser })).rejects.toThrow(
-        'Administrator access required'
-      )
-      expect(setStatusSpy).toHaveBeenCalledWith(403)
     })
   })
 })
