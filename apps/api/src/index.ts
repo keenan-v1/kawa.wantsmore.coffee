@@ -8,6 +8,18 @@ const app = express()
 app.use(json())
 app.use(urlencoded({ extended: true }))
 
+// Middleware to add refreshed token header when roles have changed
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const originalJson = res.json.bind(res)
+  res.json = (body: unknown) => {
+    if (req.refreshedToken) {
+      res.setHeader('X-Refreshed-Token', req.refreshedToken)
+    }
+    return originalJson(body)
+  }
+  next()
+})
+
 // Swagger UI - at /docs since DigitalOcean routes /api/* here (stripping /api prefix)
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 

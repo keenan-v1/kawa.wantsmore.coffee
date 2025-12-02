@@ -1,6 +1,6 @@
 # KawaKawa Market - Development Commands
 
-.PHONY: help install dev build db-init db-init-dev db-reset db-studio fio-sync clean
+.PHONY: help install dev build db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -57,3 +57,10 @@ clean: ## Clean build artifacts and node_modules
 	rm -rf node_modules apps/*/node_modules packages/*/node_modules
 	rm -rf apps/*/dist packages/*/dist
 	rm -rf .turbo apps/*/.turbo packages/*/.turbo
+
+kill-dev: ## Kill all running dev servers (tsx, vite, turbo)
+	@echo "Killing dev servers..."
+	@-pkill -f "tsx watch" 2>/dev/null || true
+	@-pkill -f "vite" 2>/dev/null || true
+	@-pkill -f "turbo run dev" 2>/dev/null || true
+	@echo "Done. Any zombie processes will be cleaned up when VSCode restarts."

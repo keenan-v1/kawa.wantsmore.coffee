@@ -5,6 +5,7 @@ import MarketView from '../views/MarketView.vue'
 import InventoryView from '../views/InventoryView.vue'
 import DemandView from '../views/DemandView.vue'
 import AccountView from '../views/AccountView.vue'
+import AdminView from '../views/AdminView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -48,13 +49,31 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/admin',
+      name: 'admin',
+      component: AdminView,
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/market'
     }
   ]
 })
 
-// Navigation guard for authentication
+// Helper to check if user has a role
+const hasRole = (roleId: string): boolean => {
+  const userStr = localStorage.getItem('user')
+  if (!userStr) return false
+  try {
+    const user = JSON.parse(userStr)
+    return user.roles?.some((r: { id: string }) => r.id === roleId) ?? false
+  } catch {
+    return false
+  }
+}
+
+// Navigation guard for authentication and authorization
 router.beforeEach((to, _from, next) => {
   const jwt = localStorage.getItem('jwt')
 
@@ -65,6 +84,9 @@ router.beforeEach((to, _from, next) => {
       path: '/login',
       query: { redirect: redirectPath }
     })
+  } else if (to.meta.requiresAdmin && !hasRole('administrator')) {
+    // Redirect non-admins away from admin pages
+    next({ path: '/market' })
   } else {
     next()
   }

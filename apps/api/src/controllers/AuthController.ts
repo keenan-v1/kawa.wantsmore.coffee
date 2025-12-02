@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Route, Tags, SuccessResponse, Response } from 'tsoa'
 import { eq, and } from 'drizzle-orm'
-import { db, users, userSettings, userRoles, passwordResetTokens } from '../db/index.js'
+import type { Role } from '@kawakawa/types'
+import { db, users, userSettings, userRoles, roles, passwordResetTokens } from '../db/index.js'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import { generateToken } from '../utils/jwt.js'
 import { Unauthorized, Forbidden, BadRequest, NotFound } from '../utils/errors.js'
@@ -34,7 +35,7 @@ interface AuthResponse {
     username: string
     displayName: string
     email?: string
-    roles: string[]
+    roles: Role[]
   }
 }
 
@@ -72,15 +73,28 @@ export class AuthController extends Controller {
       throw Forbidden('Account is inactive. Please contact an administrator.')
     }
 
-    // Get user roles
-    const roles = await db
-      .select({ roleId: userRoles.roleId })
+    // Get user roles with names
+    const userRolesData = await db
+      .select({
+        roleId: roles.id,
+        roleName: roles.name,
+      })
       .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, user.id))
 
-    const roleIds = roles.map(r => r.roleId)
+    const roleIds = userRolesData.map(r => r.roleId)
+    const roleObjects: Role[] = userRolesData.map(r => ({
+      id: r.roleId,
+      name: r.roleName,
+    }))
 
-    // Generate JWT token
+    // Safety check: users must have at least one role
+    if (roleIds.length === 0) {
+      throw Forbidden('Account has no roles assigned. Please contact an administrator.')
+    }
+
+    // Generate JWT token (still uses role IDs for compact payload)
     const token = generateToken({
       userId: user.id,
       username: user.username,
@@ -94,7 +108,7 @@ export class AuthController extends Controller {
         username: user.username,
         displayName: user.displayName,
         email: user.email || undefined,
-        roles: roleIds,
+        roles: roleObjects,
       },
     }
   }
@@ -140,6 +154,12 @@ export class AuthController extends Controller {
       roleId: 'applicant',
     })
 
+    // Get the applicant role name for the response
+    const [applicantRole] = await db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, 'applicant'))
+
     // Generate JWT token
     const token = generateToken({
       userId: newUser.id,
@@ -155,7 +175,7 @@ export class AuthController extends Controller {
         username: newUser.username,
         displayName: newUser.displayName,
         email: newUser.email || undefined,
-        roles: ['applicant'],
+        roles: [{ id: applicantRole.id, name: applicantRole.name }],
       },
     }
   }

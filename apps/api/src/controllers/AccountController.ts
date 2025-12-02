@@ -133,12 +133,14 @@ export class AccountController extends Controller {
       .where(eq(users.id, userId))
 
     if (!user) {
+      this.setStatus(404)
       throw NotFound('User not found')
     }
 
     // Verify current password
     const isValid = await verifyPassword(body.currentPassword, user.passwordHash)
     if (!isValid) {
+      this.setStatus(400)
       throw BadRequest('Current password is incorrect')
     }
 
