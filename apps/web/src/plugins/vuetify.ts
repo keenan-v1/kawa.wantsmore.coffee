@@ -7,6 +7,11 @@ import * as directives from 'vuetify/directives'
 export default createVuetify({
   components,
   directives,
+  defaults: {
+    VTooltip: {
+      contentClass: 'bg-surface text-body-2',
+    },
+  },
   theme: {
     defaultTheme: 'kawa',
     themes: {

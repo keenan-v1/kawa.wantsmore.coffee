@@ -106,6 +106,13 @@ interface ValidateTokenResponse {
   expiresAt?: string
 }
 
+interface FioSyncResponse {
+  success: boolean
+  inserted: number
+  errors: string[]
+  username: string
+}
+
 // Helper to get JWT token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('jwt')
@@ -336,6 +343,36 @@ const realApi = {
     return response.json()
   },
 
+  syncUserFio: async (userId: number): Promise<FioSyncResponse> => {
+    const response = await fetch(`/api/admin/users/${userId}/sync-fio`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('User not found')
+      }
+      if (response.status === 400) {
+        throw new Error('User does not have FIO credentials configured')
+      }
+      throw new Error(`Failed to sync FIO: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   resetPassword: async (request: ResetPasswordRequest): Promise<void> => {
     const response = await fetch('/api/auth/reset-password', {
       method: 'POST',
@@ -518,6 +555,7 @@ export const api = {
     updateRole: (roleId: string, updates: { name?: string; color?: string }) => realApi.updateRole(roleId, updates),
     deleteRole: (roleId: string) => realApi.deleteRole(roleId),
     generatePasswordResetLink: (userId: number) => realApi.generatePasswordResetLink(userId),
+    syncUserFio: (userId: number) => realApi.syncUserFio(userId),
     listPermissions: () => realApi.listPermissions(),
     listRolePermissions: () => realApi.listRolePermissions(),
     setRolePermission: (request: SetRolePermissionRequest) => realApi.setRolePermission(request),

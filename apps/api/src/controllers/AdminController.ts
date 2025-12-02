@@ -7,6 +7,7 @@ import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'
 import { invalidatePermissionCache } from '../utils/permissionService.js'
 import crypto from 'crypto'
+import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -391,6 +392,54 @@ export class AdminController extends Controller {
     return {
       token,
       expiresAt,
+      username: user.username,
+    }
+  }
+
+  /**
+   * Trigger FIO inventory sync for a user (admin action for testing)
+   */
+  @Post('users/{userId}/sync-fio')
+  public async syncUserFio(@Path() userId: number): Promise<{
+    success: boolean
+    inserted: number
+    errors: string[]
+    username: string
+  }> {
+    // Get user and their FIO credentials
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    if (!user) {
+      this.setStatus(404)
+      throw NotFound('User not found')
+    }
+
+    const [settings] = await db
+      .select({
+        fioUsername: userSettings.fioUsername,
+        fioApiKey: userSettings.fioApiKey,
+      })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+
+    if (!settings?.fioUsername || !settings?.fioApiKey) {
+      this.setStatus(400)
+      throw BadRequest('User does not have FIO credentials configured')
+    }
+
+    // Perform sync
+    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername)
+
+    return {
+      success: result.success,
+      inserted: result.inserted,
+      errors: result.errors,
       username: user.username,
     }
   }

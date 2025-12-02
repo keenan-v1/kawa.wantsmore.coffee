@@ -53,15 +53,16 @@
             </template>
 
             <template #item.roles="{ item }">
-              <v-chip
-                v-for="role in item.roles"
-                :key="role.id"
-                size="small"
-                class="mr-1"
-                :color="role.color"
-              >
-                {{ role.name }}
-              </v-chip>
+              <div class="d-flex flex-wrap ga-1">
+                <v-chip
+                  v-for="role in item.roles"
+                  :key="role.id"
+                  size="small"
+                  :color="role.color"
+                >
+                  {{ role.name }}
+                </v-chip>
+              </div>
             </template>
 
             <template #item.fioSync="{ item }">
@@ -84,9 +85,57 @@
             </template>
 
             <template #item.actions="{ item }">
-              <v-btn icon size="small" @click="openEditDialog(item)">
-                <v-icon>mdi-pencil</v-icon>
-              </v-btn>
+              <!-- Desktop: show buttons -->
+              <div class="d-none d-sm-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      :disabled="!item.fioSync.fioUsername"
+                      :loading="syncingUsers.has(item.id)"
+                      @click="syncUserFio(item)"
+                    >
+                      <v-icon>mdi-sync</v-icon>
+                    </v-btn>
+                  </template>
+                  {{ item.fioSync.fioUsername ? 'Sync FIO' : 'FIO not configured' }}
+                </v-tooltip>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn v-bind="props" icon size="small" @click="openEditDialog(item)">
+                      <v-icon>mdi-pencil</v-icon>
+                    </v-btn>
+                  </template>
+                  Edit user
+                </v-tooltip>
+              </div>
+              <!-- Mobile: show menu -->
+              <v-menu>
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" icon size="small" class="d-sm-none">
+                    <v-icon>mdi-dots-vertical</v-icon>
+                  </v-btn>
+                </template>
+                <v-list density="compact">
+                  <v-list-item
+                    :disabled="!item.fioSync.fioUsername"
+                    @click="syncUserFio(item)"
+                  >
+                    <template #prepend>
+                      <v-icon>mdi-sync</v-icon>
+                    </template>
+                    <v-list-item-title>Sync FIO</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item @click="openEditDialog(item)">
+                    <template #prepend>
+                      <v-icon>mdi-pencil</v-icon>
+                    </template>
+                    <v-list-item-title>Edit user</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </template>
           </v-data-table-server>
         </v-card>
@@ -127,7 +176,7 @@
                     <div class="text-caption text-medium-emphasis">{{ permission.id }}</div>
                   </td>
                   <td class="px-0">
-                    <v-tooltip v-if="permission.description" location="right" content-class="bg-surface text-body-2">
+                    <v-tooltip v-if="permission.description" location="right">
                       <template #activator="{ props }">
                         <v-icon
                           v-bind="props"
@@ -451,7 +500,7 @@ const userHeaders = [
   { title: 'Roles', key: 'roles', sortable: false },
   { title: 'FIO Sync', key: 'fioSync', sortable: false },
   { title: 'Created', key: 'createdAt', sortable: false },
-  { title: 'Actions', key: 'actions', sortable: false, width: 80 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
 ]
 
 const userList = ref<AdminUser[]>([])
@@ -460,6 +509,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const search = ref('')
 const loading = ref(false)
+const syncingUsers = ref<Set<number>>(new Set())
 const availableRoles = ref<Role[]>([])
 
 const editDialog = ref(false)
@@ -584,6 +634,26 @@ const loadUsers = async () => {
     showSnackbar('Failed to load users', 'error')
   } finally {
     loading.value = false
+  }
+}
+
+const syncUserFio = async (user: AdminUser) => {
+  try {
+    syncingUsers.value.add(user.id)
+    const result = await api.admin.syncUserFio(user.id)
+    if (result.success) {
+      showSnackbar(`Synced ${result.inserted} items for ${result.username}`)
+      // Refresh the user list to update sync timestamp
+      await loadUsers()
+    } else {
+      showSnackbar(`Sync completed with errors: ${result.errors.join(', ')}`, 'error')
+    }
+  } catch (error) {
+    console.error('Failed to sync FIO', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync FIO'
+    showSnackbar(message, 'error')
+  } finally {
+    syncingUsers.value.delete(user.id)
   }
 }
 

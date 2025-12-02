@@ -74,6 +74,9 @@ pnpm db:seed      # Seed initial data
 pnpm db:init      # Idempotent initialization (checks if seeding needed)
 pnpm db:studio    # Open Drizzle Studio (visual DB browser)
 
+# TSOA (API route generation)
+pnpm generate          # Regenerate routes and spec after changing controllers
+
 # FIO sync commands
 pnpm fio:sync                # Sync all FIO data
 pnpm fio:sync:commodities    # Sync commodities only
