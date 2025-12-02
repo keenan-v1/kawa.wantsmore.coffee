@@ -9,6 +9,7 @@ interface User {
   password: string
   displayName: string
   fioUsername: string
+  hasFioApiKey: boolean
   preferredCurrency: Currency
   roles: Role[]
 }
@@ -35,6 +36,7 @@ const users: User[] = [
     password: 'password',
     displayName: 'Demo User',
     fioUsername: 'demo_fio',
+    hasFioApiKey: true,
     preferredCurrency: 'CIS',
     roles: [
       roleService.getRoleById('member')!,
@@ -87,6 +89,7 @@ export const mockApi = {
             profileName: user.profileName,
             displayName: user.displayName,
             fioUsername: user.fioUsername,
+            hasFioApiKey: user.hasFioApiKey,
             preferredCurrency: user.preferredCurrency,
             roles: user.roles
           }
@@ -130,6 +133,7 @@ export const mockApi = {
           password: request.password,
           displayName: request.profileName,
           fioUsername: '',
+          hasFioApiKey: false,
           preferredCurrency: 'CIS', // Default currency
           roles: [roleService.getRoleById('applicant')!]
         }

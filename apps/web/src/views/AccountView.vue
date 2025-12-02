@@ -25,9 +25,20 @@
               />
               <v-text-field
                 v-model="account.fioUsername"
-                label="FIO Username (optional)"
+                label="FIO Username"
                 prepend-icon="mdi-game-controller"
-                hint="Link your Prosperous Universe account"
+                hint="Your Prosperous Universe username"
+              />
+              <v-text-field
+                v-model="fioApiKey"
+                :label="account.hasFioApiKey ? 'FIO API Key (configured)' : 'FIO API Key'"
+                :placeholder="account.hasFioApiKey ? '••••••••••••••••' : 'Enter your FIO API key'"
+                prepend-icon="mdi-key"
+                :append-inner-icon="showFioApiKey ? 'mdi-eye-off' : 'mdi-eye'"
+                :type="showFioApiKey ? 'text' : 'password'"
+                @click:append-inner="showFioApiKey = !showFioApiKey"
+                hint="Get your API key from https://fio.fnar.net/settings"
+                persistent-hint
               />
               <v-select
                 v-model="account.preferredCurrency"
@@ -140,6 +151,7 @@ const account = ref<{
   profileName: string
   displayName: string
   fioUsername: string
+  hasFioApiKey: boolean
   preferredCurrency: Currency
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
@@ -148,11 +160,16 @@ const account = ref<{
   profileName: '',
   displayName: '',
   fioUsername: '',
+  hasFioApiKey: false,
   preferredCurrency: 'CIS',
   locationDisplayMode: 'both',
   commodityDisplayMode: 'both',
   roles: []
 })
+
+// Separate ref for FIO API key (write-only, never pre-populated)
+const fioApiKey = ref('')
+const showFioApiKey = ref(false)
 
 const roleNames = computed(() => {
   return roleService.getRoleNames(account.value.roles)
@@ -211,15 +228,35 @@ onMounted(async () => {
 const saveProfile = async () => {
   try {
     savingProfile.value = true
-    const updated = await api.account.updateProfile({
+    const updateData: {
+      displayName: string
+      fioUsername: string
+      fioApiKey?: string
+      preferredCurrency: Currency
+      locationDisplayMode: LocationDisplayMode
+      commodityDisplayMode: CommodityDisplayMode
+    } = {
       displayName: account.value.displayName,
       fioUsername: account.value.fioUsername || '',
       preferredCurrency: account.value.preferredCurrency,
       locationDisplayMode: account.value.locationDisplayMode,
       commodityDisplayMode: account.value.commodityDisplayMode
-    })
+    }
 
+    // Only include fioApiKey if user entered a new one
+    if (fioApiKey.value) {
+      updateData.fioApiKey = fioApiKey.value
+    }
+
+    const updated = await api.account.updateProfile(updateData)
+
+    account.value.hasFioApiKey = updated.hasFioApiKey
     userStore.setUser(updated)
+
+    // Clear the API key field after successful save
+    fioApiKey.value = ''
+    showFioApiKey.value = false
+
     showSnackbar('Profile updated successfully')
   } catch (error) {
     console.error('Failed to update profile', error)

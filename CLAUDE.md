@@ -17,6 +17,9 @@ Full-stack internal commodity market for KawaKawa, Inc., a fictional corporation
 - **PostgreSQL 17** with **Drizzle ORM**
 - **Vitest** for unit testing
 - **FIO REST API** integration (Prosperous Universe game data)
+  - API Spec: https://doc.fnar.net/api.json
+  - Base URL: https://rest.fnar.net
+  - Per-user API keys (users provide their own FIO credentials)
 
 ### Infrastructure
 - **Turborepo** monorepo structure

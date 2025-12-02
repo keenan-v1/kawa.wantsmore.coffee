@@ -5,11 +5,11 @@ import type { Role } from '../types'
 
 // Mock roles - configurable from backend in the future
 const MOCK_ROLES: Role[] = [
-  { id: 'applicant', name: 'Applicant' },
-  { id: 'member', name: 'Member' },
-  { id: 'lead', name: 'Lead' },
-  { id: 'trade-partner', name: 'Trade Partner' },
-  { id: 'administrator', name: 'Administrator' }
+  { id: 'applicant', name: 'Applicant', color: 'blue-grey' },
+  { id: 'member', name: 'Member', color: 'blue' },
+  { id: 'lead', name: 'Lead', color: 'green' },
+  { id: 'trade-partner', name: 'Trade Partner', color: 'orange' },
+  { id: 'administrator', name: 'Administrator', color: 'red' }
 ]
 
 export const roleService = {

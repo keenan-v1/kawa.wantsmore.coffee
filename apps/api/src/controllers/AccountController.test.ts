@@ -18,6 +18,7 @@ vi.mock('../db/index.js', () => ({
   userSettings: {
     userId: 'userId',
     fioUsername: 'fioUsername',
+    fioApiKey: 'fioApiKey',
     preferredCurrency: 'preferredCurrency',
     locationDisplayMode: 'locationDisplayMode',
     commodityDisplayMode: 'commodityDisplayMode',
@@ -30,6 +31,7 @@ vi.mock('../db/index.js', () => ({
   roles: {
     id: 'id',
     name: 'name',
+    color: 'color',
   },
 }))
 
@@ -66,13 +68,14 @@ describe('AccountController', () => {
         username: 'testuser',
         displayName: 'Test User',
         fioUsername: 'fiotest',
+        fioApiKey: 'secret-api-key',
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'ticker-only',
       }
       const mockRoles = [
-        { roleId: 'member', roleName: 'Member' },
-        { roleId: 'lead', roleName: 'Lead' },
+        { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
+        { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
       ]
 
       // Mock first query (user + settings)
@@ -88,12 +91,13 @@ describe('AccountController', () => {
         profileName: 'testuser',
         displayName: 'Test User',
         fioUsername: 'fiotest',
+        hasFioApiKey: true,
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'ticker-only',
         roles: [
-          { id: 'member', name: 'Member' },
-          { id: 'lead', name: 'Lead' },
+          { id: 'member', name: 'Member', color: 'blue' },
+          { id: 'lead', name: 'Lead', color: 'green' },
         ],
       })
       expect(db.select).toHaveBeenCalledTimes(2)
@@ -104,6 +108,7 @@ describe('AccountController', () => {
         username: 'newuser',
         displayName: 'New User',
         fioUsername: null,
+        fioApiKey: null,
         preferredCurrency: null,
         locationDisplayMode: null,
         commodityDisplayMode: null,
@@ -120,6 +125,7 @@ describe('AccountController', () => {
         profileName: 'newuser',
         displayName: 'New User',
         fioUsername: '',
+        hasFioApiKey: false,
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'both',
@@ -143,6 +149,7 @@ describe('AccountController', () => {
       username: 'testuser',
       displayName: 'Updated Name',
       fioUsername: 'fiotest',
+      fioApiKey: 'existing-api-key',
       preferredCurrency: 'ICA',
       locationDisplayMode: 'names-only',
       commodityDisplayMode: 'both',
@@ -152,7 +159,7 @@ describe('AccountController', () => {
       // Mock getProfile call that happens at the end
       mockSelect.where
         .mockResolvedValueOnce([mockProfileData])
-        .mockResolvedValueOnce([{ roleId: 'member', roleName: 'Member' }])
+        .mockResolvedValueOnce([{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }])
     })
 
     it('should update displayName in users table', async () => {
@@ -202,6 +209,19 @@ describe('AccountController', () => {
       await controller.updateProfile(body, request)
 
       expect(db.update).toHaveBeenCalledTimes(2)
+    })
+
+    it('should update fioApiKey in userSettings table', async () => {
+      const request = { user: { userId: 1, username: 'testuser', roles: [] } }
+      const body = { fioApiKey: 'new-secret-api-key' }
+
+      await controller.updateProfile(body, request)
+
+      expect(db.update).toHaveBeenCalledTimes(1)
+      expect(mockUpdate.set).toHaveBeenCalledWith({
+        fioApiKey: 'new-secret-api-key',
+        updatedAt: expect.any(Date),
+      })
     })
 
     it('should not update users table if no displayName provided', async () => {

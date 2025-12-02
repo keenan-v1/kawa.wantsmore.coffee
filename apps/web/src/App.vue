@@ -5,7 +5,6 @@
       <v-spacer />
       <v-btn to="/market" text>Market</v-btn>
       <v-btn to="/inventory" text>My Inventory</v-btn>
-      <v-btn to="/demand" text>Demands</v-btn>
       <v-btn to="/account" text>Account</v-btn>
       <v-btn v-if="isAdmin" to="/admin" text prepend-icon="mdi-shield-account">Admin</v-btn>
       <v-btn @click="logout" text prepend-icon="mdi-logout">Logout</v-btn>

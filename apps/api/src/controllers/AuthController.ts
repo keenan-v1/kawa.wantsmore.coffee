@@ -79,11 +79,12 @@ export class AuthController extends Controller {
       throw Forbidden('Account is inactive. Please contact an administrator.')
     }
 
-    // Get user roles with names
+    // Get user roles with names and colors
     const userRolesData = await db
       .select({
         roleId: roles.id,
         roleName: roles.name,
+        roleColor: roles.color,
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
@@ -93,6 +94,7 @@ export class AuthController extends Controller {
     const roleObjects: Role[] = userRolesData.map(r => ({
       id: r.roleId,
       name: r.roleName,
+      color: r.roleColor,
     }))
 
     // Safety check: users must have at least one role
@@ -160,9 +162,9 @@ export class AuthController extends Controller {
       roleId: 'applicant',
     })
 
-    // Get the applicant role name for the response
+    // Get the applicant role for the response
     const [applicantRole] = await db
-      .select({ id: roles.id, name: roles.name })
+      .select({ id: roles.id, name: roles.name, color: roles.color })
       .from(roles)
       .where(eq(roles.id, 'applicant'))
 
@@ -181,7 +183,7 @@ export class AuthController extends Controller {
         username: newUser.username,
         displayName: newUser.displayName,
         email: newUser.email || undefined,
-        roles: [{ id: applicantRole.id, name: applicantRole.name }],
+        roles: [{ id: applicantRole.id, name: applicantRole.name, color: applicantRole.color }],
       },
     }
   }

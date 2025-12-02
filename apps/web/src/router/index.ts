@@ -4,7 +4,6 @@ import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 import MarketView from '../views/MarketView.vue'
 import InventoryView from '../views/InventoryView.vue'
-import DemandView from '../views/DemandView.vue'
 import AccountView from '../views/AccountView.vue'
 import AdminView from '../views/AdminView.vue'
 
@@ -40,12 +39,6 @@ const router = createRouter({
       path: '/inventory',
       name: 'inventory',
       component: InventoryView,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/demand',
-      name: 'demand',
-      component: DemandView,
       meta: { requiresAuth: true }
     },
     {

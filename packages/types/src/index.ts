@@ -25,42 +25,46 @@ export type CommodityDisplayMode = 'ticker-only' | 'name-only' | 'both'
 export interface Role {
   id: string
   name: string
+  color: string // Vuetify color for UI chips (e.g., 'blue', 'green', 'red')
 }
 
 export interface User {
   profileName: string
   displayName: string
   fioUsername: string
+  hasFioApiKey: boolean // Indicates if FIO API key is configured (never expose actual key)
   preferredCurrency: Currency
   locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
   commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
   roles: Role[] // One user to many roles
 }
 
-export interface InventoryItem {
+// FIO inventory synced from game
+export interface FioInventoryItem {
   id: number
-  commodity: string // ticker
+  commodityTicker: string
   quantity: number
-  price: number
-  currency: Currency
-  location: string // location ID
+  locationId: string
+  lastSyncedAt: string // ISO date string
 }
 
-export interface Demand {
-  id: number
-  commodity: string // ticker
-  quantity: number
-  maxPrice: number
-  currency: Currency
-  deliveryLocation: string // location ID
-}
+// Sell order limit modes
+export type SellOrderLimitMode = 'none' | 'max_sell' | 'reserve'
 
-export interface MarketListing {
+// User sell order (offer to sell)
+export interface SellOrder {
   id: number
-  commodity: string // ticker
-  seller: string
-  quantity: number
+  commodityTicker: string
+  locationId: string
   price: number
   currency: Currency
-  location: string // location ID
+  limitMode: SellOrderLimitMode
+  limitQuantity: number | null
+  targetRoleId: string | null // null = internal order, set = visible to that role
+}
+
+// Sell order with calculated available quantity
+export interface SellOrderWithAvailability extends SellOrder {
+  fioQuantity: number // Raw FIO inventory quantity
+  availableQuantity: number // Calculated based on limitMode
 }

@@ -130,7 +130,79 @@ export class FioClient {
     if (includeRecipes) params.include_recipes = 'true'
     return this.fetchJson('/building', params)
   }
+
+  /**
+   * Fetch user inventory from FIO API
+   * Uses query parameter authentication (apikey + username)
+   */
+  async getUserInventory(apiKey: string, username: string, includeHeader = true): Promise<string> {
+    const url = new URL(`${this.baseUrl}/csv/inventory`)
+    url.searchParams.set('apikey', apiKey)
+    url.searchParams.set('username', username)
+    url.searchParams.set('include_header', includeHeader.toString())
+
+    const headers: Record<string, string> = {
+      'Accept': 'text/csv',
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.text()
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user inventory from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
+
+  /**
+   * Fetch user sites from FIO API
+   * Uses query parameter authentication (apikey + username)
+   */
+  async getUserSites(apiKey: string, username: string, includeHeader = true): Promise<string> {
+    const url = new URL(`${this.baseUrl}/csv/sites`)
+    url.searchParams.set('apikey', apiKey)
+    url.searchParams.set('username', username)
+    url.searchParams.set('include_header', includeHeader.toString())
+
+    const headers: Record<string, string> = {
+      'Accept': 'text/csv',
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.text()
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user sites from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
 }
 
-// Export singleton instance
+// Export singleton instance for public endpoints (commodities, locations, etc.)
 export const fioClient = new FioClient(process.env.FIO_API_KEY)

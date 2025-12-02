@@ -9,11 +9,31 @@ export const currencyEnum = pgEnum('currency', ['ICA', 'CIS', 'AIC', 'NCC'])
 export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet'])
 export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names-only', 'natural-ids-only', 'both'])
 export const commodityDisplayModeEnum = pgEnum('commodity_display_mode', ['ticker-only', 'name-only', 'both'])
+export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', ['none', 'max_sell', 'reserve'])
 
 // ==================== ROLES ====================
 export const roles = pgTable('roles', {
   id: varchar('id', { length: 50 }).primaryKey(), // 'applicant', 'member', 'lead', etc.
   name: varchar('name', { length: 100 }).notNull(), // 'Applicant', 'Member', 'Lead', etc.
+  color: varchar('color', { length: 20 }).notNull().default('grey'), // UI chip color (vuetify color names)
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// ==================== PERMISSIONS ====================
+export const permissions = pgTable('permissions', {
+  id: varchar('id', { length: 100 }).primaryKey(), // 'orders.view_internal', 'orders.post_external', etc.
+  name: varchar('name', { length: 100 }).notNull(), // Display name
+  description: text('description'), // Explanation of what this permission does
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+// ==================== ROLE PERMISSIONS (Many-to-Many) ====================
+export const rolePermissions = pgTable('role_permissions', {
+  id: serial('id').primaryKey(),
+  roleId: varchar('role_id', { length: 50 }).notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: varchar('permission_id', { length: 100 }).notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  allowed: boolean('allowed').notNull().default(true), // true = granted, false = explicitly denied
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -81,41 +101,29 @@ export const locations = pgTable('locations', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== INVENTORY ====================
-export const inventory = pgTable('inventory', {
+// ==================== FIO INVENTORY (Raw synced data from FIO) ====================
+export const fioInventory = pgTable('fio_inventory', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => commodities.ticker),
   quantity: integer('quantity').notNull(),
-  price: decimal('price', { precision: 12, scale: 2 }).notNull(),
-  currency: currencyEnum('currency').notNull(),
   locationId: varchar('location_id', { length: 20 }).notNull().references(() => locations.id),
+  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== DEMANDS ====================
-export const demands = pgTable('demands', {
+// ==================== SELL ORDERS ====================
+export const sellOrders = pgTable('sell_orders', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => commodities.ticker),
-  quantity: integer('quantity').notNull(),
-  maxPrice: decimal('max_price', { precision: 12, scale: 2 }).notNull(),
-  currency: currencyEnum('currency').notNull(),
-  deliveryLocationId: varchar('delivery_location_id', { length: 20 }).notNull().references(() => locations.id),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
-// ==================== MARKET LISTINGS ====================
-export const marketListings = pgTable('market_listings', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => commodities.ticker),
-  quantity: integer('quantity').notNull(),
+  locationId: varchar('location_id', { length: 20 }).notNull().references(() => locations.id),
   price: decimal('price', { precision: 12, scale: 2 }).notNull(),
   currency: currencyEnum('currency').notNull(),
-  locationId: varchar('location_id', { length: 20 }).notNull().references(() => locations.id),
+  limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
+  limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
+  targetRoleId: varchar('target_role_id', { length: 50 }).references(() => roles.id), // null = internal, set = visible to that role
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -129,9 +137,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   userRoles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
-  inventory: many(inventory),
-  demands: many(demands),
-  marketListings: many(marketListings),
+  fioInventory: many(fioInventory),
+  sellOrders: many(sellOrders),
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -150,6 +157,22 @@ export const passwordResetTokensRelations = relations(passwordResetTokens, ({ on
 
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
+  rolePermissions: many(rolePermissions),
+}))
+
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  rolePermissions: many(rolePermissions),
+}))
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [rolePermissions.roleId],
+    references: [roles.id],
+  }),
+  permission: one(permissions, {
+    fields: [rolePermissions.permissionId],
+    references: [permissions.id],
+  }),
 }))
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
@@ -164,58 +187,46 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
 }))
 
 export const commoditiesRelations = relations(commodities, ({ many }) => ({
-  inventory: many(inventory),
-  demands: many(demands),
-  marketListings: many(marketListings),
+  fioInventory: many(fioInventory),
+  sellOrders: many(sellOrders),
 }))
 
 export const locationsRelations = relations(locations, ({ many }) => ({
-  inventory: many(inventory),
-  demands: many(demands),
-  marketListings: many(marketListings),
+  fioInventory: many(fioInventory),
+  sellOrders: many(sellOrders),
 }))
 
-export const inventoryRelations = relations(inventory, ({ one }) => ({
+export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
   user: one(users, {
-    fields: [inventory.userId],
+    fields: [fioInventory.userId],
     references: [users.id],
   }),
   commodity: one(commodities, {
-    fields: [inventory.commodityTicker],
+    fields: [fioInventory.commodityTicker],
     references: [commodities.ticker],
   }),
   location: one(locations, {
-    fields: [inventory.locationId],
+    fields: [fioInventory.locationId],
     references: [locations.id],
   }),
 }))
 
-export const demandsRelations = relations(demands, ({ one }) => ({
+export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
   user: one(users, {
-    fields: [demands.userId],
+    fields: [sellOrders.userId],
     references: [users.id],
   }),
   commodity: one(commodities, {
-    fields: [demands.commodityTicker],
+    fields: [sellOrders.commodityTicker],
     references: [commodities.ticker],
   }),
   location: one(locations, {
-    fields: [demands.deliveryLocationId],
+    fields: [sellOrders.locationId],
     references: [locations.id],
+  }),
+  targetRole: one(roles, {
+    fields: [sellOrders.targetRoleId],
+    references: [roles.id],
   }),
 }))
 
-export const marketListingsRelations = relations(marketListings, ({ one }) => ({
-  user: one(users, {
-    fields: [marketListings.userId],
-    references: [users.id],
-  }),
-  commodity: one(commodities, {
-    fields: [marketListings.commodityTicker],
-    references: [commodities.ticker],
-  }),
-  location: one(locations, {
-    fields: [marketListings.locationId],
-    references: [locations.id],
-  }),
-}))

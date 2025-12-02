@@ -15,6 +15,7 @@ interface RegisterRequest {
 interface UpdateProfileRequest {
   displayName?: string
   fioUsername?: string
+  fioApiKey?: string
   preferredCurrency?: Currency
   locationDisplayMode?: LocationDisplayMode
   commodityDisplayMode?: CommodityDisplayMode
@@ -25,6 +26,11 @@ interface ChangePasswordRequest {
   newPassword: string
 }
 
+interface FioSyncInfo {
+  fioUsername: string | null
+  lastSyncedAt: string | null
+}
+
 interface AdminUser {
   id: number
   username: string
@@ -32,7 +38,36 @@ interface AdminUser {
   displayName: string
   isActive: boolean
   roles: Role[]
+  fioSync: FioSyncInfo
   createdAt: string
+}
+
+interface Permission {
+  id: string
+  name: string
+  description: string | null
+}
+
+interface RolePermissionWithDetails {
+  id: number
+  roleId: string
+  roleName: string
+  roleColor: string
+  permissionId: string
+  permissionName: string
+  allowed: boolean
+}
+
+interface CreateRoleRequest {
+  id: string
+  name: string
+  color: string
+}
+
+interface SetRolePermissionRequest {
+  roleId: string
+  permissionId: string
+  allowed: boolean
 }
 
 interface AdminUserListResponse {
@@ -323,6 +358,130 @@ const realApi = {
 
     return response.json()
   },
+
+  // Role management
+  createRole: async (request: CreateRoleRequest): Promise<Role> => {
+    const response = await fetch('/api/admin/roles', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 409) {
+        throw new Error('Role with this ID already exists')
+      }
+      throw new Error(`Failed to create role: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateRole: async (roleId: string, updates: { name?: string; color?: string }): Promise<Role> => {
+    const response = await fetch(`/api/admin/roles/${roleId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Role not found')
+      }
+      throw new Error(`Failed to update role: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteRole: async (roleId: string): Promise<void> => {
+    const response = await fetch(`/api/admin/roles/${roleId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Role not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Cannot delete role')
+      }
+      throw new Error(`Failed to delete role: ${response.statusText}`)
+    }
+  },
+
+  // Permission management
+  listPermissions: async (): Promise<Permission[]> => {
+    const response = await fetch('/api/admin/permissions', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to list permissions: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  listRolePermissions: async (): Promise<RolePermissionWithDetails[]> => {
+    const response = await fetch('/api/admin/role-permissions', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to list role permissions: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  setRolePermission: async (request: SetRolePermissionRequest): Promise<void> => {
+    const response = await fetch('/api/admin/role-permissions', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Role or permission not found')
+      }
+      throw new Error(`Failed to set role permission: ${response.statusText}`)
+    }
+  },
+
+  deleteRolePermission: async (id: number): Promise<void> => {
+    const response = await fetch(`/api/admin/role-permissions/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Role permission mapping not found')
+      }
+      throw new Error(`Failed to delete role permission: ${response.statusText}`)
+    }
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -346,6 +505,13 @@ export const api = {
     listUsers: (page?: number, pageSize?: number, search?: string) => realApi.listUsers(page, pageSize, search),
     updateUser: (userId: number, updates: UpdateUserRequest) => realApi.updateUser(userId, updates),
     listRoles: () => realApi.listRoles(),
+    createRole: (request: CreateRoleRequest) => realApi.createRole(request),
+    updateRole: (roleId: string, updates: { name?: string; color?: string }) => realApi.updateRole(roleId, updates),
+    deleteRole: (roleId: string) => realApi.deleteRole(roleId),
     generatePasswordResetLink: (userId: number) => realApi.generatePasswordResetLink(userId),
+    listPermissions: () => realApi.listPermissions(),
+    listRolePermissions: () => realApi.listRolePermissions(),
+    setRolePermission: (request: SetRolePermissionRequest) => realApi.setRolePermission(request),
+    deleteRolePermission: (id: number) => realApi.deleteRolePermission(id),
   }
 }

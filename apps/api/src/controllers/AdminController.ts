@@ -1,11 +1,17 @@
-import { Body, Controller, Get, Put, Post, Path, Route, Security, Tags, Request, Query } from 'tsoa'
+import { Body, Controller, Get, Put, Post, Delete, Path, Route, Security, Tags, Request, Query } from 'tsoa'
 import type { Role } from '@kawakawa/types'
-import { db, users, userRoles, roles, passwordResetTokens } from '../db/index.js'
-import { eq, ilike, or, sql, desc } from 'drizzle-orm'
+import { db, users, userRoles, roles, passwordResetTokens, userSettings, fioInventory, permissions, rolePermissions } from '../db/index.js'
+import { eq, ilike, or, sql, desc, max, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
-import { NotFound, BadRequest } from '../utils/errors.js'
+import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'
+import { invalidatePermissionCache } from '../utils/permissionService.js'
 import crypto from 'crypto'
+
+interface FioSyncInfo {
+  fioUsername: string | null
+  lastSyncedAt: Date | null
+}
 
 interface AdminUser {
   id: number
@@ -14,6 +20,7 @@ interface AdminUser {
   displayName: string
   isActive: boolean
   roles: Role[]
+  fioSync: FioSyncInfo
   createdAt: Date
 }
 
@@ -33,6 +40,46 @@ interface PasswordResetLinkResponse {
   token: string
   expiresAt: Date
   username: string
+}
+
+interface UpdateRoleRequest {
+  name?: string
+  color?: string // Vuetify color for UI chips
+}
+
+interface CreateRoleRequest {
+  id: string
+  name: string
+  color: string
+}
+
+interface Permission {
+  id: string
+  name: string
+  description: string | null
+}
+
+interface RolePermission {
+  id: number
+  roleId: string
+  permissionId: string
+  allowed: boolean
+}
+
+interface RolePermissionWithDetails {
+  id: number
+  roleId: string
+  roleName: string
+  roleColor: string
+  permissionId: string
+  permissionName: string
+  allowed: boolean
+}
+
+interface SetRolePermissionRequest {
+  roleId: string
+  permissionId: string
+  allowed: boolean
 }
 
 @Route('admin')
@@ -85,27 +132,44 @@ export class AdminController extends Controller {
       .limit(pageSize)
       .offset(offset)
 
-    // Get roles for each user
-    const usersWithRoles: AdminUser[] = await Promise.all(
+    // Get roles and FIO sync info for each user
+    const usersWithDetails: AdminUser[] = await Promise.all(
       userList.map(async (user) => {
+        // Get user roles
         const userRolesData = await db
           .select({
             roleId: roles.id,
             roleName: roles.name,
+            roleColor: roles.color,
           })
           .from(userRoles)
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, user.id))
 
+        // Get FIO sync info
+        const [settings] = await db
+          .select({ fioUsername: userSettings.fioUsername })
+          .from(userSettings)
+          .where(eq(userSettings.userId, user.id))
+
+        const [lastSync] = await db
+          .select({ lastSyncedAt: max(fioInventory.lastSyncedAt) })
+          .from(fioInventory)
+          .where(eq(fioInventory.userId, user.id))
+
         return {
           ...user,
-          roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName })),
+          roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName, color: r.roleColor })),
+          fioSync: {
+            fioUsername: settings?.fioUsername || null,
+            lastSyncedAt: lastSync?.lastSyncedAt || null,
+          },
         }
       })
     )
 
     return {
-      users: usersWithRoles,
+      users: usersWithDetails,
       total,
       page,
       pageSize,
@@ -140,14 +204,30 @@ export class AdminController extends Controller {
       .select({
         roleId: roles.id,
         roleName: roles.name,
+        roleColor: roles.color,
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId))
 
+    // Get FIO sync info
+    const [settings] = await db
+      .select({ fioUsername: userSettings.fioUsername })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+
+    const [lastSync] = await db
+      .select({ lastSyncedAt: max(fioInventory.lastSyncedAt) })
+      .from(fioInventory)
+      .where(eq(fioInventory.userId, userId))
+
     return {
       ...user,
-      roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName })),
+      roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName, color: r.roleColor })),
+      fioSync: {
+        fioUsername: settings?.fioUsername || null,
+        lastSyncedAt: lastSync?.lastSyncedAt || null,
+      },
     }
   }
 
@@ -233,9 +313,47 @@ export class AdminController extends Controller {
   @Get('roles')
   public async listRoles(): Promise<Role[]> {
 
-    const roleList = await db.select({ id: roles.id, name: roles.name }).from(roles)
+    const roleList = await db.select({ id: roles.id, name: roles.name, color: roles.color }).from(roles)
 
     return roleList
+  }
+
+  /**
+   * Update a role's name or color
+   */
+  @Put('roles/{roleId}')
+  public async updateRole(
+    @Path() roleId: string,
+    @Body() body: UpdateRoleRequest
+  ): Promise<Role> {
+    // Verify role exists
+    const [existingRole] = await db
+      .select({ id: roles.id, name: roles.name, color: roles.color })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+
+    if (!existingRole) {
+      this.setStatus(404)
+      throw NotFound('Role not found')
+    }
+
+    // Build update object
+    const updateData: { name?: string; color?: string; updatedAt: Date } = {
+      updatedAt: new Date(),
+    }
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.color !== undefined) updateData.color = body.color
+
+    // Update role
+    await db.update(roles).set(updateData).where(eq(roles.id, roleId))
+
+    // Return updated role
+    const [updatedRole] = await db
+      .select({ id: roles.id, name: roles.name, color: roles.color })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+
+    return updatedRole
   }
 
   /**
@@ -275,5 +393,216 @@ export class AdminController extends Controller {
       expiresAt,
       username: user.username,
     }
+  }
+
+  // ==================== ROLE MANAGEMENT ====================
+
+  /**
+   * Create a new role
+   */
+  @Post('roles')
+  public async createRole(@Body() body: CreateRoleRequest): Promise<Role> {
+    // Check if role ID already exists
+    const [existing] = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.id, body.id))
+
+    if (existing) {
+      this.setStatus(409)
+      throw Conflict(`Role with ID '${body.id}' already exists`)
+    }
+
+    // Create role
+    await db.insert(roles).values({
+      id: body.id,
+      name: body.name,
+      color: body.color,
+    })
+
+    return { id: body.id, name: body.name, color: body.color }
+  }
+
+  /**
+   * Delete a role (only if no users are assigned to it)
+   */
+  @Delete('roles/{roleId}')
+  public async deleteRole(@Path() roleId: string): Promise<{ success: boolean }> {
+    // Verify role exists
+    const [existing] = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+
+    if (!existing) {
+      this.setStatus(404)
+      throw NotFound('Role not found')
+    }
+
+    // Check if any users have this role
+    const [userCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userRoles)
+      .where(eq(userRoles.roleId, roleId))
+
+    if (userCount && userCount.count > 0) {
+      this.setStatus(400)
+      throw BadRequest(`Cannot delete role: ${userCount.count} user(s) are assigned to this role`)
+    }
+
+    // Delete role permissions first (cascade should handle this but being explicit)
+    await db.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId))
+
+    // Delete the role
+    await db.delete(roles).where(eq(roles.id, roleId))
+
+    // Invalidate permission cache
+    invalidatePermissionCache()
+
+    return { success: true }
+  }
+
+  // ==================== PERMISSION MANAGEMENT ====================
+
+  /**
+   * List all permissions
+   */
+  @Get('permissions')
+  public async listPermissions(): Promise<Permission[]> {
+    const permissionList = await db
+      .select({
+        id: permissions.id,
+        name: permissions.name,
+        description: permissions.description,
+      })
+      .from(permissions)
+      .orderBy(permissions.id)
+
+    return permissionList
+  }
+
+  /**
+   * List all role-permission mappings with details
+   */
+  @Get('role-permissions')
+  public async listRolePermissions(): Promise<RolePermissionWithDetails[]> {
+    const mappings = await db
+      .select({
+        id: rolePermissions.id,
+        roleId: rolePermissions.roleId,
+        roleName: roles.name,
+        roleColor: roles.color,
+        permissionId: rolePermissions.permissionId,
+        permissionName: permissions.name,
+        allowed: rolePermissions.allowed,
+      })
+      .from(rolePermissions)
+      .innerJoin(roles, eq(rolePermissions.roleId, roles.id))
+      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .orderBy(roles.id, permissions.id)
+
+    return mappings
+  }
+
+  /**
+   * Set a role permission (create or update)
+   */
+  @Post('role-permissions')
+  public async setRolePermission(@Body() body: SetRolePermissionRequest): Promise<RolePermission> {
+    // Verify role exists
+    const [role] = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.id, body.roleId))
+
+    if (!role) {
+      this.setStatus(404)
+      throw NotFound(`Role '${body.roleId}' not found`)
+    }
+
+    // Verify permission exists
+    const [permission] = await db
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.id, body.permissionId))
+
+    if (!permission) {
+      this.setStatus(404)
+      throw NotFound(`Permission '${body.permissionId}' not found`)
+    }
+
+    // Check if mapping already exists
+    const [existing] = await db
+      .select({ id: rolePermissions.id })
+      .from(rolePermissions)
+      .where(
+        and(
+          eq(rolePermissions.roleId, body.roleId),
+          eq(rolePermissions.permissionId, body.permissionId)
+        )
+      )
+
+    if (existing) {
+      // Update existing
+      await db
+        .update(rolePermissions)
+        .set({ allowed: body.allowed, updatedAt: new Date() })
+        .where(eq(rolePermissions.id, existing.id))
+
+      // Invalidate cache
+      invalidatePermissionCache()
+
+      return {
+        id: existing.id,
+        roleId: body.roleId,
+        permissionId: body.permissionId,
+        allowed: body.allowed,
+      }
+    }
+
+    // Create new
+    const [newMapping] = await db
+      .insert(rolePermissions)
+      .values({
+        roleId: body.roleId,
+        permissionId: body.permissionId,
+        allowed: body.allowed,
+      })
+      .returning()
+
+    // Invalidate cache
+    invalidatePermissionCache()
+
+    return {
+      id: newMapping.id,
+      roleId: newMapping.roleId,
+      permissionId: newMapping.permissionId,
+      allowed: newMapping.allowed,
+    }
+  }
+
+  /**
+   * Delete a role permission mapping
+   */
+  @Delete('role-permissions/{id}')
+  public async deleteRolePermission(@Path() id: number): Promise<{ success: boolean }> {
+    // Verify mapping exists
+    const [existing] = await db
+      .select({ id: rolePermissions.id })
+      .from(rolePermissions)
+      .where(eq(rolePermissions.id, id))
+
+    if (!existing) {
+      this.setStatus(404)
+      throw NotFound('Role permission mapping not found')
+    }
+
+    // Delete
+    await db.delete(rolePermissions).where(eq(rolePermissions.id, id))
+
+    // Invalidate cache
+    invalidatePermissionCache()
+
+    return { success: true }
   }
 }

@@ -160,3 +160,25 @@ export interface FioPrice {
   UserNameSubmitted: string
   Timestamp: string
 }
+
+// User inventory item from /csv/inventory endpoint
+export interface FioInventoryItem {
+  StorageId: string
+  AddressableId: string // Location natural ID (e.g., "UV-351a", "BEN")
+  MaterialId: string
+  MaterialTicker: string // e.g., "H2O", "RAT"
+  MaterialName: string
+  MaterialCategory: string
+  Type: string // e.g., "STORE", "SHIP"
+  Amount: number
+  Weight: number
+  Volume: number
+}
+
+// User site from /csv/sites endpoint
+export interface FioSite {
+  SiteId: string
+  PlanetId: string
+  PlanetNaturalId: string
+  PlanetName: string
+}

@@ -10,6 +10,7 @@ interface UserProfile {
   profileName: string
   displayName: string
   fioUsername: string
+  hasFioApiKey: boolean // Indicates if FIO API key is configured (never expose actual key)
   preferredCurrency: Currency
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
@@ -19,6 +20,7 @@ interface UserProfile {
 interface UpdateProfileRequest {
   displayName?: string
   fioUsername?: string
+  fioApiKey?: string // FIO API key (write-only, never returned in responses)
   preferredCurrency?: Currency
   locationDisplayMode?: LocationDisplayMode
   commodityDisplayMode?: CommodityDisplayMode
@@ -43,6 +45,7 @@ export class AccountController extends Controller {
         username: users.username,
         displayName: users.displayName,
         fioUsername: userSettings.fioUsername,
+        fioApiKey: userSettings.fioApiKey,
         preferredCurrency: userSettings.preferredCurrency,
         locationDisplayMode: userSettings.locationDisplayMode,
         commodityDisplayMode: userSettings.commodityDisplayMode,
@@ -61,20 +64,23 @@ export class AccountController extends Controller {
       .select({
         roleId: roles.id,
         roleName: roles.name,
+        roleColor: roles.color,
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId))
 
-    const rolesArray: Role[] = userRolesData.map((r: { roleId: string; roleName: string }) => ({
+    const rolesArray: Role[] = userRolesData.map((r) => ({
       id: r.roleId,
       name: r.roleName,
+      color: r.roleColor,
     }))
 
     return {
       profileName: user.username,
       displayName: user.displayName,
       fioUsername: user.fioUsername || '',
+      hasFioApiKey: !!user.fioApiKey,
       preferredCurrency: user.preferredCurrency || 'CIS',
       locationDisplayMode: user.locationDisplayMode || 'both',
       commodityDisplayMode: user.commodityDisplayMode || 'both',
@@ -103,6 +109,7 @@ export class AccountController extends Controller {
     // Update user settings if any settings provided
     const settingsUpdate: Partial<typeof userSettings.$inferInsert> = {}
     if (body.fioUsername !== undefined) settingsUpdate.fioUsername = body.fioUsername
+    if (body.fioApiKey !== undefined) settingsUpdate.fioApiKey = body.fioApiKey
     if (body.preferredCurrency !== undefined) settingsUpdate.preferredCurrency = body.preferredCurrency
     if (body.locationDisplayMode !== undefined) settingsUpdate.locationDisplayMode = body.locationDisplayMode
     if (body.commodityDisplayMode !== undefined) settingsUpdate.commodityDisplayMode = body.commodityDisplayMode
