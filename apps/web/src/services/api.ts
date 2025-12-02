@@ -70,6 +70,13 @@ interface SetRolePermissionRequest {
   allowed: boolean
 }
 
+interface RolePermission {
+  id: number
+  roleId: string
+  permissionId: string
+  allowed: boolean
+}
+
 interface AdminUserListResponse {
   users: AdminUser[]
   total: number
@@ -449,7 +456,7 @@ const realApi = {
     return response.json()
   },
 
-  setRolePermission: async (request: SetRolePermissionRequest): Promise<void> => {
+  setRolePermission: async (request: SetRolePermissionRequest): Promise<RolePermission> => {
     const response = await fetch('/api/admin/role-permissions', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -465,6 +472,8 @@ const realApi = {
       }
       throw new Error(`Failed to set role permission: ${response.statusText}`)
     }
+
+    return response.json()
   },
 
   deleteRolePermission: async (id: number): Promise<void> => {

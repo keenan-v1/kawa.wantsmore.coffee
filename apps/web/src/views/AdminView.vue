@@ -110,6 +110,7 @@
               <thead>
                 <tr>
                   <th class="text-left">Permission</th>
+                  <th style="width: 28px"></th>
                   <th
                     v-for="role in availableRoles"
                     :key="role.id"
@@ -124,6 +125,20 @@
                   <td>
                     <div class="font-weight-medium">{{ permission.name }}</div>
                     <div class="text-caption text-medium-emphasis">{{ permission.id }}</div>
+                  </td>
+                  <td class="px-0">
+                    <v-tooltip v-if="permission.description" location="right" content-class="bg-surface text-body-2">
+                      <template #activator="{ props }">
+                        <v-icon
+                          v-bind="props"
+                          size="small"
+                          class="text-medium-emphasis"
+                        >
+                          mdi-information-outline
+                        </v-icon>
+                      </template>
+                      {{ permission.description }}
+                    </v-tooltip>
                   </td>
                   <td
                     v-for="role in availableRoles"
@@ -572,9 +587,14 @@ const loadUsers = async () => {
   }
 }
 
+// Track if roles were modified (for refreshing user list)
+const rolesModified = ref(false)
+
 const loadRoles = async () => {
   try {
-    availableRoles.value = await api.admin.listRoles()
+    const roles = await api.admin.listRoles()
+    // Sort alphabetically by ID for stable ordering
+    availableRoles.value = roles.sort((a, b) => a.id.localeCompare(b.id))
   } catch (error) {
     console.error('Failed to load roles', error)
   }
@@ -587,7 +607,8 @@ const loadPermissions = async () => {
       api.admin.listPermissions(),
       api.admin.listRolePermissions(),
     ])
-    permissionList.value = perms
+    // Sort alphabetically by ID for stable ordering
+    permissionList.value = perms.sort((a, b) => a.id.localeCompare(b.id))
     rolePermissionsList.value = rolePerms
   } catch (error) {
     console.error('Failed to load permissions', error)
@@ -669,30 +690,52 @@ const isTogglingPermission = (roleId: string, permissionId: string): boolean => 
 const togglePermission = async (roleId: string, permissionId: string) => {
   const key = `${roleId}:${permissionId}`
   const currentStatus = getPermissionStatus(roleId, permissionId)
+  const existingMapping = rolePermissionsList.value.find(
+    (rp) => rp.roleId === roleId && rp.permissionId === permissionId
+  )
 
   try {
     togglingPermissions.value.add(key)
 
     if (currentStatus === null) {
       // Not set -> Grant
-      await api.admin.setRolePermission({ roleId, permissionId, allowed: true })
+      const result = await api.admin.setRolePermission({ roleId, permissionId, allowed: true })
+      // Update local state with the real ID from the server
+      const role = availableRoles.value.find(r => r.id === roleId)
+      const permission = permissionList.value.find(p => p.id === permissionId)
+      rolePermissionsList.value.push({
+        id: result.id,
+        roleId,
+        roleName: role?.name || roleId,
+        roleColor: role?.color || 'grey',
+        permissionId,
+        permissionName: permission?.name || permissionId,
+        allowed: true,
+      })
     } else if (currentStatus === true) {
       // Granted -> Deny
-      await api.admin.setRolePermission({ roleId, permissionId, allowed: false })
+      const result = await api.admin.setRolePermission({ roleId, permissionId, allowed: false })
+      // Update local state - the server returns the same record with updated allowed
+      if (existingMapping) {
+        existingMapping.id = result.id // In case ID changed (shouldn't, but be safe)
+        existingMapping.allowed = false
+      }
     } else {
       // Denied -> Remove (delete the mapping)
-      const mapping = rolePermissionsList.value.find(
-        (rp) => rp.roleId === roleId && rp.permissionId === permissionId
-      )
-      if (mapping) {
-        await api.admin.deleteRolePermission(mapping.id)
+      if (existingMapping) {
+        await api.admin.deleteRolePermission(existingMapping.id)
+        // Update local state - remove from array
+        const index = rolePermissionsList.value.indexOf(existingMapping)
+        if (index > -1) {
+          rolePermissionsList.value.splice(index, 1)
+        }
       }
     }
-
-    await loadPermissions()
   } catch (error) {
     console.error('Failed to toggle permission', error)
     showSnackbar('Failed to update permission', 'error')
+    // On error, reload to restore correct state
+    await loadPermissions()
   } finally {
     togglingPermissions.value.delete(key)
   }
@@ -733,6 +776,7 @@ const saveRole = async () => {
     }
 
     roleDialog.value = false
+    rolesModified.value = true
     await loadRoles()
   } catch (error) {
     console.error('Failed to save role', error)
@@ -756,6 +800,7 @@ const deleteRole = async () => {
     await api.admin.deleteRole(deletingRole.value.id)
     showSnackbar('Role deleted successfully')
     deleteRoleDialog.value = false
+    rolesModified.value = true
     await loadRoles()
   } catch (error) {
     console.error('Failed to delete role', error)
@@ -768,8 +813,15 @@ const deleteRole = async () => {
 
 // Watch for tab changes to load data
 watch(activeTab, async (newTab) => {
-  if (newTab === 'permissions' && permissionList.value.length === 0) {
-    await loadPermissions()
+  if (newTab === 'permissions') {
+    // Always reload permissions to ensure fresh data
+    if (permissionList.value.length === 0) {
+      await loadPermissions()
+    }
+  } else if (newTab === 'users' && rolesModified.value) {
+    // Refresh user list to get updated role colors/names
+    rolesModified.value = false
+    await loadUsers()
   }
 })
 
@@ -786,6 +838,6 @@ onMounted(() => {
 }
 
 .permission-matrix td:first-child {
-  min-width: 200px;
+  width: 1%;
 }
 </style>
