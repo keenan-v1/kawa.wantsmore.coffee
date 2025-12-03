@@ -226,6 +226,18 @@
           <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
         </template>
 
+        <template #item.fioUploadedAt="{ item }">
+          <v-chip
+            v-if="item.fioUploadedAt"
+            :color="getSyncStatusColor(item.fioUploadedAt)"
+            size="small"
+            variant="tonal"
+          >
+            {{ formatRelativeTime(item.fioUploadedAt) }}
+          </v-chip>
+          <span v-else class="text-medium-emphasis">-</span>
+        </template>
+
         <template #item.actions="{ item }">
           <!-- Desktop: show buttons -->
           <div class="d-none d-sm-flex ga-1">
@@ -335,6 +347,7 @@ const getCommodityDisplay = (ticker: string): string => {
 const headers = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
+  { title: 'FIO Age', key: 'fioUploadedAt', sortable: true },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Actions', key: 'actions', sortable: false, width: 100 },
 ]

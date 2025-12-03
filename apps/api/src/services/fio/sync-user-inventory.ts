@@ -247,15 +247,11 @@ export async function getUserFioInventory(userId: number) {
       id: fioInventory.id,
       commodityTicker: fioInventory.commodityTicker,
       quantity: fioInventory.quantity,
-      lastSyncedAt: fioInventory.lastSyncedAt,
       // Storage info
       storageId: fioUserStorage.storageId,
       storageType: fioUserStorage.type,
-      weightLoad: fioUserStorage.weightLoad,
-      weightCapacity: fioUserStorage.weightCapacity,
-      volumeLoad: fioUserStorage.volumeLoad,
-      volumeCapacity: fioUserStorage.volumeCapacity,
-      fioTimestamp: fioUserStorage.fioTimestamp,
+      fioUploadedAt: fioUserStorage.fioUploadedAt,
+      lastSyncedAt: fioUserStorage.lastSyncedAt,
       // Location info
       locationId: fioUserStorage.locationId,
       locationName: fioLocations.name,
@@ -264,5 +260,5 @@ export async function getUserFioInventory(userId: number) {
     .from(fioInventory)
     .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
     .leftJoin(fioLocations, eq(fioUserStorage.locationId, fioLocations.naturalId))
-    .where(eq(fioInventory.userId, userId))
+    .where(eq(fioUserStorage.userId, userId))
 }
