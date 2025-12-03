@@ -1,7 +1,7 @@
 // Commodity service - fetches from backend API
 
 import type { Commodity, CommodityDisplayMode } from '../types'
-import { camelCaseToHumanReadable } from '../utils/formatting'
+import { localizeMaterial } from '../utils/materials'
 
 // Cache for commodities to avoid repeated API calls
 let cachedCommodities: Commodity[] | null = null
@@ -54,10 +54,10 @@ export const commodityService = {
     if (mode === 'ticker-only') {
       return commodity.ticker
     } else if (mode === 'name-only') {
-      return camelCaseToHumanReadable(commodity.name)
+      return localizeMaterial(commodity.name)
     } else {
       // both: ticker - name
-      return `${commodity.ticker} - ${camelCaseToHumanReadable(commodity.name)}`
+      return `${commodity.ticker} - ${localizeMaterial(commodity.name)}`
     }
   },
 

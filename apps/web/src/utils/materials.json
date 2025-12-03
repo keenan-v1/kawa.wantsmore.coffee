@@ -1,0 +1,1482 @@
+[
+  {
+    "material": "advancedBulkhead",
+    "name": "Advanced Bulkhead"
+  },
+  {
+    "material": "advancedDeckElements",
+    "name": "Advanced Deck Elements"
+  },
+  {
+    "material": "advancedEngine",
+    "name": "Advanced STL Engine"
+  },
+  {
+    "material": "advancedFuelPump",
+    "name": "Advanced Fuel Pump"
+  },
+  {
+    "material": "advancedFuelRod",
+    "name": "Advanced Fuel Rod"
+  },
+  {
+    "material": "advancedHeatShield",
+    "name": "Advanced Thermal Protection Tile"
+  },
+  {
+    "material": "advancedHighgSeats",
+    "name": "Advanced High-G Seats"
+  },
+  {
+    "material": "advancedHullPlate",
+    "name": "Advanced Hull Plate"
+  },
+  {
+    "material": "advancedNozzle",
+    "name": "Advanced Nozzle"
+  },
+  {
+    "material": "advancedRadiationShielding",
+    "name": "Advanced Anti-rad Plate"
+  },
+  {
+    "material": "advancedStructuralElements",
+    "name": "Advanced Structural Elements"
+  },
+  {
+    "material": "advancedThermalProtectionMaterial",
+    "name": "Advanced Thermal Protection Material"
+  },
+  {
+    "material": "advancedWhippleShielding",
+    "name": "Advanced Whipple Shielding"
+  },
+  {
+    "material": "advancedWindow",
+    "name": "Advanced Transparent Aperture"
+  },
+  {
+    "material": "aerostatFoundation",
+    "name": "Aerostat Foundation"
+  },
+  {
+    "material": "airScrubber",
+    "name": "Air Scrubber"
+  },
+  {
+    "material": "allPurposeFodder",
+    "name": "All-Purpose Fodder"
+  },
+  {
+    "material": "aluminium",
+    "name": "Aluminium"
+  },
+  {
+    "material": "aluminiumIronAlloy",
+    "name": "Ferrominium"
+  },
+  {
+    "material": "aluminiumOre",
+    "name": "Aluminium Ore"
+  },
+  {
+    "material": "aluminiumTitaniumAlloy",
+    "name": "Alpha-Stabilized Titanium"
+  },
+  {
+    "material": "alurhenium",
+    "name": "Alurhenium"
+  },
+  {
+    "material": "ammonia",
+    "name": "Ammonia"
+  },
+  {
+    "material": "antennaArray",
+    "name": "Antenna Array"
+  },
+  {
+    "material": "antibacterialTreeFlowers",
+    "name": "Flowery Hops"
+  },
+  {
+    "material": "argon",
+    "name": "Argon"
+  },
+  {
+    "material": "artificialSoil",
+    "name": "Artificial Soil"
+  },
+  {
+    "material": "audioDistributionSystem",
+    "name": "Audio Distribution System"
+  },
+  {
+    "material": "audioTransmitter",
+    "name": "Audio Transmitter"
+  },
+  {
+    "material": "autoDoc",
+    "name": "Auto-Doc"
+  },
+  {
+    "material": "automatedCoolingSystem",
+    "name": "Automated Cooling System"
+  },
+  {
+    "material": "bacteria",
+    "name": "Helpful Bacteria"
+  },
+  {
+    "material": "bandages",
+    "name": "Bandages"
+  },
+  {
+    "material": "basicAiFramework",
+    "name": "Basic AI Framework"
+  },
+  {
+    "material": "basicBulkhead",
+    "name": "Basic Bulkhead"
+  },
+  {
+    "material": "basicDeckElements",
+    "name": "Basic Deck Elements"
+  },
+  {
+    "material": "basicFuelPump",
+    "name": "Basic Fuel Pump"
+  },
+  {
+    "material": "basicFuelRod",
+    "name": "Basic Fuel Rod"
+  },
+  {
+    "material": "basicHeatShield",
+    "name": "Basic Thermal Protection Tile"
+  },
+  {
+    "material": "basicHighgSeats",
+    "name": "Basic High-G Seats"
+  },
+  {
+    "material": "basicHullPlate",
+    "name": "Basic Hull Plate"
+  },
+  {
+    "material": "basicNozzle",
+    "name": "Basic Nozzle"
+  },
+  {
+    "material": "basicRadiationShielding",
+    "name": "Basic Anti-rad Plate"
+  },
+  {
+    "material": "basicStructuralElements",
+    "name": "Basic Structural Elements"
+  },
+  {
+    "material": "basicThermalProtectionMaterial",
+    "name": "Basic Thermal Protection Material"
+  },
+  {
+    "material": "basicWhippleShielding",
+    "name": "Basic Whipple Shielding"
+  },
+  {
+    "material": "basicWindow",
+    "name": "Basic Transparent Aperture"
+  },
+  {
+    "material": "beryl",
+    "name": "Beryl Crystals"
+  },
+  {
+    "material": "beryllium",
+    "name": "Beryllium"
+  },
+  {
+    "material": "bioreactiveMineral",
+    "name": "Bioreactive Minerals"
+  },
+  {
+    "material": "biosphereUnit",
+    "name": "Biosphere Unit"
+  },
+  {
+    "material": "bleach",
+    "name": "Desaturation Agent"
+  },
+  {
+    "material": "blueGoldConnectors",
+    "name": "Shielded Connectors"
+  },
+  {
+    "material": "bodyScanner",
+    "name": "Body Scanner"
+  },
+  {
+    "material": "boronCrystals",
+    "name": "Boron Crystals"
+  },
+  {
+    "material": "borosilicate",
+    "name": "Borosilicate"
+  },
+  {
+    "material": "breathableLiquid",
+    "name": "Breathable Liquid"
+  },
+  {
+    "material": "caffeinatedBeans",
+    "name": "Caffeinated Beans"
+  },
+  {
+    "material": "calcium",
+    "name": "Calcium"
+  },
+  {
+    "material": "caliche",
+    "name": "Caliche Rock"
+  },
+  {
+    "material": "capacitor",
+    "name": "Electric Field Capacitor"
+  },
+  {
+    "material": "carbohydrateGrains",
+    "name": "High-Carb Grains"
+  },
+  {
+    "material": "carbohydrateMaize",
+    "name": "High-Carb Maize"
+  },
+  {
+    "material": "carbon",
+    "name": "Carbon"
+  },
+  {
+    "material": "ceramicFabric",
+    "name": "Ceramic Fabric"
+  },
+  {
+    "material": "ceramicTungstenFabric",
+    "name": "Ceramic-Tungsten Fabric"
+  },
+  {
+    "material": "chemicalReagents",
+    "name": "Chemical Reagents"
+  },
+  {
+    "material": "chlorine",
+    "name": "Chlorine"
+  },
+  {
+    "material": "climateController",
+    "name": "Climate Controller"
+  },
+  {
+    "material": "combustionChamber",
+    "name": "Combustion Chamber"
+  },
+  {
+    "material": "commandBridge1",
+    "name": "Command Bridge MK1"
+  },
+  {
+    "material": "commandBridge2",
+    "name": "Command Bridge MK2"
+  },
+  {
+    "material": "commandBridgeShort",
+    "name": "Short-distance Command Bridge"
+  },
+  {
+    "material": "communicationSystem",
+    "name": "Communication System"
+  },
+  {
+    "material": "coolingFan",
+    "name": "Active Cooling Device"
+  },
+  {
+    "material": "copper",
+    "name": "Copper"
+  },
+  {
+    "material": "copperAluminiumAlloy",
+    "name": "Bronze"
+  },
+  {
+    "material": "copperConnectors",
+    "name": "Budget Connectors"
+  },
+  {
+    "material": "copperOre",
+    "name": "Copper Ore"
+  },
+  {
+    "material": "coreModuleKit",
+    "name": "Core Module Kit"
+  },
+  {
+    "material": "cottonProcessed",
+    "name": "Cotton Fabric"
+  },
+  {
+    "material": "cottonRaw",
+    "name": "Raw Cotton Fiber"
+  },
+  {
+    "material": "crewQuarters",
+    "name": "Crew Quarters (Large)"
+  },
+  {
+    "material": "crewQuartersMed",
+    "name": "Crew Quarters (Medium)"
+  },
+  {
+    "material": "crewQuartersSmall",
+    "name": "Crew Quarters (Small)"
+  },
+  {
+    "material": "crewQuartersTiny",
+    "name": "Crew Quarters (Tiny)"
+  },
+  {
+    "material": "crowdControlDrone",
+    "name": "Crowd Control Drone"
+  },
+  {
+    "material": "cryoUnit",
+    "name": "Cryogenic Unit"
+  },
+  {
+    "material": "cryogenicFluid",
+    "name": "Cryogenic Stabilizer"
+  },
+  {
+    "material": "cryopreservationUnit",
+    "name": "Cryopreservation Unit"
+  },
+  {
+    "material": "dataAnalyzer",
+    "name": "Data Analyzer"
+  },
+  {
+    "material": "dataVisualizer",
+    "name": "Data Visualizer"
+  },
+  {
+    "material": "decorativeElements",
+    "name": "Decorative Elements"
+  },
+  {
+    "material": "distributedDatabase",
+    "name": "Distributed Database"
+  },
+  {
+    "material": "drinkingWater",
+    "name": "Drinking Water"
+  },
+  {
+    "material": "droneChassis",
+    "name": "Drone Chassis"
+  },
+  {
+    "material": "droneFrame",
+    "name": "Drone Frame"
+  },
+  {
+    "material": "droneOperationsUnit",
+    "name": "Drone Operations Unit"
+  },
+  {
+    "material": "einsteinium",
+    "name": "Einsteinium"
+  },
+  {
+    "material": "engineerBundle",
+    "name": "Engineer Consumable Bundle"
+  },
+  {
+    "material": "engineerClothing",
+    "name": "Smart Space Suit"
+  },
+  {
+    "material": "engineerFood",
+    "name": "Flavoured Insta-Meal"
+  },
+  {
+    "material": "engineerLuxuryDrink",
+    "name": "Einsteinium-Infused Gin"
+  },
+  {
+    "material": "engineerLuxuryHealth",
+    "name": "VitaGel"
+  },
+  {
+    "material": "engineerTools",
+    "name": "Personal Data Assistant"
+  },
+  {
+    "material": "enrichedEinsteinium",
+    "name": "Enriched Einsteinium"
+  },
+  {
+    "material": "enrichedTechnetium",
+    "name": "Enriched Technetium"
+  },
+  {
+    "material": "entertainmentDataCore",
+    "name": "Entertainment Data Core"
+  },
+  {
+    "material": "entertainmentUnit",
+    "name": "Entertainment Unit"
+  },
+  {
+    "material": "epoxy",
+    "name": "Epoxy Resin"
+  },
+  {
+    "material": "fastenerKitMedium",
+    "name": "Medium Fastener Kit"
+  },
+  {
+    "material": "fastenerKitSmall",
+    "name": "Small Fastener Kit"
+  },
+  {
+    "material": "fattyNuts",
+    "name": "Triglyceride Nuts"
+  },
+  {
+    "material": "fattyVegetables",
+    "name": "Triglyceride Fruits"
+  },
+  {
+    "material": "fissionReactor",
+    "name": "Fission Reactor"
+  },
+  {
+    "material": "floatingTank",
+    "name": "Floating Tank"
+  },
+  {
+    "material": "flowControl",
+    "name": "Flow Control Device"
+  },
+  {
+    "material": "fluidPiping",
+    "name": "Fluid Piping"
+  },
+  {
+    "material": "fluorine",
+    "name": "Fluorine"
+  },
+  {
+    "material": "flux",
+    "name": "Flux"
+  },
+  {
+    "material": "ftlFieldController",
+    "name": "FTL Field Controller"
+  },
+  {
+    "material": "ftlFuel",
+    "name": "FTL Fuel"
+  },
+  {
+    "material": "fuelSavingEngine",
+    "name": "Fuel-saving STL Engine"
+  },
+  {
+    "material": "fullBodyInteractionDevice",
+    "name": "Full-Body Interaction Device"
+  },
+  {
+    "material": "galerite",
+    "name": "Galerite Rock"
+  },
+  {
+    "material": "gasContainer",
+    "name": "Cylindrical Gas Container"
+  },
+  {
+    "material": "gasVent",
+    "name": "Gas Vent"
+  },
+  {
+    "material": "gatewaySegment",
+    "name": "Gateway Segment"
+  },
+  {
+    "material": "glassCombustionChamber",
+    "name": "Glass Combustion Chamber"
+  },
+  {
+    "material": "glassEngine",
+    "name": "Glass-based STL Engine"
+  },
+  {
+    "material": "glassNozzle",
+    "name": "Glass Nozzle"
+  },
+  {
+    "material": "gold",
+    "name": "Gold"
+  },
+  {
+    "material": "goldCopperAlloy",
+    "name": "Red Gold"
+  },
+  {
+    "material": "goldIronAlloy",
+    "name": "Blue Gold"
+  },
+  {
+    "material": "goldOre",
+    "name": "Gold Ore"
+  },
+  {
+    "material": "grapes",
+    "name": "Wine-Quality Grapes"
+  },
+  {
+    "material": "habitatUnit",
+    "name": "Habitat Unit"
+  },
+  {
+    "material": "habitationModule",
+    "name": "Habitation Module"
+  },
+  {
+    "material": "halite",
+    "name": "Halite Crystals"
+  },
+  {
+    "material": "handcraftWorkshopUnit",
+    "name": "Handcraft Workshop Unit"
+  },
+  {
+    "material": "hardenedHullPlate",
+    "name": "Hardened Hull Plate"
+  },
+  {
+    "material": "hardenedStructuralElements",
+    "name": "Hardened Structural Elements"
+  },
+  {
+    "material": "heliotropeExtract",
+    "name": "Heliotrope Extract"
+  },
+  {
+    "material": "helium",
+    "name": "Helium"
+  },
+  {
+    "material": "helium3",
+    "name": "Helium-3 Isotope"
+  },
+  {
+    "material": "herbs",
+    "name": "Spicy Herbs"
+  },
+  {
+    "material": "highLoadCargoBay",
+    "name": "High-load Cargo Bay Kit"
+  },
+  {
+    "material": "highPowerReactor",
+    "name": "High-power FTL Reactor"
+  },
+  {
+    "material": "highVolumeCargoBay",
+    "name": "High-volume Cargo Bay Kit"
+  },
+  {
+    "material": "holographicDisplay",
+    "name": "Holographic Display"
+  },
+  {
+    "material": "holographicGlasses",
+    "name": "Holographic Glasses"
+  },
+  {
+    "material": "hugeCargoBay",
+    "name": "Huge Cargo Bay Kit"
+  },
+  {
+    "material": "hydrocarbonPlants",
+    "name": "Hydrocarbon Plants"
+  },
+  {
+    "material": "hydrogen",
+    "name": "Hydrogen"
+  },
+  {
+    "material": "hyperPowerReactor",
+    "name": "Hyper-power Reactor"
+  },
+  {
+    "material": "hyperthrustEngine",
+    "name": "Hyperthrust STL Engine"
+  },
+  {
+    "material": "hyperthrustNozzle",
+    "name": "Hyperthrust Nozzle"
+  },
+  {
+    "material": "indigo",
+    "name": "Indigo Colorant"
+  },
+  {
+    "material": "informationDataCore",
+    "name": "Information Data Core"
+  },
+  {
+    "material": "informationManagementSystem",
+    "name": "Information Management System"
+  },
+  {
+    "material": "insuFoam",
+    "name": "InsuFoam"
+  },
+  {
+    "material": "iodine",
+    "name": "Iodine"
+  },
+  {
+    "material": "iron",
+    "name": "Iron"
+  },
+  {
+    "material": "ironOre",
+    "name": "Iron Ore"
+  },
+  {
+    "material": "ironTitaniumAlloy",
+    "name": "Ferro-Titanium"
+  },
+  {
+    "material": "kevlar",
+    "name": "Para Aramid"
+  },
+  {
+    "material": "krypton",
+    "name": "Krypton"
+  },
+  {
+    "material": "kryptonium",
+    "name": "Kryptonium"
+  },
+  {
+    "material": "laboratoryUnit",
+    "name": "Laboratory Unit"
+  },
+  {
+    "material": "largeCapacitorBank",
+    "name": "Large Capacitor Bank"
+  },
+  {
+    "material": "largeCargoBay",
+    "name": "Large Cargo Bay Kit"
+  },
+  {
+    "material": "largeDeviceCover",
+    "name": "Durable Casing L"
+  },
+  {
+    "material": "largeEmitter",
+    "name": "Large FTL Emitter"
+  },
+  {
+    "material": "largeFtlTank",
+    "name": "Large FTL Fuel Tank Kit"
+  },
+  {
+    "material": "largePlasticsBoard",
+    "name": "Polymer Sheet Type L"
+  },
+  {
+    "material": "largeShipRepairDroneUnit",
+    "name": "Large Ship-Repair Drone Operations Unit"
+  },
+  {
+    "material": "largeStlTank",
+    "name": "Large STL Fuel Tank Kit"
+  },
+  {
+    "material": "laserDiode",
+    "name": "Laser Diodes"
+  },
+  {
+    "material": "lifeSupportSystem",
+    "name": "Life Support System"
+  },
+  {
+    "material": "lightweightBulkhead",
+    "name": "Lightweight Bulkhead"
+  },
+  {
+    "material": "lightweightDeckElements",
+    "name": "Lightweight Deck Elements"
+  },
+  {
+    "material": "lightweightHullPlate",
+    "name": "Lightweight Hull Plate"
+  },
+  {
+    "material": "lightweightStructuralElements",
+    "name": "Lightweight Structural Elements"
+  },
+  {
+    "material": "lightweightWindow",
+    "name": "Lightweight Transparent Aperture"
+  },
+  {
+    "material": "limestone",
+    "name": "Limestone"
+  },
+  {
+    "material": "liquidCrystals",
+    "name": "Liquid Crystals"
+  },
+  {
+    "material": "liquidEinsteinium",
+    "name": "Liquid Einsteinium"
+  },
+  {
+    "material": "lithium",
+    "name": "Lithium"
+  },
+  {
+    "material": "lithiumOre",
+    "name": "Lithium Ore"
+  },
+  {
+    "material": "localDatabase",
+    "name": "Local Database"
+  },
+  {
+    "material": "logisticsSystem",
+    "name": "Logistics System"
+  },
+  {
+    "material": "lowHeatFuelPump",
+    "name": "Low-heat Fuel Pump"
+  },
+  {
+    "material": "machineLearningInterface",
+    "name": "Machine Learning Interface"
+  },
+  {
+    "material": "magnesite",
+    "name": "Magnesite"
+  },
+  {
+    "material": "magnesium",
+    "name": "Magnesium"
+  },
+  {
+    "material": "magneticFloor",
+    "name": "Magnetic Ground Cover"
+  },
+  {
+    "material": "magnetite",
+    "name": "Magnetite"
+  },
+  {
+    "material": "mainFrameBlank",
+    "name": "Basic Mainframe"
+  },
+  {
+    "material": "meat",
+    "name": "Meat Tissue Patties"
+  },
+  {
+    "material": "medicalStretcher",
+    "name": "Medical Stretcher"
+  },
+  {
+    "material": "mediumCapacitorBank",
+    "name": "Medium Capacitor Bank"
+  },
+  {
+    "material": "mediumCargoBay",
+    "name": "Medium Cargo Bay Kit"
+  },
+  {
+    "material": "mediumDeviceCover",
+    "name": "Durable Casing M"
+  },
+  {
+    "material": "mediumEmitter",
+    "name": "Medium FTL Emitter"
+  },
+  {
+    "material": "mediumFtlTank",
+    "name": "Medium FTL Fuel Tank Kit"
+  },
+  {
+    "material": "mediumPlasticsBoard",
+    "name": "Polymer Sheet Type M"
+  },
+  {
+    "material": "mediumStlTank",
+    "name": "Medium STL Fuel Tank Kit"
+  },
+  {
+    "material": "megaTubeCoating",
+    "name": "MegaTube Coating"
+  },
+  {
+    "material": "memoryBank",
+    "name": "Memory Bank"
+  },
+  {
+    "material": "metalHalideLamp",
+    "name": "Metal-Halide Lighting System"
+  },
+  {
+    "material": "microHeadphones",
+    "name": "Micro Headphones"
+  },
+  {
+    "material": "microProcessor",
+    "name": "Micro-Processor"
+  },
+  {
+    "material": "mineralConstructionGranulate",
+    "name": "Mineral Construction Granulate"
+  },
+  {
+    "material": "motherBoard",
+    "name": "Motherboard"
+  },
+  {
+    "material": "mushrooms",
+    "name": "Protein-Rich Mushrooms"
+  },
+  {
+    "material": "nanoCarbonSheeting",
+    "name": "Nano-Carbon Sheeting"
+  },
+  {
+    "material": "nanoFiber",
+    "name": "Nano Fiber"
+  },
+  {
+    "material": "nanoGlass",
+    "name": "Nano-Coated Glass"
+  },
+  {
+    "material": "nanoResin",
+    "name": "Nano-Enhanced Resin"
+  },
+  {
+    "material": "navigation1",
+    "name": "Navigation Module MK1"
+  },
+  {
+    "material": "navigation2",
+    "name": "Navigation Module MK2"
+  },
+  {
+    "material": "neon",
+    "name": "Neon"
+  },
+  {
+    "material": "neonLightingSystem",
+    "name": "Neon Lighting System"
+  },
+  {
+    "material": "networkingFramework",
+    "name": "Networking Framework"
+  },
+  {
+    "material": "neuralNetwork",
+    "name": "Neural Network"
+  },
+  {
+    "material": "nitrogen",
+    "name": "Nitrogen"
+  },
+  {
+    "material": "nonVolatileMemory",
+    "name": "Non-Volatile Memory"
+  },
+  {
+    "material": "nutrientSolution",
+    "name": "Nutrient Solution"
+  },
+  {
+    "material": "nylon",
+    "name": "Nylon Fabric"
+  },
+  {
+    "material": "officeSupplies",
+    "name": "Office Supplies"
+  },
+  {
+    "material": "olfactorySubstances",
+    "name": "Olfactory Substances"
+  },
+  {
+    "material": "operatingSystem",
+    "name": "Operating System"
+  },
+  {
+    "material": "oxygen",
+    "name": "Oxygen"
+  },
+  {
+    "material": "painkillers",
+    "name": "Painkillers"
+  },
+  {
+    "material": "pesticides",
+    "name": "DDT Plant Agent"
+  },
+  {
+    "material": "pineberries",
+    "name": "Pineberries"
+  },
+  {
+    "material": "pioneerBundle",
+    "name": "Pioneer Consumable Bundle"
+  },
+  {
+    "material": "pioneerClothing",
+    "name": "Basic Overalls"
+  },
+  {
+    "material": "pioneerLuxuryClothing",
+    "name": "Padded Work Overall"
+  },
+  {
+    "material": "pioneerLuxuryDrink",
+    "name": "Caffeinated Infusion"
+  },
+  {
+    "material": "polarityFieldGenerator",
+    "name": "Polarity Field Generator"
+  },
+  {
+    "material": "polyEthylene",
+    "name": "Poly-Ethylene"
+  },
+  {
+    "material": "polymerGranulate",
+    "name": "Polymer Granulate"
+  },
+  {
+    "material": "powerCell",
+    "name": "Power Cell"
+  },
+  {
+    "material": "premiumFertilizer",
+    "name": "Premium Fertilizer"
+  },
+  {
+    "material": "pressureShielding",
+    "name": "Pressure Shielding"
+  },
+  {
+    "material": "printedCircuitBoard",
+    "name": "Printed Circuit Board"
+  },
+  {
+    "material": "proteinAlgae",
+    "name": "Protein-Rich Algae"
+  },
+  {
+    "material": "proteinBeans",
+    "name": "Protein-Rich Beans"
+  },
+  {
+    "material": "proteinPaste",
+    "name": "Protein Paste"
+  },
+  {
+    "material": "quickChargeReactor",
+    "name": "Quick-charge FTL Reactor"
+  },
+  {
+    "material": "radiationShielding",
+    "name": "Radiation Shielding"
+  },
+  {
+    "material": "radioDevice",
+    "name": "Radio Device"
+  },
+  {
+    "material": "radioisotopeGenerator",
+    "name": "Radioisotope Generator"
+  },
+  {
+    "material": "rations",
+    "name": "Basic Rations"
+  },
+  {
+    "material": "reactorControlSystem",
+    "name": "Reactor Control System"
+  },
+  {
+    "material": "redGoldConnectors",
+    "name": "High-Capacity Connectors"
+  },
+  {
+    "material": "reinforcedBulkhead",
+    "name": "Reinforced Bulkhead"
+  },
+  {
+    "material": "reinforcedDeckElements",
+    "name": "Reinforced Deck Elements"
+  },
+  {
+    "material": "reinforcedHullPlate",
+    "name": "Reinforced Hull Plate"
+  },
+  {
+    "material": "reinforcedStructuralElements",
+    "name": "Reinforced Structural Elements"
+  },
+  {
+    "material": "reinforcedTranslucentMaterial",
+    "name": "Reinforced Glass"
+  },
+  {
+    "material": "reinforcedWindow",
+    "name": "Reinforced Transparent Aperture"
+  },
+  {
+    "material": "rescueDrone",
+    "name": "Rescue Drone"
+  },
+  {
+    "material": "rhenium",
+    "name": "Rhenium"
+  },
+  {
+    "material": "rheniumOre",
+    "name": "Rhenium Ore"
+  },
+  {
+    "material": "safetyUniform",
+    "name": "Safety Uniform"
+  },
+  {
+    "material": "scientistBundle",
+    "name": "Scientist Consumable Bundle"
+  },
+  {
+    "material": "scientistClothing",
+    "name": "AI-Assisted Lab Coat"
+  },
+  {
+    "material": "scientistFood",
+    "name": "Quality Meat Meal"
+  },
+  {
+    "material": "scientistLuxuryDrink",
+    "name": "Smart Zinfandel"
+  },
+  {
+    "material": "scientistLuxuryHealth",
+    "name": "NeuroStimulants"
+  },
+  {
+    "material": "scientistTools",
+    "name": "Scientific Work Station"
+  },
+  {
+    "material": "sealant",
+    "name": "Poly-Sulfite Sealant"
+  },
+  {
+    "material": "searchAlgorithm",
+    "name": "Search Algorithm"
+  },
+  {
+    "material": "sedativeSubstance",
+    "name": "Sedative Substance"
+  },
+  {
+    "material": "sensor",
+    "name": "Sensor"
+  },
+  {
+    "material": "sensorArray",
+    "name": "Sensor Array"
+  },
+  {
+    "material": "settlerBundle",
+    "name": "Settler Consumable Bundle"
+  },
+  {
+    "material": "settlerClothing",
+    "name": "Exoskeleton Work Suit"
+  },
+  {
+    "material": "settlerLuxuryDrink",
+    "name": "Kombucha"
+  },
+  {
+    "material": "settlerLuxuryTools",
+    "name": "Repair Kit"
+  },
+  {
+    "material": "settlerTools",
+    "name": "Power Tools"
+  },
+  {
+    "material": "shipRepairDrone",
+    "name": "Ship-Repair Drone"
+  },
+  {
+    "material": "shockwaveDampeningModule",
+    "name": "Shockwave-dampening Module"
+  },
+  {
+    "material": "silicon",
+    "name": "Silicon"
+  },
+  {
+    "material": "siliconOre",
+    "name": "Silicon Ore"
+  },
+  {
+    "material": "silkProcessed",
+    "name": "Silken Fabric"
+  },
+  {
+    "material": "silkRaw",
+    "name": "Raw Silk Strains"
+  },
+  {
+    "material": "singularityStabilizer",
+    "name": "Singularity Stabilizer"
+  },
+  {
+    "material": "smallCapacitorBank",
+    "name": "Small Capacitor Bank"
+  },
+  {
+    "material": "smallCargoBay",
+    "name": "Small Cargo Bay Kit"
+  },
+  {
+    "material": "smallDeviceCover",
+    "name": "Durable Casing S"
+  },
+  {
+    "material": "smallEmitter",
+    "name": "Small FTL Emitter"
+  },
+  {
+    "material": "smallFtlTank",
+    "name": "Small FTL Fuel Tank Kit"
+  },
+  {
+    "material": "smallPlasticsBoard",
+    "name": "Polymer Sheet Type S"
+  },
+  {
+    "material": "smallShipRepairDroneUnit",
+    "name": "Small Ship-Repair Drone Operations Unit"
+  },
+  {
+    "material": "smallStlTank",
+    "name": "Small STL Fuel Tank Kit"
+  },
+  {
+    "material": "sodium",
+    "name": "Sodium"
+  },
+  {
+    "material": "sodiumBorohydride",
+    "name": "Sodium Borohydride"
+  },
+  {
+    "material": "solarCell",
+    "name": "Solar Cell"
+  },
+  {
+    "material": "solarPanel",
+    "name": "Solar Panel"
+  },
+  {
+    "material": "sortingAlgorithm",
+    "name": "Sorting Algorithm"
+  },
+  {
+    "material": "spaceTether",
+    "name": "Space Tether"
+  },
+  {
+    "material": "specializedRadiationShielding",
+    "name": "Specialized Anti-rad Plate"
+  },
+  {
+    "material": "stabilitySupportSystem",
+    "name": "Stability Support System"
+  },
+  {
+    "material": "standardEngine",
+    "name": "Standard STL Engine"
+  },
+  {
+    "material": "standardReactor",
+    "name": "Standard FTL Reactor"
+  },
+  {
+    "material": "steel",
+    "name": "Steel"
+  },
+  {
+    "material": "stlFuel",
+    "name": "STL Fuel"
+  },
+  {
+    "material": "structuralSpacecraftComponent",
+    "name": "Structural Spacecraft Component"
+  },
+  {
+    "material": "sulfur",
+    "name": "Sulfur"
+  },
+  {
+    "material": "sulfurCrystals",
+    "name": "Sulfur Crystals"
+  },
+  {
+    "material": "surgeryUnit",
+    "name": "Surgery Unit"
+  },
+  {
+    "material": "surgicalDrone",
+    "name": "Surgical Drone"
+  },
+  {
+    "material": "surgicalEquipment",
+    "name": "Surgical Equipment"
+  },
+  {
+    "material": "surveillanceDrone",
+    "name": "Surveillance Drone"
+  },
+  {
+    "material": "tantalite",
+    "name": "Tantalite Rock"
+  },
+  {
+    "material": "tantalum",
+    "name": "Tantalum"
+  },
+  {
+    "material": "targetingComputer",
+    "name": "Targeting Computer"
+  },
+  {
+    "material": "tclAcid",
+    "name": "TCL Acid"
+  },
+  {
+    "material": "technetium",
+    "name": "Technetium"
+  },
+  {
+    "material": "technetiumOxide",
+    "name": "Technetium Oxide"
+  },
+  {
+    "material": "technetiumStabilizers",
+    "name": "Stabilized Technetium"
+  },
+  {
+    "material": "technicianBundle",
+    "name": "Technician Consumable Bundle"
+  },
+  {
+    "material": "technicianClothing",
+    "name": "HazMat Work Suit"
+  },
+  {
+    "material": "technicianHealth",
+    "name": "Basic Medical Kit"
+  },
+  {
+    "material": "technicianLuxuryDrink",
+    "name": "Stellar Pale Ale"
+  },
+  {
+    "material": "technicianLuxuryHealth",
+    "name": "Stem Cell Treatment"
+  },
+  {
+    "material": "technicianTools",
+    "name": "Multi-Purpose Scanner"
+  },
+  {
+    "material": "technoKevlar",
+    "name": "Enhanced Para Aramid"
+  },
+  {
+    "material": "tectosilisite",
+    "name": "Tectosilisite"
+  },
+  {
+    "material": "tensionReliefStructure",
+    "name": "Tension Relief Structure"
+  },
+  {
+    "material": "tensorProcessingUnit",
+    "name": "Tensor Processing Unit"
+  },
+  {
+    "material": "testTubes",
+    "name": "Test Tubes"
+  },
+  {
+    "material": "thermalShielding",
+    "name": "Thermal Shielding"
+  },
+  {
+    "material": "thermoFluid",
+    "name": "ThermoFluid"
+  },
+  {
+    "material": "tinyCargoBay",
+    "name": "Tiny Cargo Bay Kit"
+  },
+  {
+    "material": "titanium",
+    "name": "Titanium"
+  },
+  {
+    "material": "titaniumOre",
+    "name": "Titanium Ore"
+  },
+  {
+    "material": "torusSegment",
+    "name": "Torus Segment"
+  },
+  {
+    "material": "touchDeviceBlank",
+    "name": "Handheld Personal Console"
+  },
+  {
+    "material": "touchScreen",
+    "name": "Capacitive Display"
+  },
+  {
+    "material": "transistor",
+    "name": "Advanced Transistor"
+  },
+  {
+    "material": "translucentMaterial",
+    "name": "Glass"
+  },
+  {
+    "material": "traumaCareUnit",
+    "name": "Trauma Care Unit"
+  },
+  {
+    "material": "truss",
+    "name": "Truss"
+  },
+  {
+    "material": "tungstenAluminiumAlloy",
+    "name": "Alpha-Stabilized Tungsten"
+  },
+  {
+    "material": "tungstenResource",
+    "name": "Bacterial Tungsten Solution"
+  },
+  {
+    "material": "twoDimensionalDisplay",
+    "name": "Information Display"
+  },
+  {
+    "material": "universalToolset",
+    "name": "Universal Toolset"
+  },
+  {
+    "material": "universeMap",
+    "name": "Spatial Navigation Map"
+  },
+  {
+    "material": "verySmallCargoBay",
+    "name": "Very Small Cargo Bay Kit"
+  },
+  {
+    "material": "vitaEssence",
+    "name": "Vita Essence"
+  },
+  {
+    "material": "vortexEngine",
+    "name": "Vortex Engine"
+  },
+  {
+    "material": "vortexFuelTank",
+    "name": "Vortex Fuel Tank"
+  },
+  {
+    "material": "vortexReactor",
+    "name": "Vortex Reactor"
+  },
+  {
+    "material": "vortexStimulationFuel",
+    "name": "Vortex Fuel"
+  },
+  {
+    "material": "waferMedium",
+    "name": "Medium Wafer"
+  },
+  {
+    "material": "waferSmall",
+    "name": "Small Wafer"
+  },
+  {
+    "material": "water",
+    "name": "Water"
+  },
+  {
+    "material": "waterFilter",
+    "name": "Active Water Filter"
+  },
+  {
+    "material": "waterRecycler",
+    "name": "Water Reclaimer"
+  },
+  {
+    "material": "weakArtificalIntelligence",
+    "name": "Weak Artificial Intelligence"
+  },
+  {
+    "material": "windowManager",
+    "name": "Window Manager"
+  },
+  {
+    "material": "wolfram",
+    "name": "Tungsten"
+  },
+  {
+    "material": "wolfrhenium",
+    "name": "Wolfrhenium"
+  },
+  {
+    "material": "workstationBlank",
+    "name": "Basic Workstation"
+  },
+  {
+    "material": "zircon",
+    "name": "Zircon Crystals"
+  },
+  {
+    "material": "zirconium",
+    "name": "Zirconium"
+  }
+]
