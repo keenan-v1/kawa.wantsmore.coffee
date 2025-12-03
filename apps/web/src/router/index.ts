@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
+import UnverifiedView from '../views/UnverifiedView.vue'
 import MarketView from '../views/MarketView.vue'
 import InventoryView from '../views/InventoryView.vue'
 import MyOrdersView from '../views/MyOrdersView.vue'
@@ -31,34 +32,40 @@ const router = createRouter({
       component: ResetPasswordView,
     },
     {
+      path: '/pending',
+      name: 'pending',
+      component: UnverifiedView,
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/market',
       name: 'market',
       component: MarketView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresVerified: true },
     },
     {
       path: '/inventory',
       name: 'inventory',
       component: InventoryView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresVerified: true },
     },
     {
       path: '/orders',
       name: 'my-orders',
       component: MyOrdersView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresVerified: true },
     },
     {
       path: '/account',
       name: 'account',
       component: AccountView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresVerified: true },
     },
     {
       path: '/admin',
       name: 'admin',
       component: AdminView,
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: { requiresAuth: true, requiresVerified: true, requiresAdmin: true },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -79,6 +86,19 @@ const hasRole = (roleId: string): boolean => {
   }
 }
 
+// Check if user is verified (has any role other than 'unverified')
+const isVerified = (): boolean => {
+  const userStr = localStorage.getItem('user')
+  if (!userStr) return false
+  try {
+    const user = JSON.parse(userStr)
+    // User is verified if they have any role that isn't 'unverified'
+    return user.roles?.some((r: { id: string }) => r.id !== 'unverified') ?? false
+  } catch {
+    return false
+  }
+}
+
 // Navigation guard for authentication and authorization
 router.beforeEach((to, _from, next) => {
   const jwt = localStorage.getItem('jwt')
@@ -90,6 +110,9 @@ router.beforeEach((to, _from, next) => {
       path: '/login',
       query: { redirect: redirectPath },
     })
+  } else if (to.meta.requiresVerified && !isVerified()) {
+    // Redirect unverified users to pending page
+    next({ path: '/pending' })
   } else if (to.meta.requiresAdmin && !hasRole('administrator')) {
     // Redirect non-admins away from admin pages
     next({ path: '/market' })

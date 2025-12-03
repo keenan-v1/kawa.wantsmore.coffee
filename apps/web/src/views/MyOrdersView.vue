@@ -6,164 +6,293 @@
       {{ snackbar.message }}
     </v-snackbar>
 
-    <!-- Orders Table -->
-    <v-card>
-      <v-card-title>
-        <v-row align="center">
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="search"
-              prepend-icon="mdi-magnify"
-              label="Search orders..."
-              single-line
-              hide-details
-              clearable
-              density="compact"
-            />
-          </v-col>
-          <v-col cols="12" md="6" class="text-right">
-            <span class="text-body-2 text-medium-emphasis">
-              {{ filteredOrders.length }} order(s)
-            </span>
-          </v-col>
-        </v-row>
-      </v-card-title>
+    <v-tabs v-model="activeTab" class="mb-4">
+      <v-tab value="sell">
+        <v-icon start>mdi-tag</v-icon>
+        Sell Orders
+        <v-badge
+          v-if="sellOrders.length > 0"
+          :content="sellOrders.length"
+          color="success"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
+      <v-tab value="buy">
+        <v-icon start>mdi-cart</v-icon>
+        Buy Orders
+        <v-badge
+          v-if="buyOrders.length > 0"
+          :content="buyOrders.length"
+          color="primary"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
+    </v-tabs>
 
-      <v-data-table
-        :headers="headers"
-        :items="filteredOrders"
-        :loading="loading"
-        :items-per-page="25"
-        class="elevation-0"
-      >
-        <template #item.commodityTicker="{ item }">
-          <span class="font-weight-medium">{{ getCommodityDisplay(item.commodityTicker) }}</span>
-        </template>
+    <v-tabs-window v-model="activeTab">
+      <!-- SELL ORDERS TAB -->
+      <v-tabs-window-item value="sell">
+        <v-card>
+          <v-card-title>
+            <v-row align="center">
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="sellSearch"
+                  prepend-icon="mdi-magnify"
+                  label="Search sell orders..."
+                  single-line
+                  hide-details
+                  clearable
+                  density="compact"
+                />
+              </v-col>
+              <v-col cols="12" md="6" class="text-right">
+                <span class="text-body-2 text-medium-emphasis">
+                  {{ filteredSellOrders.length }} order(s)
+                </span>
+              </v-col>
+            </v-row>
+          </v-card-title>
 
-        <template #item.locationId="{ item }">
-          {{ getLocationDisplay(item.locationId) }}
-        </template>
-
-        <template #item.price="{ item }">
-          <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
-          <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
-        </template>
-
-        <template #item.availableQuantity="{ item }">
-          <div>
-            <span class="font-weight-medium">{{ item.availableQuantity.toLocaleString() }}</span>
-            <span v-if="item.availableQuantity !== item.fioQuantity" class="text-medium-emphasis">
-              / {{ item.fioQuantity.toLocaleString() }}
-            </span>
-          </div>
-          <div v-if="item.limitMode !== 'none'" class="text-caption text-medium-emphasis">
-            {{ getLimitModeLabel(item.limitMode) }}
-            <span v-if="item.limitQuantity">: {{ item.limitQuantity.toLocaleString() }}</span>
-          </div>
-        </template>
-
-        <template #item.orderType="{ item }">
-          <v-chip
-            :color="item.orderType === 'partner' ? 'primary' : 'default'"
-            size="small"
-            variant="tonal"
+          <v-data-table
+            :headers="sellHeaders"
+            :items="filteredSellOrders"
+            :loading="loadingSell"
+            :items-per-page="25"
+            class="elevation-0"
           >
-            {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
-          </v-chip>
-        </template>
-
-        <template #item.actions="{ item }">
-          <!-- Desktop: show buttons -->
-          <div class="d-none d-sm-flex ga-1">
-            <v-tooltip location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon
-                  size="small"
-                  variant="text"
-                  @click="openEditDialog(item)"
-                >
-                  <v-icon>mdi-pencil</v-icon>
-                </v-btn>
-              </template>
-              Edit order
-            </v-tooltip>
-            <v-tooltip location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon
-                  size="small"
-                  variant="text"
-                  color="error"
-                  @click="confirmDelete(item)"
-                >
-                  <v-icon>mdi-delete</v-icon>
-                </v-btn>
-              </template>
-              Delete order
-            </v-tooltip>
-          </div>
-          <!-- Mobile: show menu -->
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon size="small" class="d-sm-none">
-                <v-icon>mdi-dots-vertical</v-icon>
-              </v-btn>
+            <template #item.commodityTicker="{ item }">
+              <span class="font-weight-medium">{{
+                getCommodityDisplay(item.commodityTicker)
+              }}</span>
             </template>
-            <v-list density="compact">
-              <v-list-item @click="openEditDialog(item)">
-                <template #prepend>
-                  <v-icon>mdi-pencil</v-icon>
-                </template>
-                <v-list-item-title>Edit</v-list-item-title>
-              </v-list-item>
-              <v-list-item @click="confirmDelete(item)">
-                <template #prepend>
-                  <v-icon color="error">mdi-delete</v-icon>
-                </template>
-                <v-list-item-title>Delete</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-        </template>
 
-        <template #no-data>
-          <div class="text-center py-8">
-            <v-icon size="64" color="grey-lighten-1">mdi-tag-multiple</v-icon>
-            <p class="text-h6 mt-4">No sell orders</p>
-            <p class="text-body-2 text-medium-emphasis">
-              Create sell orders from your inventory to list items for sale
-            </p>
-            <v-btn color="primary" class="mt-4" to="/inventory"> Go to Inventory </v-btn>
-          </div>
-        </template>
-      </v-data-table>
-    </v-card>
+            <template #item.locationId="{ item }">
+              {{ getLocationDisplay(item.locationId) }}
+            </template>
 
-    <!-- Edit Order Dialog -->
-    <v-dialog v-model="editDialog" max-width="500" persistent>
-      <v-card v-if="editingOrder">
+            <template #item.price="{ item }">
+              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+            </template>
+
+            <template #item.availableQuantity="{ item }">
+              <div>
+                <span class="font-weight-medium">{{
+                  item.availableQuantity.toLocaleString()
+                }}</span>
+                <span
+                  v-if="item.availableQuantity !== item.fioQuantity"
+                  class="text-medium-emphasis"
+                >
+                  / {{ item.fioQuantity.toLocaleString() }}
+                </span>
+              </div>
+              <div v-if="item.limitMode !== 'none'" class="text-caption text-medium-emphasis">
+                {{ getLimitModeLabel(item.limitMode) }}
+                <span v-if="item.limitQuantity">: {{ item.limitQuantity.toLocaleString() }}</span>
+              </div>
+            </template>
+
+            <template #item.orderType="{ item }">
+              <v-chip
+                :color="item.orderType === 'partner' ? 'primary' : 'default'"
+                size="small"
+                variant="tonal"
+              >
+                {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
+              </v-chip>
+            </template>
+
+            <template #item.actions="{ item }">
+              <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="openEditSellDialog(item)"
+                    >
+                      <v-icon>mdi-pencil</v-icon>
+                    </v-btn>
+                  </template>
+                  Edit order
+                </v-tooltip>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      color="error"
+                      @click="confirmDeleteSell(item)"
+                    >
+                      <v-icon>mdi-delete</v-icon>
+                    </v-btn>
+                  </template>
+                  Delete order
+                </v-tooltip>
+              </div>
+            </template>
+
+            <template #no-data>
+              <div class="text-center py-8">
+                <v-icon size="64" color="grey-lighten-1">mdi-tag-multiple</v-icon>
+                <p class="text-h6 mt-4">No sell orders</p>
+                <p class="text-body-2 text-medium-emphasis">
+                  Create sell orders from your inventory to list items for sale
+                </p>
+                <v-btn color="primary" class="mt-4" to="/inventory"> Go to Inventory </v-btn>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-tabs-window-item>
+
+      <!-- BUY ORDERS TAB -->
+      <v-tabs-window-item value="buy">
+        <v-card>
+          <v-card-title>
+            <v-row align="center">
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="buySearch"
+                  prepend-icon="mdi-magnify"
+                  label="Search buy orders..."
+                  single-line
+                  hide-details
+                  clearable
+                  density="compact"
+                />
+              </v-col>
+              <v-col cols="12" md="6" class="text-right">
+                <v-btn color="primary" prepend-icon="mdi-plus" @click="buyOrderDialog = true">
+                  Create Buy Order
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+
+          <v-data-table
+            :headers="buyHeaders"
+            :items="filteredBuyOrders"
+            :loading="loadingBuy"
+            :items-per-page="25"
+            class="elevation-0"
+          >
+            <template #item.commodityTicker="{ item }">
+              <span class="font-weight-medium">{{
+                getCommodityDisplay(item.commodityTicker)
+              }}</span>
+            </template>
+
+            <template #item.locationId="{ item }">
+              {{ getLocationDisplay(item.locationId) }}
+            </template>
+
+            <template #item.price="{ item }">
+              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+            </template>
+
+            <template #item.quantity="{ item }">
+              <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+            </template>
+
+            <template #item.orderType="{ item }">
+              <v-chip
+                :color="item.orderType === 'partner' ? 'primary' : 'default'"
+                size="small"
+                variant="tonal"
+              >
+                {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
+              </v-chip>
+            </template>
+
+            <template #item.actions="{ item }">
+              <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="openEditBuyDialog(item)"
+                    >
+                      <v-icon>mdi-pencil</v-icon>
+                    </v-btn>
+                  </template>
+                  Edit order
+                </v-tooltip>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      color="error"
+                      @click="confirmDeleteBuy(item)"
+                    >
+                      <v-icon>mdi-delete</v-icon>
+                    </v-btn>
+                  </template>
+                  Delete order
+                </v-tooltip>
+              </div>
+            </template>
+
+            <template #no-data>
+              <div class="text-center py-8">
+                <v-icon size="64" color="grey-lighten-1">mdi-cart</v-icon>
+                <p class="text-h6 mt-4">No buy orders</p>
+                <p class="text-body-2 text-medium-emphasis">
+                  Create buy orders to request items from other members
+                </p>
+                <v-btn
+                  color="primary"
+                  class="mt-4"
+                  prepend-icon="mdi-plus"
+                  @click="buyOrderDialog = true"
+                >
+                  Create Buy Order
+                </v-btn>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-tabs-window-item>
+    </v-tabs-window>
+
+    <!-- Buy Order Dialog -->
+    <BuyOrderDialog v-model="buyOrderDialog" @created="loadBuyOrders" />
+
+    <!-- Edit Sell Order Dialog -->
+    <v-dialog v-model="editSellDialog" max-width="500" persistent>
+      <v-card v-if="editingSellOrder">
         <v-card-title>Edit Sell Order</v-card-title>
         <v-card-text>
-          <!-- Item Info -->
           <v-alert type="info" variant="tonal" class="mb-4" density="compact">
             <div>
-              <strong>{{ getCommodityDisplay(editingOrder.commodityTicker) }}</strong>
-              at {{ getLocationDisplay(editingOrder.locationId) }}
+              <strong>{{ getCommodityDisplay(editingSellOrder.commodityTicker) }}</strong>
+              at {{ getLocationDisplay(editingSellOrder.locationId) }}
             </div>
             <div class="text-caption">
-              FIO Quantity: {{ editingOrder.fioQuantity.toLocaleString() }}
+              FIO Quantity: {{ editingSellOrder.fioQuantity.toLocaleString() }}
             </div>
           </v-alert>
 
-          <v-form ref="editFormRef">
-            <!-- Price -->
+          <v-form ref="editSellFormRef">
             <v-row>
               <v-col cols="8">
                 <v-text-field
-                  v-model.number="editForm.price"
+                  v-model.number="editSellForm.price"
                   label="Price"
                   type="number"
                   min="0"
@@ -173,33 +302,32 @@
                 />
               </v-col>
               <v-col cols="4">
-                <v-select v-model="editForm.currency" :items="currencies" label="Currency" />
+                <v-select v-model="editSellForm.currency" :items="currencies" label="Currency" />
               </v-col>
             </v-row>
 
-            <!-- Limit Mode -->
             <v-select
-              v-model="editForm.limitMode"
+              v-model="editSellForm.limitMode"
               :items="limitModes"
               item-title="title"
               item-value="value"
               label="Quantity Limit"
             />
 
-            <!-- Limit Quantity -->
             <v-text-field
-              v-if="editForm.limitMode !== 'none'"
-              v-model.number="editForm.limitQuantity"
-              :label="editForm.limitMode === 'max_sell' ? 'Maximum to sell' : 'Reserve quantity'"
+              v-if="editSellForm.limitMode !== 'none'"
+              v-model.number="editSellForm.limitQuantity"
+              :label="
+                editSellForm.limitMode === 'max_sell' ? 'Maximum to sell' : 'Reserve quantity'
+              "
               type="number"
               min="0"
               :rules="[v => v >= 0 || 'Quantity must be non-negative']"
               class="mt-2"
             />
 
-            <!-- Order Type -->
             <v-select
-              v-model="editForm.orderType"
+              v-model="editSellForm.orderType"
               :items="orderTypes"
               item-title="title"
               item-value="value"
@@ -210,28 +338,111 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="editDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveEdit"> Save Changes </v-btn>
+          <v-btn text @click="editSellDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingSell" @click="saveEditSell"> Save Changes </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400">
+    <!-- Edit Buy Order Dialog -->
+    <v-dialog v-model="editBuyDialog" max-width="500" persistent>
+      <v-card v-if="editingBuyOrder">
+        <v-card-title>Edit Buy Order</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+            <div>
+              <strong>{{ getCommodityDisplay(editingBuyOrder.commodityTicker) }}</strong>
+              at {{ getLocationDisplay(editingBuyOrder.locationId) }}
+            </div>
+          </v-alert>
+
+          <v-form ref="editBuyFormRef">
+            <v-text-field
+              v-model.number="editBuyForm.quantity"
+              label="Quantity"
+              type="number"
+              min="1"
+              :rules="[v => v > 0 || 'Quantity must be positive']"
+              required
+            />
+
+            <v-row>
+              <v-col cols="8">
+                <v-text-field
+                  v-model.number="editBuyForm.price"
+                  label="Price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  :rules="[v => v > 0 || 'Price must be positive']"
+                  required
+                />
+              </v-col>
+              <v-col cols="4">
+                <v-select v-model="editBuyForm.currency" :items="currencies" label="Currency" />
+              </v-col>
+            </v-row>
+
+            <v-select
+              v-model="editBuyForm.orderType"
+              :items="orderTypes"
+              item-title="title"
+              item-value="value"
+              label="Order Type"
+              class="mt-4"
+            />
+          </v-form>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="editBuyDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingBuy" @click="saveEditBuy"> Save Changes </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Sell Order Confirmation -->
+    <v-dialog v-model="deleteSellDialog" max-width="400">
       <v-card>
-        <v-card-title>Delete Order</v-card-title>
+        <v-card-title>Delete Sell Order</v-card-title>
         <v-card-text>
           Are you sure you want to delete the sell order for
           <strong>{{
-            deletingOrder ? getCommodityDisplay(deletingOrder.commodityTicker) : ''
+            deletingSellOrder ? getCommodityDisplay(deletingSellOrder.commodityTicker) : ''
           }}</strong>
-          at <strong>{{ deletingOrder ? getLocationDisplay(deletingOrder.locationId) : '' }}</strong
+          at
+          <strong>{{
+            deletingSellOrder ? getLocationDisplay(deletingSellOrder.locationId) : ''
+          }}</strong
           >?
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteOrder"> Delete </v-btn>
+          <v-btn text @click="deleteSellDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingSell" @click="deleteSellOrder"> Delete </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Buy Order Confirmation -->
+    <v-dialog v-model="deleteBuyDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Buy Order</v-card-title>
+        <v-card-text>
+          Are you sure you want to delete the buy order for
+          <strong>{{
+            deletingBuyOrder ? getCommodityDisplay(deletingBuyOrder.commodityTicker) : ''
+          }}</strong>
+          at
+          <strong>{{
+            deletingBuyOrder ? getLocationDisplay(deletingBuyOrder.locationId) : ''
+          }}</strong
+          >?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteBuyDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingBuy" @click="deleteBuyOrder"> Delete </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -241,10 +452,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Currency, SellOrderLimitMode, OrderType } from '@kawakawa/types'
-import { api, type SellOrderResponse } from '../services/api'
+import { api, type SellOrderResponse, type BuyOrderResponse } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import BuyOrderDialog from '../components/BuyOrderDialog.vue'
 
 const userStore = useUserStore()
 
@@ -257,7 +469,9 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
-const headers = [
+const activeTab = ref('sell')
+
+const sellHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'Price', key: 'price', sortable: true },
@@ -266,18 +480,46 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, width: 100 },
 ]
 
-const orders = ref<SellOrderResponse[]>([])
-const loading = ref(false)
-const search = ref('')
+const buyHeaders = [
+  { title: 'Commodity', key: 'commodityTicker', sortable: true },
+  { title: 'Location', key: 'locationId', sortable: true },
+  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
+  { title: 'Type', key: 'orderType', sortable: true },
+  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
+]
 
-const editDialog = ref(false)
-const editingOrder = ref<SellOrderResponse | null>(null)
-const editFormRef = ref()
-const saving = ref(false)
+// Sell orders state
+const sellOrders = ref<SellOrderResponse[]>([])
+const loadingSell = ref(false)
+const sellSearch = ref('')
 
-const deleteDialog = ref(false)
-const deletingOrder = ref<SellOrderResponse | null>(null)
-const deleting = ref(false)
+// Buy orders state
+const buyOrders = ref<BuyOrderResponse[]>([])
+const loadingBuy = ref(false)
+const buySearch = ref('')
+const buyOrderDialog = ref(false)
+
+// Edit sell order state
+const editSellDialog = ref(false)
+const editingSellOrder = ref<SellOrderResponse | null>(null)
+const editSellFormRef = ref()
+const savingSell = ref(false)
+
+// Edit buy order state
+const editBuyDialog = ref(false)
+const editingBuyOrder = ref<BuyOrderResponse | null>(null)
+const editBuyFormRef = ref()
+const savingBuy = ref(false)
+
+// Delete state
+const deleteSellDialog = ref(false)
+const deletingSellOrder = ref<SellOrderResponse | null>(null)
+const deletingSell = ref(false)
+
+const deleteBuyDialog = ref(false)
+const deletingBuyOrder = ref<BuyOrderResponse | null>(null)
+const deletingBuy = ref(false)
 
 const snackbar = ref({
   show: false,
@@ -293,12 +535,22 @@ const limitModes = [
   { title: 'Reserve quantity (keep minimum)', value: 'reserve' },
 ]
 
-const orderTypes = [
-  { title: 'Internal (members only)', value: 'internal' },
-  { title: 'Partner (trade partners)', value: 'partner' },
-]
+// Check if user can create partner orders (members and admins can)
+const canCreatePartnerOrders = computed(() => {
+  const user = userStore.getUser()
+  if (!user?.roles) return false
+  return user.roles.some(r => r.id === 'member' || r.id === 'administrator')
+})
 
-const editForm = ref({
+const orderTypes = computed(() => {
+  const types = [{ title: 'Internal (members only)', value: 'internal' as OrderType }]
+  if (canCreatePartnerOrders.value) {
+    types.push({ title: 'Partner (trade partners)', value: 'partner' as OrderType })
+  }
+  return types
+})
+
+const editSellForm = ref({
   price: 0,
   currency: 'CIS' as Currency,
   orderType: 'internal' as OrderType,
@@ -306,14 +558,31 @@ const editForm = ref({
   limitQuantity: 0,
 })
 
+const editBuyForm = ref({
+  quantity: 1,
+  price: 0,
+  currency: 'CIS' as Currency,
+  orderType: 'internal' as OrderType,
+})
+
 const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
   snackbar.value = { show: true, message, color }
 }
 
-const filteredOrders = computed(() => {
-  if (!search.value) return orders.value
-  const searchLower = search.value.toLowerCase()
-  return orders.value.filter(
+const filteredSellOrders = computed(() => {
+  if (!sellSearch.value) return sellOrders.value
+  const searchLower = sellSearch.value.toLowerCase()
+  return sellOrders.value.filter(
+    order =>
+      order.commodityTicker.toLowerCase().includes(searchLower) ||
+      order.locationId.toLowerCase().includes(searchLower)
+  )
+})
+
+const filteredBuyOrders = computed(() => {
+  if (!buySearch.value) return buyOrders.value
+  const searchLower = buySearch.value.toLowerCase()
+  return buyOrders.value.filter(
     order =>
       order.commodityTicker.toLowerCase().includes(searchLower) ||
       order.locationId.toLowerCase().includes(searchLower)
@@ -335,81 +604,160 @@ const getLimitModeLabel = (mode: SellOrderLimitMode): string => {
   }
 }
 
-const loadOrders = async () => {
+// Load functions
+const loadSellOrders = async () => {
   try {
-    loading.value = true
-    orders.value = await api.sellOrders.list()
+    loadingSell.value = true
+    sellOrders.value = await api.sellOrders.list()
   } catch (error) {
-    console.error('Failed to load orders', error)
-    showSnackbar('Failed to load orders', 'error')
+    console.error('Failed to load sell orders', error)
+    showSnackbar('Failed to load sell orders', 'error')
   } finally {
-    loading.value = false
+    loadingSell.value = false
   }
 }
 
-const openEditDialog = (order: SellOrderResponse) => {
-  editingOrder.value = order
-  editForm.value = {
+const loadBuyOrders = async () => {
+  try {
+    loadingBuy.value = true
+    buyOrders.value = await api.buyOrders.list()
+  } catch (error) {
+    console.error('Failed to load buy orders', error)
+    showSnackbar('Failed to load buy orders', 'error')
+  } finally {
+    loadingBuy.value = false
+  }
+}
+
+// Edit sell order functions
+const openEditSellDialog = (order: SellOrderResponse) => {
+  editingSellOrder.value = order
+  editSellForm.value = {
     price: order.price,
     currency: order.currency,
     orderType: order.orderType,
     limitMode: order.limitMode,
     limitQuantity: order.limitQuantity ?? 0,
   }
-  editDialog.value = true
+  editSellDialog.value = true
 }
 
-const saveEdit = async () => {
-  if (!editingOrder.value) return
+const saveEditSell = async () => {
+  if (!editingSellOrder.value) return
 
-  const { valid } = await editFormRef.value.validate()
+  const { valid } = await editSellFormRef.value.validate()
   if (!valid) return
 
   try {
-    saving.value = true
-    await api.sellOrders.update(editingOrder.value.id, {
-      price: editForm.value.price,
-      currency: editForm.value.currency,
-      orderType: editForm.value.orderType,
-      limitMode: editForm.value.limitMode,
-      limitQuantity: editForm.value.limitMode === 'none' ? null : editForm.value.limitQuantity,
+    savingSell.value = true
+    await api.sellOrders.update(editingSellOrder.value.id, {
+      price: editSellForm.value.price,
+      currency: editSellForm.value.currency,
+      orderType: editSellForm.value.orderType,
+      limitMode: editSellForm.value.limitMode,
+      limitQuantity:
+        editSellForm.value.limitMode === 'none' ? null : editSellForm.value.limitQuantity,
     })
-    showSnackbar('Order updated successfully')
-    editDialog.value = false
-    await loadOrders()
+    showSnackbar('Sell order updated successfully')
+    editSellDialog.value = false
+    await loadSellOrders()
   } catch (error) {
-    console.error('Failed to update order', error)
-    const message = error instanceof Error ? error.message : 'Failed to update order'
+    console.error('Failed to update sell order', error)
+    const message = error instanceof Error ? error.message : 'Failed to update sell order'
     showSnackbar(message, 'error')
   } finally {
-    saving.value = false
+    savingSell.value = false
   }
 }
 
-const confirmDelete = (order: SellOrderResponse) => {
-  deletingOrder.value = order
-  deleteDialog.value = true
+// Edit buy order functions
+const openEditBuyDialog = (order: BuyOrderResponse) => {
+  editingBuyOrder.value = order
+  editBuyForm.value = {
+    quantity: order.quantity,
+    price: order.price,
+    currency: order.currency,
+    orderType: order.orderType,
+  }
+  editBuyDialog.value = true
 }
 
-const deleteOrder = async () => {
-  if (!deletingOrder.value) return
+const saveEditBuy = async () => {
+  if (!editingBuyOrder.value) return
+
+  const { valid } = await editBuyFormRef.value.validate()
+  if (!valid) return
 
   try {
-    deleting.value = true
-    await api.sellOrders.delete(deletingOrder.value.id)
-    showSnackbar('Order deleted successfully')
-    deleteDialog.value = false
-    await loadOrders()
+    savingBuy.value = true
+    await api.buyOrders.update(editingBuyOrder.value.id, {
+      quantity: editBuyForm.value.quantity,
+      price: editBuyForm.value.price,
+      currency: editBuyForm.value.currency,
+      orderType: editBuyForm.value.orderType,
+    })
+    showSnackbar('Buy order updated successfully')
+    editBuyDialog.value = false
+    await loadBuyOrders()
   } catch (error) {
-    console.error('Failed to delete order', error)
-    const message = error instanceof Error ? error.message : 'Failed to delete order'
+    console.error('Failed to update buy order', error)
+    const message = error instanceof Error ? error.message : 'Failed to update buy order'
     showSnackbar(message, 'error')
   } finally {
-    deleting.value = false
+    savingBuy.value = false
+  }
+}
+
+// Delete sell order functions
+const confirmDeleteSell = (order: SellOrderResponse) => {
+  deletingSellOrder.value = order
+  deleteSellDialog.value = true
+}
+
+const deleteSellOrder = async () => {
+  if (!deletingSellOrder.value) return
+
+  try {
+    deletingSell.value = true
+    await api.sellOrders.delete(deletingSellOrder.value.id)
+    showSnackbar('Sell order deleted successfully')
+    deleteSellDialog.value = false
+    await loadSellOrders()
+  } catch (error) {
+    console.error('Failed to delete sell order', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete sell order'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingSell.value = false
+  }
+}
+
+// Delete buy order functions
+const confirmDeleteBuy = (order: BuyOrderResponse) => {
+  deletingBuyOrder.value = order
+  deleteBuyDialog.value = true
+}
+
+const deleteBuyOrder = async () => {
+  if (!deletingBuyOrder.value) return
+
+  try {
+    deletingBuy.value = true
+    await api.buyOrders.delete(deletingBuyOrder.value.id)
+    showSnackbar('Buy order deleted successfully')
+    deleteBuyDialog.value = false
+    await loadBuyOrders()
+  } catch (error) {
+    console.error('Failed to delete buy order', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete buy order'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingBuy.value = false
   }
 }
 
 onMounted(() => {
-  loadOrders()
+  loadSellOrders()
+  loadBuyOrders()
 })
 </script>

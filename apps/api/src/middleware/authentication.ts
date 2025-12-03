@@ -3,13 +3,7 @@ import { eq } from 'drizzle-orm'
 import { verifyToken, generateToken, JwtPayload } from '../utils/jwt.js'
 import { getCachedRoles, setCachedRoles } from '../utils/roleCache.js'
 import { db, userRoles } from '../db/index.js'
-
-// Extend Express Request to include refreshed token
-declare module 'express-serve-static-core' {
-  interface Request {
-    refreshedToken?: string
-  }
-}
+import { setContextValue } from '../utils/requestContext.js'
 
 /**
  * Check if two role arrays have the same elements (order independent)
@@ -72,7 +66,7 @@ export async function expressAuthentication(
           username: decoded.username,
           roles: currentRoles,
         }
-        request.refreshedToken = generateToken(payload)
+        setContextValue('refreshedToken', generateToken(payload))
       }
 
       // Check scopes (required roles) if specified

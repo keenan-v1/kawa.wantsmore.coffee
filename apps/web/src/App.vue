@@ -3,22 +3,65 @@
     <v-app-bar v-if="isAuthenticated" color="primary" density="compact">
       <v-app-bar-title>KawaKawa CX</v-app-bar-title>
       <v-spacer />
-      <v-btn to="/market" text>Market</v-btn>
-      <v-btn to="/inventory" text>My Inventory</v-btn>
-      <v-btn to="/orders" text>My Orders</v-btn>
-      <v-btn to="/account" text>Account</v-btn>
-      <v-btn v-if="isAdmin" to="/admin" text prepend-icon="mdi-shield-account">
-        Admin
-        <v-badge
-          v-if="pendingApprovalsCount > 0"
-          :content="pendingApprovalsCount"
-          color="error"
-          floating
-          offset-x="-5"
-          offset-y="-5"
-        />
-      </v-btn>
-      <v-btn @click="logout" text prepend-icon="mdi-logout">Logout</v-btn>
+      <!-- Only show navigation for verified users -->
+      <template v-if="isVerified">
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" to="/market" icon size="small" class="mx-1">
+              <v-icon>mdi-store</v-icon>
+            </v-btn>
+          </template>
+          Market
+        </v-tooltip>
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" to="/inventory" icon size="small" class="mx-1">
+              <v-icon>mdi-package-variant</v-icon>
+            </v-btn>
+          </template>
+          My Inventory
+        </v-tooltip>
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" to="/orders" icon size="small" class="mx-1">
+              <v-icon>mdi-clipboard-list</v-icon>
+            </v-btn>
+          </template>
+          My Orders
+        </v-tooltip>
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" to="/account" icon size="small" class="mx-1">
+              <v-icon>mdi-account-cog</v-icon>
+            </v-btn>
+          </template>
+          Account
+        </v-tooltip>
+        <v-tooltip v-if="isAdmin" location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" to="/admin" icon size="small" class="mx-1">
+              <v-badge
+                v-if="pendingApprovalsCount > 0"
+                :content="pendingApprovalsCount"
+                color="error"
+                floating
+              >
+                <v-icon>mdi-shield-account</v-icon>
+              </v-badge>
+              <v-icon v-else>mdi-shield-account</v-icon>
+            </v-btn>
+          </template>
+          Admin
+        </v-tooltip>
+      </template>
+      <v-tooltip location="bottom">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" @click="logout" icon size="small" class="mx-1">
+            <v-icon>mdi-logout</v-icon>
+          </v-btn>
+        </template>
+        Logout
+      </v-tooltip>
     </v-app-bar>
 
     <v-main>
@@ -40,6 +83,12 @@ const router = useRouter()
 const userStore = useUserStore()
 const isAuthenticated = ref(false)
 const pendingApprovalsCount = ref(0)
+
+const isVerified = computed(() => {
+  const user = userStore.getUser()
+  // User is verified if they have any role other than 'unverified'
+  return user?.roles?.some(r => r.id !== 'unverified') ?? false
+})
 
 const isAdmin = computed(() => {
   const user = userStore.getUser()
@@ -81,6 +130,26 @@ const logout = () => {
   router.push('/login')
 }
 
+// Validate the session on startup - clears stale tokens
+const validateSession = async () => {
+  const token = localStorage.getItem('jwt')
+  if (!token) return
+
+  try {
+    // Try to fetch user profile to validate the token
+    const user = await api.account.getProfile()
+    userStore.setUser(user)
+    isAuthenticated.value = true
+  } catch (error) {
+    // Token is invalid or user doesn't exist - clear and redirect
+    console.warn('Session invalid, clearing token:', error)
+    localStorage.removeItem('jwt')
+    userStore.clearUser()
+    isAuthenticated.value = false
+    router.push('/login')
+  }
+}
+
 // Handle token refresh events - re-fetch user profile to update roles
 const handleTokenRefreshed = async () => {
   try {
@@ -98,18 +167,20 @@ const handleApprovalQueueUpdated = () => {
   fetchPendingApprovalsCount()
 }
 
-onMounted(() => {
-  checkAuth()
-  router.afterEach(() => {
-    checkAuth()
-  })
-
+onMounted(async () => {
   // Listen for token refresh events
   window.addEventListener('token-refreshed', handleTokenRefreshed)
   window.addEventListener('approval-queue-updated', handleApprovalQueueUpdated)
 
-  // Prefetch reference data on app startup
-  if (isAuthenticated.value) {
+  router.afterEach(() => {
+    checkAuth()
+  })
+
+  // Validate session on startup (clears stale tokens)
+  await validateSession()
+
+  // Prefetch reference data if authenticated and verified
+  if (isAuthenticated.value && isVerified.value) {
     commodityService.prefetch().catch(err => console.error('Failed to prefetch commodities:', err))
     locationService.prefetch().catch(err => console.error('Failed to prefetch locations:', err))
     roleService.prefetch().catch(err => console.error('Failed to prefetch roles:', err))

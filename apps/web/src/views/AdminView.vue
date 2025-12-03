@@ -77,9 +77,12 @@
                     density="compact"
                     hide-details
                     style="min-width: 180px"
+                    class="approval-role-select"
                   >
                     <template #selection="{ item }">
-                      <v-chip :color="item.raw.color" size="small">{{ item.title }}</v-chip>
+                      <v-chip :color="item.raw.color" size="small" class="ml-1">{{
+                        item.title
+                      }}</v-chip>
                     </template>
                   </v-select>
                   <v-btn

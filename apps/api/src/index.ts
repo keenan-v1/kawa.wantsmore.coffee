@@ -2,22 +2,27 @@ import express, { json, urlencoded, Request, Response, NextFunction } from 'expr
 import swaggerUi from 'swagger-ui-express'
 import { RegisterRoutes } from './generated/routes.js'
 import swaggerDocument from './generated/swagger.json' with { type: 'json' }
+import { requestContext, getContextValue } from './utils/requestContext.js'
 
 const app = express()
 
 app.use(json())
 app.use(urlencoded({ extended: true }))
 
-// Middleware to add refreshed token header when roles have changed
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const originalJson = res.json.bind(res)
-  res.json = (body: unknown) => {
-    if (req.refreshedToken) {
-      res.setHeader('X-Refreshed-Token', req.refreshedToken)
+// Wrap all requests in AsyncLocalStorage context (similar to Go's context.Context)
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  requestContext.run(new Map(), () => {
+    // Intercept json() to add refreshed token header before response is sent
+    const originalJson = res.json.bind(res)
+    res.json = (body: unknown) => {
+      const refreshedToken = getContextValue<string>('refreshedToken')
+      if (refreshedToken) {
+        res.setHeader('X-Refreshed-Token', refreshedToken)
+      }
+      return originalJson(body)
     }
-    return originalJson(body)
-  }
-  next()
+    next()
+  })
 })
 
 // Swagger UI - at /docs since DigitalOcean routes /api/* here (stripping /api prefix)

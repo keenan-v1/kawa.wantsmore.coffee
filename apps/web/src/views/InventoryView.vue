@@ -22,10 +22,26 @@
                 FIO data: {{ formatRelativeTime(lastSync.fioUploadedAt) }}
               </v-chip>
             </div>
-            <div v-else class="text-body-2 text-medium-emphasis">No inventory synced yet</div>
+            <div v-else class="text-body-2 text-medium-emphasis">
+              <template v-if="!fioConfigured">
+                No inventory synced yet.
+                <router-link to="/account">Go to Account</router-link>
+                to configure FIO.
+              </template>
+              <template v-else>No inventory synced yet</template>
+            </div>
           </v-col>
           <v-col cols="12" md="6" class="text-md-right">
+            <v-tooltip v-if="!fioConfigured" location="top">
+              <template #activator="{ props }">
+                <span v-bind="props">
+                  <v-btn color="primary" prepend-icon="mdi-sync" disabled> Sync from FIO </v-btn>
+                </span>
+              </template>
+              Configure FIO credentials in Account settings first
+            </v-tooltip>
             <v-btn
+              v-else
               color="primary"
               prepend-icon="mdi-sync"
               :loading="syncing"
@@ -281,10 +297,15 @@
                 No items match your filters.
                 <a href="#" @click.prevent="clearFilters">Clear filters</a>
               </template>
+              <template v-else-if="!fioConfigured">
+                No inventory synced yet.
+                <router-link to="/account">Go to Account</router-link>
+                to configure FIO.
+              </template>
               <template v-else> Sync your FIO inventory to see your items here </template>
             </p>
             <v-btn
-              v-if="!hasActiveFilters"
+              v-if="!hasActiveFilters && fioConfigured"
               color="primary"
               class="mt-4"
               prepend-icon="mdi-sync"
@@ -292,6 +313,15 @@
               @click="syncInventory"
             >
               Sync from FIO
+            </v-btn>
+            <v-btn
+              v-if="!hasActiveFilters && !fioConfigured"
+              color="primary"
+              class="mt-4"
+              prepend-icon="mdi-cog"
+              to="/account"
+            >
+              Configure FIO
             </v-btn>
           </div>
         </template>
@@ -316,6 +346,12 @@ import { useUserStore } from '../stores/user'
 import SellOrderDialog from '../components/SellOrderDialog.vue'
 
 const userStore = useUserStore()
+
+// Check if FIO is configured
+const fioConfigured = computed(() => {
+  const user = userStore.getUser()
+  return user?.hasFioApiKey && user?.fioUsername
+})
 
 interface LastSync {
   lastSyncedAt: string | null

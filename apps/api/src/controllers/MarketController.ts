@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Route, Security, Tags, Request } from 'tsoa'
 import type { Currency, OrderType } from '@kawakawa/types'
-import { db, sellOrders, fioInventory, fioUserStorage, users } from '../db/index.js'
+import { db, sellOrders, buyOrders, fioInventory, fioUserStorage, users } from '../db/index.js'
 import { eq, inArray } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
@@ -16,6 +16,19 @@ interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
+}
+
+// Buy request from market (buy orders from all users)
+interface MarketBuyRequest {
+  id: number
+  buyerName: string
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType
+  isOwn: boolean
 }
 
 /**
@@ -163,5 +176,87 @@ export class MarketController extends Controller {
     })
 
     return listings
+  }
+
+  /**
+   * Get all buy requests on the market (from all users)
+   * Filters by order type based on user permissions
+   */
+  @Get('buy-requests')
+  public async getMarketBuyRequests(
+    @Request() request: { user: JwtPayload },
+    @Query() commodity?: string,
+    @Query() location?: string
+  ): Promise<MarketBuyRequest[]> {
+    const userId = request.user.userId
+    const userRoles = request.user.roles
+
+    // Check what order types the user can view
+    const canViewInternal = await hasPermission(userRoles, 'orders.view_internal')
+    const canViewPartner = await hasPermission(userRoles, 'orders.view_partner')
+
+    if (!canViewInternal && !canViewPartner) {
+      return []
+    }
+
+    // Get all buy orders
+    const orders = await db
+      .select({
+        id: buyOrders.id,
+        userId: buyOrders.userId,
+        commodityTicker: buyOrders.commodityTicker,
+        locationId: buyOrders.locationId,
+        quantity: buyOrders.quantity,
+        price: buyOrders.price,
+        currency: buyOrders.currency,
+        orderType: buyOrders.orderType,
+        buyerName: users.displayName,
+      })
+      .from(buyOrders)
+      .innerJoin(users, eq(buyOrders.userId, users.id))
+
+    // Process orders and filter by permissions
+    const requests: MarketBuyRequest[] = []
+
+    for (const order of orders) {
+      const isOwn = order.userId === userId
+
+      // Filter by order type permissions (always show user's own orders)
+      if (!isOwn) {
+        if (order.orderType === 'internal' && !canViewInternal) continue
+        if (order.orderType === 'partner' && !canViewPartner) continue
+      }
+
+      // Filter by commodity if specified
+      if (commodity && order.commodityTicker !== commodity) continue
+
+      // Filter by location if specified
+      if (location && order.locationId !== location) continue
+
+      requests.push({
+        id: order.id,
+        buyerName: order.buyerName,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        quantity: order.quantity,
+        price: parseFloat(order.price),
+        currency: order.currency,
+        orderType: order.orderType,
+        isOwn,
+      })
+    }
+
+    // Sort by commodity, then location, then price (highest first for buy orders)
+    requests.sort((a, b) => {
+      if (a.commodityTicker !== b.commodityTicker) {
+        return a.commodityTicker.localeCompare(b.commodityTicker)
+      }
+      if (a.locationId !== b.locationId) {
+        return a.locationId.localeCompare(b.locationId)
+      }
+      return b.price - a.price // Higher prices first for buy orders
+    })
+
+    return requests
   }
 }

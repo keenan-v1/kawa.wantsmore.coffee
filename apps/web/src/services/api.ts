@@ -223,6 +223,18 @@ interface MarketListing {
   isOwn: boolean
 }
 
+interface MarketBuyRequest {
+  id: number
+  buyerName: string
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType
+  isOwn: boolean
+}
+
 // Helper to get JWT token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('jwt')
@@ -940,6 +952,35 @@ const realApi = {
     return response.json()
   },
 
+  getMarketBuyRequests: async (
+    commodity?: string,
+    location?: string
+  ): Promise<MarketBuyRequest[]> => {
+    const params = new URLSearchParams()
+    if (commodity) params.append('commodity', commodity)
+    if (location) params.append('location', location)
+
+    const url = `/api/market/buy-requests${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get market buy requests: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   // Buy Orders methods
   getBuyOrders: async (): Promise<BuyOrderResponse[]> => {
     const response = await fetch('/api/buy-orders', {
@@ -1106,6 +1147,8 @@ export const api = {
   market: {
     getListings: (commodity?: string, location?: string) =>
       realApi.getMarketListings(commodity, location),
+    getBuyRequests: (commodity?: string, location?: string) =>
+      realApi.getMarketBuyRequests(commodity, location),
   },
   roles: {
     list: () => realApi.getRoles(),
@@ -1122,4 +1165,5 @@ export type {
   CreateBuyOrderRequest,
   UpdateBuyOrderRequest,
   MarketListing,
+  MarketBuyRequest,
 }

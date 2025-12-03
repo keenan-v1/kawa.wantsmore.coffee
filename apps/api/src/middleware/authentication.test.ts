@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { expressAuthentication } from './authentication.js'
 import * as jwtUtils from '../utils/jwt.js'
 import * as roleCache from '../utils/roleCache.js'
+import * as requestContext from '../utils/requestContext.js'
 import { db } from '../db/index.js'
 import type { Request } from 'express'
 
@@ -13,6 +14,10 @@ vi.mock('../utils/jwt.js', () => ({
 vi.mock('../utils/roleCache.js', () => ({
   getCachedRoles: vi.fn(),
   setCachedRoles: vi.fn(),
+}))
+
+vi.mock('../utils/requestContext.js', () => ({
+  setContextValue: vi.fn(),
 }))
 
 vi.mock('../db/index.js', () => ({
@@ -125,7 +130,7 @@ describe('expressAuthentication', () => {
         username: 'user',
         roles: currentRoles,
       })
-      expect(mockRequest.refreshedToken).toBe('new-token')
+      expect(requestContext.setContextValue).toHaveBeenCalledWith('refreshedToken', 'new-token')
     })
   })
 

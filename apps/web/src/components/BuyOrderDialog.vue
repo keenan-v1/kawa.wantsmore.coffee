@@ -108,10 +108,20 @@ const loadingLocations = ref(false)
 
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
-const orderTypes = [
-  { title: 'Internal (members only)', value: 'internal' },
-  { title: 'Partner (trade partners)', value: 'partner' },
-]
+// Check if user can create partner orders (members and admins can)
+const canCreatePartnerOrders = computed(() => {
+  const user = userStore.getUser()
+  if (!user?.roles) return false
+  return user.roles.some(r => r.id === 'member' || r.id === 'administrator')
+})
+
+const orderTypes = computed(() => {
+  const types = [{ title: 'Internal (members only)', value: 'internal' as OrderType }]
+  if (canCreatePartnerOrders.value) {
+    types.push({ title: 'Partner (trade partners)', value: 'partner' as OrderType })
+  }
+  return types
+})
 
 const form = ref({
   commodityTicker: '',
