@@ -13,7 +13,7 @@ import {
   SuccessResponse,
 } from 'tsoa'
 import type { Currency } from '@kawakawa/types'
-import { db, sellOrders, fioInventory, commodities, locations, roles } from '../db/index.js'
+import { db, sellOrders, fioInventory, fioUserStorage, fioCommodities, fioLocations, roles } from '../db/index.js'
 import { eq, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
@@ -87,46 +87,53 @@ export class SellOrdersController extends Controller {
   ): Promise<SellOrderResponse[]> {
     const userId = request.user.userId
 
-    // Get sell orders with FIO inventory data
+    // Get sell orders - we'll look up inventory separately due to the new schema
     const orders = await db
-      .select({
-        id: sellOrders.id,
-        commodityTicker: sellOrders.commodityTicker,
-        locationId: sellOrders.locationId,
-        price: sellOrders.price,
-        currency: sellOrders.currency,
-        limitMode: sellOrders.limitMode,
-        limitQuantity: sellOrders.limitQuantity,
-        targetRoleId: sellOrders.targetRoleId,
-        fioQuantity: fioInventory.quantity,
-      })
+      .select()
       .from(sellOrders)
-      .leftJoin(
-        fioInventory,
-        and(
-          eq(sellOrders.userId, fioInventory.userId),
-          eq(sellOrders.commodityTicker, fioInventory.commodityTicker),
-          eq(sellOrders.locationId, fioInventory.locationId)
-        )
-      )
       .where(eq(sellOrders.userId, userId))
 
-    return orders.map(order => ({
-      id: order.id,
-      commodityTicker: order.commodityTicker,
-      locationId: order.locationId,
-      price: parseFloat(order.price),
-      currency: order.currency,
-      limitMode: order.limitMode,
-      limitQuantity: order.limitQuantity,
-      targetRoleId: order.targetRoleId,
-      fioQuantity: order.fioQuantity ?? 0,
-      availableQuantity: calculateAvailableQuantity(
-        order.fioQuantity ?? 0,
-        order.limitMode,
-        order.limitQuantity
-      ),
-    }))
+    // Get all user's inventory with location info for matching
+    const inventory = await db
+      .select({
+        commodityTicker: fioInventory.commodityTicker,
+        quantity: fioInventory.quantity,
+        locationId: fioUserStorage.locationId,
+      })
+      .from(fioInventory)
+      .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+      .where(eq(fioInventory.userId, userId))
+
+    // Build a lookup map: "ticker:locationId" -> total quantity
+    const inventoryMap = new Map<string, number>()
+    for (const item of inventory) {
+      if (item.locationId) {
+        const key = `${item.commodityTicker}:${item.locationId}`
+        inventoryMap.set(key, (inventoryMap.get(key) ?? 0) + item.quantity)
+      }
+    }
+
+    return orders.map(order => {
+      const key = `${order.commodityTicker}:${order.locationId}`
+      const fioQuantity = inventoryMap.get(key) ?? 0
+
+      return {
+        id: order.id,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        price: parseFloat(order.price),
+        currency: order.currency,
+        limitMode: order.limitMode,
+        limitQuantity: order.limitQuantity,
+        targetRoleId: order.targetRoleId,
+        fioQuantity,
+        availableQuantity: calculateAvailableQuantity(
+          fioQuantity,
+          order.limitMode,
+          order.limitQuantity
+        ),
+      }
+    })
   }
 
   /**
@@ -140,32 +147,21 @@ export class SellOrdersController extends Controller {
     const userId = request.user.userId
 
     const [order] = await db
-      .select({
-        id: sellOrders.id,
-        commodityTicker: sellOrders.commodityTicker,
-        locationId: sellOrders.locationId,
-        price: sellOrders.price,
-        currency: sellOrders.currency,
-        limitMode: sellOrders.limitMode,
-        limitQuantity: sellOrders.limitQuantity,
-        targetRoleId: sellOrders.targetRoleId,
-        fioQuantity: fioInventory.quantity,
-      })
+      .select()
       .from(sellOrders)
-      .leftJoin(
-        fioInventory,
-        and(
-          eq(sellOrders.userId, fioInventory.userId),
-          eq(sellOrders.commodityTicker, fioInventory.commodityTicker),
-          eq(sellOrders.locationId, fioInventory.locationId)
-        )
-      )
       .where(and(eq(sellOrders.id, id), eq(sellOrders.userId, userId)))
 
     if (!order) {
       this.setStatus(404)
       throw NotFound('Sell order not found')
     }
+
+    // Get FIO inventory for this commodity/location
+    const fioQuantity = await this.getInventoryQuantity(
+      userId,
+      order.commodityTicker,
+      order.locationId
+    )
 
     return {
       id: order.id,
@@ -176,13 +172,36 @@ export class SellOrdersController extends Controller {
       limitMode: order.limitMode,
       limitQuantity: order.limitQuantity,
       targetRoleId: order.targetRoleId,
-      fioQuantity: order.fioQuantity ?? 0,
+      fioQuantity,
       availableQuantity: calculateAvailableQuantity(
-        order.fioQuantity ?? 0,
+        fioQuantity,
         order.limitMode,
         order.limitQuantity
       ),
     }
+  }
+
+  /**
+   * Helper to get inventory quantity for a commodity at a location
+   */
+  private async getInventoryQuantity(
+    userId: number,
+    commodityTicker: string,
+    locationId: string
+  ): Promise<number> {
+    const items = await db
+      .select({ quantity: fioInventory.quantity })
+      .from(fioInventory)
+      .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+      .where(
+        and(
+          eq(fioInventory.userId, userId),
+          eq(fioInventory.commodityTicker, commodityTicker),
+          eq(fioUserStorage.locationId, locationId)
+        )
+      )
+
+    return items.reduce((sum, item) => sum + item.quantity, 0)
   }
 
   /**
@@ -208,9 +227,9 @@ export class SellOrdersController extends Controller {
 
     // Validate commodity exists
     const [commodity] = await db
-      .select({ ticker: commodities.ticker })
-      .from(commodities)
-      .where(eq(commodities.ticker, body.commodityTicker))
+      .select({ ticker: fioCommodities.ticker })
+      .from(fioCommodities)
+      .where(eq(fioCommodities.ticker, body.commodityTicker))
 
     if (!commodity) {
       this.setStatus(400)
@@ -219,9 +238,9 @@ export class SellOrdersController extends Controller {
 
     // Validate location exists
     const [location] = await db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(eq(locations.id, body.locationId))
+      .select({ naturalId: fioLocations.naturalId })
+      .from(fioLocations)
+      .where(eq(fioLocations.naturalId, body.locationId))
 
     if (!location) {
       this.setStatus(400)
@@ -276,18 +295,11 @@ export class SellOrdersController extends Controller {
     this.setStatus(201)
 
     // Get FIO inventory for this commodity/location
-    const [fioItem] = await db
-      .select({ quantity: fioInventory.quantity })
-      .from(fioInventory)
-      .where(
-        and(
-          eq(fioInventory.userId, userId),
-          eq(fioInventory.commodityTicker, body.commodityTicker),
-          eq(fioInventory.locationId, body.locationId)
-        )
-      )
-
-    const fioQuantity = fioItem?.quantity ?? 0
+    const fioQuantity = await this.getInventoryQuantity(
+      userId,
+      body.commodityTicker,
+      body.locationId
+    )
 
     return {
       id: newOrder.id,
@@ -372,18 +384,11 @@ export class SellOrdersController extends Controller {
       .returning()
 
     // Get FIO inventory
-    const [fioItem] = await db
-      .select({ quantity: fioInventory.quantity })
-      .from(fioInventory)
-      .where(
-        and(
-          eq(fioInventory.userId, userId),
-          eq(fioInventory.commodityTicker, updated.commodityTicker),
-          eq(fioInventory.locationId, updated.locationId)
-        )
-      )
-
-    const fioQuantity = fioItem?.quantity ?? 0
+    const fioQuantity = await this.getInventoryQuantity(
+      userId,
+      updated.commodityTicker,
+      updated.locationId
+    )
 
     return {
       id: updated.id,

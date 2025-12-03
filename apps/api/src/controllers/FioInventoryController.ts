@@ -8,7 +8,7 @@ import {
   Request,
   SuccessResponse,
 } from 'tsoa'
-import { db, userSettings, fioInventory, commodities, locations } from '../db/index.js'
+import { db, userSettings, fioInventory, fioUserStorage, fioCommodities, fioLocations } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
@@ -17,21 +17,30 @@ import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
 interface FioInventorySyncResult {
   success: boolean
   inserted: number
+  storageLocations: number
   errors: string[]
   skippedUnknownLocations: number
   skippedUnknownCommodities: number
+  fioLastSync: string | null
 }
 
 interface FioInventoryResponse {
   id: number
   commodityTicker: string
   quantity: number
-  locationId: string
+  locationId: string | null
   lastSyncedAt: string
   commodityName: string
   commodityCategory: string | null
-  locationName: string
-  locationType: string
+  locationName: string | null
+  locationType: string | null
+  // Storage info
+  storageType: string
+  weightLoad: number | null
+  weightCapacity: number | null
+  volumeLoad: number | null
+  volumeCapacity: number | null
+  fioTimestamp: string | null
 }
 
 @Route('fio/inventory')
@@ -52,16 +61,26 @@ export class FioInventoryController extends Controller {
         id: fioInventory.id,
         commodityTicker: fioInventory.commodityTicker,
         quantity: fioInventory.quantity,
-        locationId: fioInventory.locationId,
         lastSyncedAt: fioInventory.lastSyncedAt,
-        commodityName: commodities.name,
-        commodityCategory: commodities.category,
-        locationName: locations.name,
-        locationType: locations.type,
+        // Storage fields
+        storageType: fioUserStorage.type,
+        weightLoad: fioUserStorage.weightLoad,
+        weightCapacity: fioUserStorage.weightCapacity,
+        volumeLoad: fioUserStorage.volumeLoad,
+        volumeCapacity: fioUserStorage.volumeCapacity,
+        fioTimestamp: fioUserStorage.fioTimestamp,
+        // Location fields (via storage)
+        locationId: fioUserStorage.locationId,
+        locationName: fioLocations.name,
+        locationType: fioLocations.type,
+        // Commodity fields
+        commodityName: fioCommodities.name,
+        commodityCategory: fioCommodities.categoryName,
       })
       .from(fioInventory)
-      .innerJoin(commodities, eq(fioInventory.commodityTicker, commodities.ticker))
-      .innerJoin(locations, eq(fioInventory.locationId, locations.id))
+      .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+      .innerJoin(fioCommodities, eq(fioInventory.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(fioUserStorage.locationId, fioLocations.naturalId))
       .where(eq(fioInventory.userId, userId))
 
     return items.map(item => ({
@@ -74,6 +93,12 @@ export class FioInventoryController extends Controller {
       commodityCategory: item.commodityCategory,
       locationName: item.locationName,
       locationType: item.locationType,
+      storageType: item.storageType,
+      weightLoad: item.weightLoad ? parseFloat(item.weightLoad) : null,
+      weightCapacity: item.weightCapacity ? parseFloat(item.weightCapacity) : null,
+      volumeLoad: item.volumeLoad ? parseFloat(item.volumeLoad) : null,
+      volumeCapacity: item.volumeCapacity ? parseFloat(item.volumeCapacity) : null,
+      fioTimestamp: item.fioTimestamp?.toISOString() ?? null,
     }))
   }
 
@@ -108,9 +133,11 @@ export class FioInventoryController extends Controller {
     return {
       success: result.success,
       inserted: result.inserted,
+      storageLocations: result.storageLocations,
       errors: result.errors,
       skippedUnknownLocations: result.skippedUnknownLocations,
       skippedUnknownCommodities: result.skippedUnknownCommodities,
+      fioLastSync: result.fioLastSync,
     }
   }
 
@@ -120,18 +147,23 @@ export class FioInventoryController extends Controller {
   @Get('last-sync')
   public async getLastSyncTime(
     @Request() request: { user: JwtPayload }
-  ): Promise<{ lastSyncedAt: string | null }> {
+  ): Promise<{ lastSyncedAt: string | null; fioTimestamp: string | null }> {
     const userId = request.user.userId
 
-    const [item] = await db
-      .select({ lastSyncedAt: fioInventory.lastSyncedAt })
-      .from(fioInventory)
-      .where(eq(fioInventory.userId, userId))
-      .orderBy(fioInventory.lastSyncedAt)
+    // Get the most recent sync time from storage (when we synced from FIO)
+    const [storage] = await db
+      .select({
+        lastSyncedAt: fioUserStorage.lastSyncedAt,
+        fioTimestamp: fioUserStorage.fioTimestamp,
+      })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId))
+      .orderBy(fioUserStorage.lastSyncedAt)
       .limit(1)
 
     return {
-      lastSyncedAt: item?.lastSyncedAt?.toISOString() || null,
+      lastSyncedAt: storage?.lastSyncedAt?.toISOString() || null,
+      fioTimestamp: storage?.fioTimestamp?.toISOString() || null,
     }
   }
 }

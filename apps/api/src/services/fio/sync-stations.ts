@@ -1,29 +1,16 @@
 // Sync stations from FIO commodity exchanges endpoint
-import { db, locations } from '../../db/index.js'
+import { db, fioLocations } from '../../db/index.js'
 import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
 
 interface FioExchangeStation {
-  StationId: string
+  StationId: string // UUID (addressableId for storage mapping)
   NaturalId: string // Station natural ID like "HUB", "HRT", "ANT", "ARC"
   Name: string // Station name like "Hortus Station", "Hubur Station"
   SystemId: string
   SystemNaturalId: string // System code like "TD-203", "VH-331", "ZV-307", "AM-783"
   SystemName: string // System name like "Hubur", "Hortus", "Antares I", "Arclight"
-  CommisionTimeEpochMs: number
-  ComexId: string
-  ComexName: string // Exchange name like "Hubur Commodity Exchange"
-  ComexCode: string // Exchange code like "NC2", "IC1", "AI1", "CI2"
-  WarehouseId: string
-  CountryId: string
-  CountryCode: string // e.g., "CI", "NC", "AI", "IC"
-  CountryName: string // e.g., "Castillo-Ito Mercantile"
-  CurrencyNumericCode: number
-  CurrencyCode: string // e.g., "ICA", "NCC", "CIS", "AIC"
-  CurrencyName: string // e.g., "Austral", "NCE Coupons", "Sol"
-  CurrencyDecimals: number
-  UserNameSubmitted: string
-  Timestamp: string
+  WarehouseId: string // UUID for warehouse storage
 }
 
 /**
@@ -51,20 +38,24 @@ export async function syncStations(): Promise<SyncResult> {
       try {
         // Upsert station with complete system information
         await db
-          .insert(locations)
+          .insert(fioLocations)
           .values({
-            id: station.NaturalId, // e.g., "HUB", "HRT", "ANT", "ARC"
+            naturalId: station.NaturalId, // e.g., "HUB", "HRT", "ANT", "ARC"
+            addressableId: station.StationId, // UUID for storage mapping
             name: station.Name, // e.g., "Hortus Station", "Hubur Station"
             type: 'Station',
-            systemCode: station.SystemNaturalId, // e.g., "TD-203", "VH-331", "ZV-307"
+            systemId: station.SystemId,
+            systemNaturalId: station.SystemNaturalId, // e.g., "TD-203", "VH-331", "ZV-307"
             systemName: station.SystemName, // e.g., "Hubur", "Hortus", "Antares I"
           })
           .onConflictDoUpdate({
-            target: locations.id,
+            target: fioLocations.naturalId,
             set: {
+              addressableId: station.StationId,
               name: station.Name,
               type: 'Station',
-              systemCode: station.SystemNaturalId,
+              systemId: station.SystemId,
+              systemNaturalId: station.SystemNaturalId,
               systemName: station.SystemName,
               updatedAt: new Date(),
             },

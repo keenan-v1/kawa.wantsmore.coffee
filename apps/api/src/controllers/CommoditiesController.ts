@@ -1,11 +1,13 @@
 import { Controller, Get, Path, Query, Route, Tags } from 'tsoa'
-import { db, commodities } from '../db/index.js'
-import { eq, ilike, sql } from 'drizzle-orm'
+import { db, fioCommodities } from '../db/index.js'
+import { eq, sql } from 'drizzle-orm'
 
 interface Commodity {
   ticker: string
   name: string
   category: string | null
+  weight: number | null
+  volume: number | null
 }
 
 @Route('commodities')
@@ -25,22 +27,24 @@ export class CommoditiesController extends Controller {
 
     if (search) {
       conditions.push(
-        sql`${commodities.ticker} ILIKE ${`%${search}%`} OR ${commodities.name} ILIKE ${`%${search}%`}`
+        sql`${fioCommodities.ticker} ILIKE ${`%${search}%`} OR ${fioCommodities.name} ILIKE ${`%${search}%`}`
       )
     }
 
     if (category) {
-      conditions.push(eq(commodities.category, category))
+      conditions.push(eq(fioCommodities.categoryName, category))
     }
 
     const results = conditions.length > 0
-      ? await db.select().from(commodities).where(sql`${conditions.join(' AND ')}`)
-      : await db.select().from(commodities)
+      ? await db.select().from(fioCommodities).where(sql`${conditions.join(' AND ')}`)
+      : await db.select().from(fioCommodities)
 
     return results.map(c => ({
       ticker: c.ticker,
       name: c.name,
-      category: c.category,
+      category: c.categoryName,
+      weight: c.weight ? parseFloat(c.weight) : null,
+      volume: c.volume ? parseFloat(c.volume) : null,
     }))
   }
 
@@ -52,8 +56,8 @@ export class CommoditiesController extends Controller {
   public async getCommodity(@Path() ticker: string): Promise<Commodity | null> {
     const result = await db
       .select()
-      .from(commodities)
-      .where(eq(commodities.ticker, ticker.toUpperCase()))
+      .from(fioCommodities)
+      .where(eq(fioCommodities.ticker, ticker.toUpperCase()))
       .limit(1)
 
     if (result.length === 0) {
@@ -65,7 +69,9 @@ export class CommoditiesController extends Controller {
     return {
       ticker: commodity.ticker,
       name: commodity.name,
-      category: commodity.category,
+      category: commodity.categoryName,
+      weight: commodity.weight ? parseFloat(commodity.weight) : null,
+      volume: commodity.volume ? parseFloat(commodity.volume) : null,
     }
   }
 
@@ -75,10 +81,10 @@ export class CommoditiesController extends Controller {
   @Get('categories/list')
   public async getCategories(): Promise<string[]> {
     const results = await db
-      .selectDistinct({ category: commodities.category })
-      .from(commodities)
-      .where(sql`${commodities.category} IS NOT NULL`)
-      .orderBy(commodities.category)
+      .selectDistinct({ category: fioCommodities.categoryName })
+      .from(fioCommodities)
+      .where(sql`${fioCommodities.categoryName} IS NOT NULL`)
+      .orderBy(fioCommodities.categoryName)
 
     return results.map(r => r.category!).filter(Boolean)
   }

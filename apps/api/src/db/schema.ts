@@ -81,33 +81,57 @@ export const userRoles = pgTable('user_roles', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
-// ==================== COMMODITIES ====================
-export const commodities = pgTable('commodities', {
+// ==================== FIO COMMODITIES (Materials from FIO API) ====================
+export const fioCommodities = pgTable('fio_commodities', {
   ticker: varchar('ticker', { length: 10 }).primaryKey(), // 'H2O', 'RAT', 'FE', etc.
-  name: varchar('name', { length: 100 }).notNull(), // 'Water', 'Rations', 'Iron', etc.
-  category: varchar('category', { length: 50 }), // 'Agricultural', 'Mineral', 'Metal', etc.
+  materialId: varchar('material_id', { length: 40 }), // FIO UUID for mapping
+  name: varchar('name', { length: 100 }).notNull(), // 'water', 'rations', 'iron', etc.
+  categoryName: varchar('category_name', { length: 50 }), // 'consumables (basic)', 'ores', 'metals', etc.
+  categoryId: varchar('category_id', { length: 40 }), // FIO category UUID
+  weight: decimal('weight', { precision: 10, scale: 6 }), // Weight per unit
+  volume: decimal('volume', { precision: 10, scale: 6 }), // Volume per unit
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== LOCATIONS ====================
-export const locations = pgTable('locations', {
-  id: varchar('id', { length: 20 }).primaryKey(), // 'BEN', 'UV-351a', 'KW-689c', etc.
+// ==================== FIO LOCATIONS (Planets/Stations from FIO API) ====================
+export const fioLocations = pgTable('fio_locations', {
+  naturalId: varchar('natural_id', { length: 20 }).primaryKey(), // 'BEN', 'UV-351a', 'KW-689c', etc.
+  addressableId: varchar('addressable_id', { length: 40 }), // FIO UUID for storage mapping
   name: varchar('name', { length: 100 }).notNull(), // 'Benton Station', 'Katoa', etc.
   type: locationTypeEnum('type').notNull(), // 'Station' or 'Planet'
-  systemCode: varchar('system_code', { length: 20 }).notNull(), // 'UV-351', 'KW-689', 'TD-203', etc.
+  systemId: varchar('system_id', { length: 40 }), // FIO system UUID
+  systemNaturalId: varchar('system_natural_id', { length: 20 }).notNull(), // 'UV-351', 'KW-689', etc.
   systemName: varchar('system_name', { length: 100 }).notNull(), // 'Benton', 'Shadow Garden', 'Hubur', etc.
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== FIO INVENTORY (Raw synced data from FIO) ====================
+// ==================== FIO USER STORAGE (Storage locations from FIO API) ====================
+export const fioUserStorage = pgTable('fio_user_storage', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  storageId: varchar('storage_id', { length: 40 }).notNull(), // FIO's StorageId
+  addressableId: varchar('addressable_id', { length: 40 }).notNull(), // UUID for the location
+  locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // Resolved from addressableId (null if unknown)
+  type: varchar('type', { length: 30 }).notNull(), // 'STORE', 'WAREHOUSE_STORE', 'SHIP_STORE', etc.
+  weightLoad: decimal('weight_load', { precision: 12, scale: 2 }),
+  weightCapacity: decimal('weight_capacity', { precision: 12, scale: 2 }),
+  volumeLoad: decimal('volume_load', { precision: 12, scale: 2 }),
+  volumeCapacity: decimal('volume_capacity', { precision: 12, scale: 2 }),
+  fioTimestamp: timestamp('fio_timestamp'), // FIO's sync timestamp from game
+  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// ==================== FIO INVENTORY (Items in storage from FIO API) ====================
 export const fioInventory = pgTable('fio_inventory', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => commodities.ticker),
+  userStorageId: integer('user_storage_id').notNull().references(() => fioUserStorage.id, { onDelete: 'cascade' }),
+  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => fioCommodities.ticker),
   quantity: integer('quantity').notNull(),
-  locationId: varchar('location_id', { length: 20 }).notNull().references(() => locations.id),
   lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -117,8 +141,8 @@ export const fioInventory = pgTable('fio_inventory', {
 export const sellOrders = pgTable('sell_orders', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => commodities.ticker),
-  locationId: varchar('location_id', { length: 20 }).notNull().references(() => locations.id),
+  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => fioCommodities.ticker),
+  locationId: varchar('location_id', { length: 20 }).notNull().references(() => fioLocations.naturalId),
   price: decimal('price', { precision: 12, scale: 2 }).notNull(),
   currency: currencyEnum('currency').notNull(),
   limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
@@ -137,6 +161,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   userRoles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
+  fioUserStorage: many(fioUserStorage),
   fioInventory: many(fioInventory),
   sellOrders: many(sellOrders),
 }))
@@ -186,14 +211,26 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
   }),
 }))
 
-export const commoditiesRelations = relations(commodities, ({ many }) => ({
+export const fioCommoditiesRelations = relations(fioCommodities, ({ many }) => ({
   fioInventory: many(fioInventory),
   sellOrders: many(sellOrders),
 }))
 
-export const locationsRelations = relations(locations, ({ many }) => ({
-  fioInventory: many(fioInventory),
+export const fioLocationsRelations = relations(fioLocations, ({ many }) => ({
+  fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
+}))
+
+export const fioUserStorageRelations = relations(fioUserStorage, ({ one, many }) => ({
+  user: one(users, {
+    fields: [fioUserStorage.userId],
+    references: [users.id],
+  }),
+  location: one(fioLocations, {
+    fields: [fioUserStorage.locationId],
+    references: [fioLocations.naturalId],
+  }),
+  fioInventory: many(fioInventory),
 }))
 
 export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
@@ -201,13 +238,13 @@ export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
     fields: [fioInventory.userId],
     references: [users.id],
   }),
-  commodity: one(commodities, {
-    fields: [fioInventory.commodityTicker],
-    references: [commodities.ticker],
+  userStorage: one(fioUserStorage, {
+    fields: [fioInventory.userStorageId],
+    references: [fioUserStorage.id],
   }),
-  location: one(locations, {
-    fields: [fioInventory.locationId],
-    references: [locations.id],
+  commodity: one(fioCommodities, {
+    fields: [fioInventory.commodityTicker],
+    references: [fioCommodities.ticker],
   }),
 }))
 
@@ -216,13 +253,13 @@ export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
     fields: [sellOrders.userId],
     references: [users.id],
   }),
-  commodity: one(commodities, {
+  commodity: one(fioCommodities, {
     fields: [sellOrders.commodityTicker],
-    references: [commodities.ticker],
+    references: [fioCommodities.ticker],
   }),
-  location: one(locations, {
+  location: one(fioLocations, {
     fields: [sellOrders.locationId],
-    references: [locations.id],
+    references: [fioLocations.naturalId],
   }),
   targetRole: one(roles, {
     fields: [sellOrders.targetRoleId],

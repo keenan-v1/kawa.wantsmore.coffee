@@ -1,15 +1,26 @@
-// Sync locations from FIO planets and systems APIs to database
-import { db, locations } from '../../db/index.js'
+// Sync locations from FIO planets API to database
+import { db, fioLocations } from '../../db/index.js'
 import { fioClient } from './client.js'
-import { parseCsvTyped } from './csv-parser.js'
-import type { FioPlanet, FioSystem } from './types.js'
 import type { SyncResult } from './sync-types.js'
 
+interface FioPlanetFull {
+  PlanetId: string // UUID (addressableId)
+  PlanetNaturalId: string // Natural ID like "KW-688c"
+  PlanetName: string
+  SystemId: string
+  // Many other fields we don't need to store
+}
+
+interface FioSystemJson {
+  SystemId: string
+  NaturalId: string // e.g., "KW-688"
+  Name: string // e.g., "Etherwind"
+}
+
 /**
- * Sync planet locations from FIO planets and systems endpoints
- * FIO /csv/planets returns planetary bodies only (not stations)
- * Systems are joined by SystemId to get systemCode and systemName
- * Stations are synced separately via syncStations (from /global/comexexchanges)
+ * Sync planet locations from FIO /planet/allplanets/full endpoint (JSON)
+ * Populates addressableId (UUID) for storage mapping
+ * Stations are synced separately via syncStations
  */
 export async function syncLocations(): Promise<SyncResult> {
   const result: SyncResult = {
@@ -22,21 +33,19 @@ export async function syncLocations(): Promise<SyncResult> {
   try {
     // Fetch systems first to map system IDs to names/codes
     console.log('🌟 Fetching systems from FIO API...')
-    const systemsCsv = await fioClient.getSystems()
-    const systems = parseCsvTyped<FioSystem>(systemsCsv)
+    const systems = await fioClient.fetchJson<FioSystemJson[]>('/systemstars')
 
     // Create system lookup map
-    const systemMap = new Map<string, FioSystem>()
+    const systemMap = new Map<string, FioSystemJson>()
     systems.forEach(system => {
       systemMap.set(system.SystemId, system)
     })
 
     console.log(`📊 Found ${systems.length} systems`)
 
-    // Fetch planets
+    // Fetch full planet data
     console.log('🪐 Fetching planets from FIO API...')
-    const planetsCsv = await fioClient.getPlanets()
-    const planets = parseCsvTyped<FioPlanet>(planetsCsv)
+    const planets = await fioClient.fetchJson<FioPlanetFull[]>('/planet/allplanets/full')
 
     console.log(`📊 Found ${planets.length} planets`)
 
@@ -56,20 +65,23 @@ export async function syncLocations(): Promise<SyncResult> {
 
           // Insert or update planet location
           await db
-            .insert(locations)
+            .insert(fioLocations)
             .values({
-              id: planet.PlanetNaturalId, // Use natural ID like "UV-351a"
+              naturalId: planet.PlanetNaturalId,
+              addressableId: planet.PlanetId, // UUID for storage mapping
               name: planet.PlanetName,
-              type: 'Planet', // FIO only provides planets
-              systemCode: system.NaturalId, // e.g., "UV-351"
-              systemName: system.Name, // e.g., "Benton"
+              type: 'Planet',
+              systemId: planet.SystemId,
+              systemNaturalId: system.NaturalId,
+              systemName: system.Name,
             })
             .onConflictDoUpdate({
-              target: locations.id,
+              target: fioLocations.naturalId,
               set: {
+                addressableId: planet.PlanetId,
                 name: planet.PlanetName,
-                // Don't update type on conflict - preserve manually added stations
-                systemCode: system.NaturalId,
+                systemId: planet.SystemId,
+                systemNaturalId: system.NaturalId,
                 systemName: system.Name,
                 updatedAt: new Date(),
               },

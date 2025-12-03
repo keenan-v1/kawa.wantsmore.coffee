@@ -1,6 +1,6 @@
 import { Controller, Get, Path, Query, Route, Tags } from 'tsoa'
-import { db, locations } from '../db/index.js'
-import { eq, or, ilike, sql } from 'drizzle-orm'
+import { db, fioLocations } from '../db/index.js'
+import { eq, sql } from 'drizzle-orm'
 
 type LocationType = 'Station' | 'Planet'
 
@@ -31,27 +31,27 @@ export class LocationsController extends Controller {
 
     if (search) {
       conditions.push(
-        sql`${locations.name} ILIKE ${`%${search}%`} OR ${locations.id} ILIKE ${`%${search}%`} OR ${locations.systemName} ILIKE ${`%${search}%`}`
+        sql`${fioLocations.name} ILIKE ${`%${search}%`} OR ${fioLocations.naturalId} ILIKE ${`%${search}%`} OR ${fioLocations.systemName} ILIKE ${`%${search}%`}`
       )
     }
 
     if (type) {
-      conditions.push(eq(locations.type, type))
+      conditions.push(eq(fioLocations.type, type))
     }
 
     if (system) {
-      conditions.push(eq(locations.systemCode, system))
+      conditions.push(eq(fioLocations.systemNaturalId, system))
     }
 
     const results = conditions.length > 0
-      ? await db.select().from(locations).where(sql`${conditions.join(' AND ')}`).orderBy(locations.name)
-      : await db.select().from(locations).orderBy(locations.name)
+      ? await db.select().from(fioLocations).where(sql`${conditions.join(' AND ')}`).orderBy(fioLocations.name)
+      : await db.select().from(fioLocations).orderBy(fioLocations.name)
 
     return results.map(l => ({
-      id: l.id,
+      id: l.naturalId,
       name: l.name,
       type: l.type as LocationType,
-      systemCode: l.systemCode,
+      systemCode: l.systemNaturalId,
       systemName: l.systemName,
     }))
   }
@@ -63,15 +63,15 @@ export class LocationsController extends Controller {
   public async getStations(): Promise<Location[]> {
     const results = await db
       .select()
-      .from(locations)
-      .where(eq(locations.type, 'Station'))
-      .orderBy(locations.name)
+      .from(fioLocations)
+      .where(eq(fioLocations.type, 'Station'))
+      .orderBy(fioLocations.name)
 
     return results.map(l => ({
-      id: l.id,
+      id: l.naturalId,
       name: l.name,
       type: l.type as LocationType,
-      systemCode: l.systemCode,
+      systemCode: l.systemNaturalId,
       systemName: l.systemName,
     }))
   }
@@ -86,20 +86,20 @@ export class LocationsController extends Controller {
     const results = system
       ? await db
           .select()
-          .from(locations)
-          .where(sql`${locations.type} = 'Planet' AND ${locations.systemCode} = ${system}`)
-          .orderBy(locations.name)
+          .from(fioLocations)
+          .where(sql`${fioLocations.type} = 'Planet' AND ${fioLocations.systemNaturalId} = ${system}`)
+          .orderBy(fioLocations.name)
       : await db
           .select()
-          .from(locations)
-          .where(eq(locations.type, 'Planet'))
-          .orderBy(locations.name)
+          .from(fioLocations)
+          .where(eq(fioLocations.type, 'Planet'))
+          .orderBy(fioLocations.name)
 
     return results.map(l => ({
-      id: l.id,
+      id: l.naturalId,
       name: l.name,
       type: l.type as LocationType,
-      systemCode: l.systemCode,
+      systemCode: l.systemNaturalId,
       systemName: l.systemName,
     }))
   }
@@ -112,8 +112,8 @@ export class LocationsController extends Controller {
   public async getLocation(@Path() id: string): Promise<Location | null> {
     const result = await db
       .select()
-      .from(locations)
-      .where(eq(locations.id, id.toUpperCase()))
+      .from(fioLocations)
+      .where(eq(fioLocations.naturalId, id.toUpperCase()))
       .limit(1)
 
     if (result.length === 0) {
@@ -123,10 +123,10 @@ export class LocationsController extends Controller {
 
     const location = result[0]
     return {
-      id: location.id,
+      id: location.naturalId,
       name: location.name,
       type: location.type as LocationType,
-      systemCode: location.systemCode,
+      systemCode: location.systemNaturalId,
       systemName: location.systemName,
     }
   }
@@ -138,11 +138,11 @@ export class LocationsController extends Controller {
   public async getSystems(): Promise<Array<{ code: string; name: string }>> {
     const results = await db
       .selectDistinct({
-        code: locations.systemCode,
-        name: locations.systemName,
+        code: fioLocations.systemNaturalId,
+        name: fioLocations.systemName,
       })
-      .from(locations)
-      .orderBy(locations.systemName)
+      .from(fioLocations)
+      .orderBy(fioLocations.systemName)
 
     return results
   }

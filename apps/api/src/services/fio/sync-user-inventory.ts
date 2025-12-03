@@ -1,18 +1,26 @@
-// Sync user inventory from FIO API to database
-import { eq, and } from 'drizzle-orm'
-import { db, fioInventory, locations, commodities } from '../../db/index.js'
+// Sync user inventory from FIO API to database using GroupHub endpoint
+// GroupHub provides NaturalId mapping and timestamps for all locations
+import { eq } from 'drizzle-orm'
+import { db, fioInventory, fioUserStorage, fioLocations, fioCommodities } from '../../db/index.js'
 import { FioClient } from './client.js'
-import { parseCsvTyped } from './csv-parser.js'
-import type { FioInventoryItem } from './types.js'
+import type { FioGroupHubResponse, FioGroupHubStorage } from './types.js'
 import type { SyncResult } from './sync-types.js'
 
 export interface UserInventorySyncResult extends SyncResult {
+  storageLocations: number
   skippedUnknownLocations: number
   skippedUnknownCommodities: number
+  fioLastSync: string | null // Most recent FIO sync timestamp from game
 }
 
 /**
- * Sync a user's inventory from FIO API
+ * Sync a user's inventory from FIO API using GroupHub endpoint
+ *
+ * Uses /fioweb/GroupHub which provides:
+ * - Planet bases via PlayerModels[].Locations[] with LocationIdentifier (NaturalId)
+ * - Station warehouses via CXWarehouses[] with WarehouseLocationNaturalId
+ * - LastUpdated timestamps for each storage
+ *
  * @param userId - The internal user ID
  * @param fioApiKey - User's FIO API key
  * @param fioUsername - User's FIO username
@@ -27,98 +35,194 @@ export async function syncUserInventory(
     inserted: 0,
     updated: 0,
     errors: [],
+    storageLocations: 0,
     skippedUnknownLocations: 0,
     skippedUnknownCommodities: 0,
+    fioLastSync: null,
   }
 
   try {
-    // Create a client instance for this user's request
     const client = new FioClient()
 
-    console.log(`📦 Fetching inventory for ${fioUsername} from FIO API...`)
-    const csvData = await client.getUserInventory(fioApiKey, fioUsername)
+    // Fetch inventory from GroupHub endpoint
+    console.log(`📦 Fetching GroupHub data for ${fioUsername} from FIO API...`)
+    const groupHubData = await client.getGroupHub<FioGroupHubResponse>(fioApiKey, [fioUsername])
 
-    console.log('🔄 Parsing CSV data...')
-    const inventoryItems = parseCsvTyped<FioInventoryItem>(csvData)
+    // Build lookup maps for validation
+    const existingLocations = await db.select({
+      naturalId: fioLocations.naturalId,
+    }).from(fioLocations)
+    const locationIds = new Set(existingLocations.map(l => l.naturalId))
 
-    console.log(`📊 Found ${inventoryItems.length} inventory items`)
-
-    // Get existing locations and commodities for validation
-    const existingLocations = await db.select({ id: locations.id }).from(locations)
-    const locationIds = new Set(existingLocations.map(l => l.id))
-
-    const existingCommodities = await db.select({ ticker: commodities.ticker }).from(commodities)
+    const existingCommodities = await db.select({ ticker: fioCommodities.ticker }).from(fioCommodities)
     const commodityTickers = new Set(existingCommodities.map(c => c.ticker))
 
-    // Group inventory by location and commodity (combine same items at same location)
-    const groupedInventory = new Map<string, { locationId: string; ticker: string; amount: number }>()
+    // Clear existing storage and inventory for this user
+    await db.delete(fioUserStorage).where(eq(fioUserStorage.userId, userId))
+    // Inventory is deleted via cascade when storage is deleted
 
-    for (const item of inventoryItems) {
-      // Skip ship storage for now (we only want base/station storage)
-      if (item.Type === 'SHIP') {
-        continue
+    const now = new Date()
+    const timestamps: Date[] = [] // Collect timestamps to find most recent
+
+    // Track unknown locations and commodities
+    const unknownLocations = new Set<string>()
+    const unknownCommodities = new Set<string>()
+
+    // Helper to process a storage and its items
+    const processStorage = async (
+      locationId: string,
+      locationName: string,
+      storage: FioGroupHubStorage | null
+    ) => {
+      if (!storage || !storage.Items || storage.Items.length === 0) {
+        return
       }
 
-      const locationId = item.AddressableId
-      const ticker = item.MaterialTicker
-
-      // Skip if location doesn't exist
+      // Validate location exists
       if (!locationIds.has(locationId)) {
-        result.skippedUnknownLocations++
-        continue
+        if (!unknownLocations.has(locationId)) {
+          unknownLocations.add(locationId)
+          console.log(`⚠️  Unknown location: ${locationId} (${locationName})`)
+        }
+        // Count skipped items
+        const validItems = storage.Items.filter(i => i.MaterialTicker && i.Units > 0)
+        result.skippedUnknownLocations += validItems.length
+        return
       }
 
-      // Skip if commodity doesn't exist
-      if (!commodityTickers.has(ticker)) {
-        result.skippedUnknownCommodities++
-        continue
+      // Track timestamp for finding most recent
+      if (storage.LastUpdated) {
+        timestamps.push(new Date(storage.LastUpdated))
       }
 
-      const key = `${locationId}:${ticker}`
-      const existing = groupedInventory.get(key)
-      if (existing) {
-        existing.amount += item.Amount
-      } else {
-        groupedInventory.set(key, {
+      // Create storage record
+      let storageRecord: { id: number }
+      try {
+        const [inserted] = await db.insert(fioUserStorage).values({
+          userId,
+          storageId: `grouphub-${locationId}-${storage.StorageType}`,
+          addressableId: '', // Not available from GroupHub
           locationId,
-          ticker,
-          amount: item.Amount,
-        })
+          type: storage.StorageType,
+          // Capacity fields not available from GroupHub
+          weightLoad: null,
+          weightCapacity: null,
+          volumeLoad: null,
+          volumeCapacity: null,
+          fioTimestamp: storage.LastUpdated ? new Date(storage.LastUpdated) : null,
+          lastSyncedAt: now,
+        }).returning({ id: fioUserStorage.id })
+
+        storageRecord = inserted
+        result.storageLocations++
+      } catch (error) {
+        const errorMsg = `Failed to insert storage at ${locationId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        result.errors.push(errorMsg)
+        console.error(errorMsg)
+        return
+      }
+
+      // Insert inventory items
+      for (const item of storage.Items) {
+        // Skip null/empty items
+        if (!item.MaterialTicker || item.Units <= 0) {
+          continue
+        }
+
+        // Validate commodity exists
+        if (!commodityTickers.has(item.MaterialTicker)) {
+          if (!unknownCommodities.has(item.MaterialTicker)) {
+            unknownCommodities.add(item.MaterialTicker)
+            console.log(`⚠️  Unknown commodity: ${item.MaterialTicker}`)
+          }
+          result.skippedUnknownCommodities++
+          continue
+        }
+
+        try {
+          await db.insert(fioInventory).values({
+            userId,
+            userStorageId: storageRecord.id,
+            commodityTicker: item.MaterialTicker,
+            quantity: item.Units,
+            lastSyncedAt: now,
+          })
+          result.inserted++
+        } catch (error) {
+          const errorMsg = `Failed to insert ${item.MaterialTicker} at ${locationId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          result.errors.push(errorMsg)
+          console.error(errorMsg)
+        }
       }
     }
 
-    console.log(`📊 Grouped into ${groupedInventory.size} unique location/commodity pairs`)
+    // Process planet bases from PlayerModels
+    const playerModel = groupHubData.PlayerModels?.find(
+      p => p.UserName.toLowerCase() === fioUsername.toLowerCase()
+    )
 
-    // Clear existing inventory for this user before inserting new data
-    await db.delete(fioInventory).where(eq(fioInventory.userId, userId))
+    if (playerModel?.Locations) {
+      console.log(`🪐 Processing ${playerModel.Locations.length} planet locations...`)
 
-    // Insert grouped inventory
-    const now = new Date()
-    for (const [, item] of groupedInventory) {
-      try {
-        await db.insert(fioInventory).values({
-          userId,
-          commodityTicker: item.ticker,
-          quantity: item.amount,
-          locationId: item.locationId,
-          lastSyncedAt: now,
-        })
-        result.inserted++
-      } catch (error) {
-        const errorMsg = `Failed to insert inventory for ${item.ticker} at ${item.locationId}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        result.errors.push(errorMsg)
-        console.error(errorMsg)
+      for (const location of playerModel.Locations) {
+        // Process base storage (STORE)
+        await processStorage(
+          location.LocationIdentifier,
+          location.LocationName,
+          location.BaseStorage
+        )
+
+        // Process warehouse storage (WAREHOUSE_STORE) at planets
+        await processStorage(
+          location.LocationIdentifier,
+          location.LocationName,
+          location.WarehouseStorage
+        )
       }
+    }
+
+    // Process CX station warehouses
+    if (groupHubData.CXWarehouses) {
+      console.log(`🏛️  Processing ${groupHubData.CXWarehouses.length} CX warehouse locations...`)
+
+      for (const cxWarehouse of groupHubData.CXWarehouses) {
+        // Find this user's warehouse at this station
+        const playerWarehouse = cxWarehouse.PlayerCXWarehouses?.find(
+          pw => pw.PlayerName.toLowerCase() === fioUsername.toLowerCase()
+        )
+
+        if (playerWarehouse) {
+          // Convert to FioGroupHubStorage format for processStorage
+          const storage: FioGroupHubStorage = {
+            PlayerName: playerWarehouse.PlayerName,
+            StorageType: playerWarehouse.StorageType,
+            Items: playerWarehouse.Items,
+            LastUpdated: '', // CX warehouses don't have LastUpdated in current response
+          }
+
+          await processStorage(
+            cxWarehouse.WarehouseLocationNaturalId,
+            cxWarehouse.WarehouseLocationName,
+            storage
+          )
+        }
+      }
+    }
+
+    // Find most recent timestamp
+    if (timestamps.length > 0) {
+      const mostRecent = new Date(Math.max(...timestamps.map(t => t.getTime())))
+      result.fioLastSync = mostRecent.toISOString()
     }
 
     result.success = result.errors.length === 0
-    console.log(`✅ Synced ${result.inserted} inventory entries for ${fioUsername}`)
+    console.log(`✅ Synced ${result.storageLocations} storage locations with ${result.inserted} inventory entries for ${fioUsername}`)
 
     if (result.skippedUnknownLocations > 0) {
-      console.log(`⚠️  Skipped ${result.skippedUnknownLocations} items at unknown locations`)
+      console.log(`⚠️  Skipped ${result.skippedUnknownLocations} items at ${unknownLocations.size} unknown locations`)
     }
     if (result.skippedUnknownCommodities > 0) {
-      console.log(`⚠️  Skipped ${result.skippedUnknownCommodities} items with unknown commodities`)
+      console.log(`⚠️  Skipped ${result.skippedUnknownCommodities} items with ${unknownCommodities.size} unknown commodities`)
     }
     if (result.errors.length > 0) {
       console.log(`⚠️  ${result.errors.length} errors occurred`)
@@ -134,7 +238,7 @@ export async function syncUserInventory(
 }
 
 /**
- * Get a user's synced FIO inventory
+ * Get a user's synced FIO inventory with storage and location details
  */
 export async function getUserFioInventory(userId: number) {
   return db
@@ -142,9 +246,22 @@ export async function getUserFioInventory(userId: number) {
       id: fioInventory.id,
       commodityTicker: fioInventory.commodityTicker,
       quantity: fioInventory.quantity,
-      locationId: fioInventory.locationId,
       lastSyncedAt: fioInventory.lastSyncedAt,
+      // Storage info
+      storageId: fioUserStorage.storageId,
+      storageType: fioUserStorage.type,
+      weightLoad: fioUserStorage.weightLoad,
+      weightCapacity: fioUserStorage.weightCapacity,
+      volumeLoad: fioUserStorage.volumeLoad,
+      volumeCapacity: fioUserStorage.volumeCapacity,
+      fioTimestamp: fioUserStorage.fioTimestamp,
+      // Location info
+      locationId: fioUserStorage.locationId,
+      locationName: fioLocations.name,
+      locationType: fioLocations.type,
     })
     .from(fioInventory)
+    .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+    .leftJoin(fioLocations, eq(fioUserStorage.locationId, fioLocations.naturalId))
     .where(eq(fioInventory.userId, userId))
 }

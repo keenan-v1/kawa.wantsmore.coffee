@@ -7,11 +7,11 @@ vi.mock('../db/index.js', () => ({
     select: vi.fn(),
     selectDistinct: vi.fn(),
   },
-  locations: {
-    id: 'id',
+  fioLocations: {
+    naturalId: 'naturalId',
     name: 'name',
     type: 'type',
-    systemCode: 'systemCode',
+    systemNaturalId: 'systemNaturalId',
     systemName: 'systemName',
   },
 }))
@@ -40,8 +40,8 @@ describe('LocationsController', () => {
   describe('getLocations', () => {
     it('should return all locations when no filters provided', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
-        { id: 'UV-351a', name: 'Promitor', type: 'Planet', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'UV-351a', name: 'Promitor', type: 'Planet', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocations()
@@ -57,7 +57,7 @@ describe('LocationsController', () => {
 
     it('should filter by search term', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocations('benten')
@@ -70,7 +70,7 @@ describe('LocationsController', () => {
 
     it('should filter by location type', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocations(undefined, 'Station')
@@ -83,7 +83,7 @@ describe('LocationsController', () => {
 
     it('should filter by system code', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocations(undefined, undefined, 'UV-351')
@@ -96,7 +96,7 @@ describe('LocationsController', () => {
 
     it('should filter by multiple parameters', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocations('benten', 'Station', 'UV-351')
@@ -111,8 +111,8 @@ describe('LocationsController', () => {
   describe('getStations', () => {
     it('should return only stations', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
-        { id: 'MOR', name: 'Moria', type: 'Station', systemCode: 'XH-568', systemName: 'Hortus' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'MOR', name: 'Moria', type: 'Station', systemNaturalId: 'XH-568', systemName: 'Hortus' },
       ])
 
       const result = await controller.getStations()
@@ -129,8 +129,8 @@ describe('LocationsController', () => {
   describe('getPlanets', () => {
     it('should return all planets when no system filter provided', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'UV-351a', name: 'Promitor', type: 'Planet', systemCode: 'UV-351', systemName: 'Umbra' },
-        { id: 'XH-568c', name: 'Vallis', type: 'Planet', systemCode: 'XH-568', systemName: 'Hortus' },
+        { naturalId: 'UV-351a', name: 'Promitor', type: 'Planet', systemNaturalId: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'XH-568c', name: 'Vallis', type: 'Planet', systemNaturalId: 'XH-568', systemName: 'Hortus' },
       ])
 
       const result = await controller.getPlanets()
@@ -145,7 +145,7 @@ describe('LocationsController', () => {
 
     it('should filter planets by system code', async () => {
       mockSelect.orderBy.mockResolvedValue([
-        { id: 'UV-351a', name: 'Promitor', type: 'Planet', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'UV-351a', name: 'Promitor', type: 'Planet', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getPlanets('UV-351')
@@ -161,7 +161,7 @@ describe('LocationsController', () => {
   describe('getLocation', () => {
     it('should return a location by ID', async () => {
       mockSelect.limit.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       const result = await controller.getLocation('ben')
@@ -189,7 +189,7 @@ describe('LocationsController', () => {
 
     it('should convert ID to uppercase', async () => {
       mockSelect.limit.mockResolvedValue([
-        { id: 'BEN', name: 'Benten', type: 'Station', systemCode: 'UV-351', systemName: 'Umbra' },
+        { naturalId: 'BEN', name: 'Benten', type: 'Station', systemNaturalId: 'UV-351', systemName: 'Umbra' },
       ])
 
       await controller.getLocation('ben')

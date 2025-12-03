@@ -24,15 +24,20 @@ vi.mock('../db/index.js', () => ({
   },
   fioInventory: {
     userId: 'userId',
+    userStorageId: 'userStorageId',
     commodityTicker: 'commodityTicker',
-    locationId: 'locationId',
     quantity: 'quantity',
   },
-  commodities: {
+  fioUserStorage: {
+    id: 'id',
+    userId: 'userId',
+    locationId: 'locationId',
+  },
+  fioCommodities: {
     ticker: 'ticker',
   },
-  locations: {
-    id: 'id',
+  fioLocations: {
+    naturalId: 'naturalId',
   },
   roles: {
     id: 'id',
@@ -85,6 +90,7 @@ describe('SellOrdersController', () => {
 
   describe('getSellOrders', () => {
     it('should return sell orders with calculated availability', async () => {
+      // First query returns orders
       const mockOrders = [
         {
           id: 1,
@@ -95,7 +101,6 @@ describe('SellOrdersController', () => {
           limitMode: 'none',
           limitQuantity: null,
           targetRoleId: null,
-          fioQuantity: 1000,
         },
         {
           id: 2,
@@ -106,11 +111,16 @@ describe('SellOrdersController', () => {
           limitMode: 'max_sell',
           limitQuantity: 200,
           targetRoleId: null,
-          fioQuantity: 500,
         },
+      ]
+      // Second query returns inventory with location from storage
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
+        { commodityTicker: 'RAT', quantity: 500, locationId: 'BEN' },
       ]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -151,10 +161,13 @@ describe('SellOrdersController', () => {
         limitMode: 'reserve',
         limitQuantity: 500,
         targetRoleId: null,
-        fioQuantity: 2000,
       }]
+      const mockInventory = [
+        { commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN' },
+      ]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -171,10 +184,12 @@ describe('SellOrdersController', () => {
         limitMode: 'none',
         limitQuantity: null,
         targetRoleId: null,
-        fioQuantity: null, // No FIO inventory
       }]
+      // No inventory for this location/commodity
+      const mockInventory: any[] = []
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -183,7 +198,8 @@ describe('SellOrdersController', () => {
     })
 
     it('should return empty array when no orders exist', async () => {
-      mockSelect.where.mockResolvedValueOnce([])
+      mockSelect.where.mockResolvedValueOnce([]) // No orders
+      mockSelect.where.mockResolvedValueOnce([]) // No inventory (still queried)
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -200,14 +216,18 @@ describe('SellOrdersController', () => {
         limitMode: 'none',
         limitQuantity: null,
         targetRoleId: 'trade-partner',
-        fioQuantity: 1000,
       }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
+      ]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
       expect(result[0].targetRoleId).toBe('trade-partner')
+      expect(result[0].fioQuantity).toBe(1000)
     })
   })
 
@@ -222,15 +242,16 @@ describe('SellOrdersController', () => {
         limitMode: 'none',
         limitQuantity: null,
         targetRoleId: null,
-        fioQuantity: 1000,
       }
-
+      // First query: get order, Second query: getInventoryQuantity
       mockSelect.where.mockResolvedValueOnce([mockOrder])
+      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000 }])
 
       const result = await controller.getSellOrder(1, mockRequest)
 
       expect(result.id).toBe(1)
       expect(result.commodityTicker).toBe('H2O')
+      expect(result.fioQuantity).toBe(1000)
       expect(result.availableQuantity).toBe(1000)
       expect(result.targetRoleId).toBeNull()
     })
@@ -634,13 +655,17 @@ describe('SellOrdersController', () => {
         limitMode: 'reserve',
         limitQuantity: 1500, // Reserve more than we have
         targetRoleId: null,
-        fioQuantity: 1000,
       }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
+      ]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
+      expect(result[0].fioQuantity).toBe(1000)
       expect(result[0].availableQuantity).toBe(0) // max(0, 1000 - 1500) = 0
     })
 
@@ -654,13 +679,17 @@ describe('SellOrdersController', () => {
         limitMode: 'max_sell',
         limitQuantity: 2000, // Want to sell more than we have
         targetRoleId: null,
-        fioQuantity: 500,
       }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 500, locationId: 'BEN' },
+      ]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
+      mockSelect.where.mockResolvedValueOnce(mockInventory)
 
       const result = await controller.getSellOrders(mockRequest)
 
+      expect(result[0].fioQuantity).toBe(500)
       expect(result[0].availableQuantity).toBe(500) // min(500, 2000) = 500
     })
   })

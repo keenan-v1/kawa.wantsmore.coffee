@@ -7,10 +7,10 @@ vi.mock('../db/index.js', () => ({
     select: vi.fn(),
     selectDistinct: vi.fn(),
   },
-  commodities: {
+  fioCommodities: {
     ticker: 'ticker',
     name: 'name',
-    category: 'category',
+    categoryName: 'categoryName',
   },
 }))
 
@@ -38,15 +38,15 @@ describe('CommoditiesController', () => {
   describe('getCommodities', () => {
     it('should return all commodities when no filters provided', async () => {
       mockSelect.from.mockResolvedValue([
-        { ticker: 'H2O', name: 'Water', category: 'Liquids' },
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'H2O', name: 'Water', categoryName: 'Liquids', weight: '0.1', volume: '0.1' },
+        { ticker: 'FE', name: 'Iron', categoryName: 'Metals', weight: '7.8', volume: '0.5' },
       ])
 
       const result = await controller.getCommodities()
 
       expect(result).toEqual([
-        { ticker: 'H2O', name: 'Water', category: 'Liquids' },
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'H2O', name: 'Water', category: 'Liquids', weight: 0.1, volume: 0.1 },
+        { ticker: 'FE', name: 'Iron', category: 'Metals', weight: 7.8, volume: 0.5 },
       ])
       expect(db.select).toHaveBeenCalled()
       expect(mockSelect.from).toHaveBeenCalled()
@@ -54,39 +54,39 @@ describe('CommoditiesController', () => {
 
     it('should filter by search term', async () => {
       mockSelect.where.mockResolvedValue([
-        { ticker: 'H2O', name: 'Water', category: 'Liquids' },
+        { ticker: 'H2O', name: 'Water', categoryName: 'Liquids', weight: '0.1', volume: '0.1' },
       ])
 
       const result = await controller.getCommodities('water')
 
       expect(result).toEqual([
-        { ticker: 'H2O', name: 'Water', category: 'Liquids' },
+        { ticker: 'H2O', name: 'Water', category: 'Liquids', weight: 0.1, volume: 0.1 },
       ])
       expect(mockSelect.where).toHaveBeenCalled()
     })
 
     it('should filter by category', async () => {
       mockSelect.where.mockResolvedValue([
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'FE', name: 'Iron', categoryName: 'Metals', weight: '7.8', volume: '0.5' },
       ])
 
       const result = await controller.getCommodities(undefined, 'Metals')
 
       expect(result).toEqual([
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'FE', name: 'Iron', category: 'Metals', weight: 7.8, volume: 0.5 },
       ])
       expect(mockSelect.where).toHaveBeenCalled()
     })
 
     it('should filter by both search and category', async () => {
       mockSelect.where.mockResolvedValue([
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'FE', name: 'Iron', categoryName: 'Metals', weight: '7.8', volume: '0.5' },
       ])
 
       const result = await controller.getCommodities('iron', 'Metals')
 
       expect(result).toEqual([
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'FE', name: 'Iron', category: 'Metals', weight: 7.8, volume: 0.5 },
       ])
       expect(mockSelect.where).toHaveBeenCalled()
     })
@@ -95,7 +95,7 @@ describe('CommoditiesController', () => {
   describe('getCommodity', () => {
     it('should return a commodity by ticker', async () => {
       mockSelect.limit.mockResolvedValue([
-        { ticker: 'H2O', name: 'Water', category: 'Liquids' },
+        { ticker: 'H2O', name: 'Water', categoryName: 'Liquids', weight: '0.1', volume: '0.1' },
       ])
 
       const result = await controller.getCommodity('h2o')
@@ -104,6 +104,8 @@ describe('CommoditiesController', () => {
         ticker: 'H2O',
         name: 'Water',
         category: 'Liquids',
+        weight: 0.1,
+        volume: 0.1,
       })
       expect(mockSelect.where).toHaveBeenCalled()
       expect(mockSelect.limit).toHaveBeenCalledWith(1)
@@ -121,7 +123,7 @@ describe('CommoditiesController', () => {
 
     it('should convert ticker to uppercase', async () => {
       mockSelect.limit.mockResolvedValue([
-        { ticker: 'FE', name: 'Iron', category: 'Metals' },
+        { ticker: 'FE', name: 'Iron', categoryName: 'Metals', weight: '7.8', volume: '0.5' },
       ])
 
       await controller.getCommodity('fe')

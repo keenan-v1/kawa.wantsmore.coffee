@@ -202,6 +202,159 @@ export class FioClient {
       )
     }
   }
+
+  /**
+   * Fetch user storage data from FIO API (JSON)
+   * Returns all storage locations with inventory and timestamps
+   * Requires API key authentication via Authorization header
+   */
+  async getUserStorage<T>(apiKey: string, username: string): Promise<T> {
+    const url = new URL(`${this.baseUrl}/storage/${username}`)
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Authorization': apiKey,
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.json() as T
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user storage from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
+
+  /**
+   * Fetch user storage data for a specific location from FIO API (JSON)
+   * StorageDescription can be: StorageId, PlanetId, PlanetNaturalId, or PlanetName
+   * Returns storage data for that location, or null if not found (404)
+   * Requires API key authentication via Authorization header
+   */
+  async getUserStorageByLocation<T>(apiKey: string, username: string, storageDescription: string): Promise<T | null> {
+    const url = new URL(`${this.baseUrl}/storage/${username}/${storageDescription}`)
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Authorization': apiKey,
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      // Return null for 404 (user doesn't have storage at this location)
+      if (response.status === 404) {
+        return null
+      }
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.json() as T
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user storage by location from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
+
+  /**
+   * Fetch user data from FIO API (JSON)
+   * Returns user info including planets (with ID mappings) and timestamp
+   * Requires API key authentication via Authorization header
+   */
+  async getUserData<T>(apiKey: string, username: string): Promise<T> {
+    const url = new URL(`${this.baseUrl}/user/${username}`)
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Authorization': apiKey,
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.json() as T
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user data from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
+
+  /**
+   * Fetch user inventory data from FIO GroupHub endpoint (undocumented)
+   * Returns comprehensive inventory data with NaturalIds and timestamps
+   * - Planet bases via PlayerModels[].Locations[] with LocationIdentifier
+   * - Station warehouses via CXWarehouses[] with WarehouseLocationNaturalId
+   * Requires API key authentication via Authorization header
+   */
+  async getGroupHub<T>(apiKey: string, usernames: string[]): Promise<T> {
+    const url = new URL(`${this.baseUrl}/fioweb/GroupHub`)
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': apiKey,
+    }
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(usernames),
+      })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return await response.json() as T
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch GroupHub data from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
 }
 
 // Export singleton instance for public endpoints (commodities, locations, etc.)

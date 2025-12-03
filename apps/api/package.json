@@ -7,11 +7,11 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "tsoa spec-and-routes && tsx watch --env-file-if-exists=.env src/index.ts",
-    "dev:debug": "tsoa spec-and-routes && tsx watch --inspect --env-file-if-exists=.env src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "dev:debug": "tsx watch --inspect --env-file-if-exists=.env src/index.ts",
     "build": "tsoa spec-and-routes && tsc",
     "start": "node dist/index.js",
-    "generate": "tsoa spec-and-routes",
+    "tsoa:generate": "tsoa spec-and-routes",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

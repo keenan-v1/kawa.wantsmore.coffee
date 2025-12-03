@@ -1,6 +1,6 @@
 # KawaKawa Market - Development Commands
 
-.PHONY: help install dev build db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
+.PHONY: help install dev build test db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -22,6 +22,9 @@ dev-web: ## Start Web dev server only
 
 build: ## Build all packages
 	pnpm build
+
+test: ## Run all tests
+	pnpm -r test -- --run
 
 db-init: ## Initialize database (migrate, seed, sync FIO) - idempotent, production-ready
 	pnpm --filter @kawakawa/api db:migrate
