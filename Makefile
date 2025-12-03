@@ -1,4 +1,4 @@
-# KawaKawa Market - Development Commands
+# KawaKawa CX - Development Commands
 
 .PHONY: help install dev build test db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
 

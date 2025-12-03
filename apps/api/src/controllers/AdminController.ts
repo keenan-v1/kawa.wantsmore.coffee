@@ -1,104 +1,125 @@
-import { Body, Controller, Get, Put, Post, Delete, Path, Route, Security, Tags, Request, Query } from 'tsoa'
-import type { Role } from '@kawakawa/types'
-import { db, users, userRoles, roles, passwordResetTokens, userSettings, fioInventory, permissions, rolePermissions } from '../db/index.js'
-import { eq, ilike, or, sql, desc, max, and } from 'drizzle-orm'
-import type { JwtPayload } from '../utils/jwt.js'
-import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
-import { invalidateCachedRoles } from '../utils/roleCache.js'
-import { invalidatePermissionCache } from '../utils/permissionService.js'
-import crypto from 'crypto'
-import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
+import {
+  Body,
+  Controller,
+  Get,
+  Put,
+  Post,
+  Delete,
+  Path,
+  Route,
+  Security,
+  Tags,
+  Request,
+  Query,
+} from "tsoa";
+import type { Role } from "@kawakawa/types";
+import {
+  db,
+  users,
+  userRoles,
+  roles,
+  passwordResetTokens,
+  userSettings,
+  permissions,
+  rolePermissions,
+  fioUserStorage,
+} from "../db/index.js";
+import { eq, ilike, or, sql, desc, max, and } from "drizzle-orm";
+import type { JwtPayload } from "../utils/jwt.js";
+import { NotFound, BadRequest, Conflict } from "../utils/errors.js";
+import { invalidateCachedRoles } from "../utils/roleCache.js";
+import { invalidatePermissionCache } from "../utils/permissionService.js";
+import crypto from "crypto";
+import { syncUserInventory } from "../services/fio/sync-user-inventory.js";
 
 interface FioSyncInfo {
-  fioUsername: string | null
-  lastSyncedAt: Date | null
+  fioUsername: string | null;
+  lastSyncedAt: Date | null;
 }
 
 interface AdminUser {
-  id: number
-  username: string
-  email: string | null
-  displayName: string
-  isActive: boolean
-  roles: Role[]
-  fioSync: FioSyncInfo
-  createdAt: Date
+  id: number;
+  username: string;
+  email: string | null;
+  displayName: string;
+  isActive: boolean;
+  roles: Role[];
+  fioSync: FioSyncInfo;
+  createdAt: Date;
 }
 
 interface AdminUserListResponse {
-  users: AdminUser[]
-  total: number
-  page: number
-  pageSize: number
+  users: AdminUser[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 interface UpdateUserRequest {
-  isActive?: boolean
-  roles?: string[] // Array of role IDs to assign
+  isActive?: boolean;
+  roles?: string[]; // Array of role IDs to assign
 }
 
 interface PasswordResetLinkResponse {
-  token: string
-  expiresAt: Date
-  username: string
+  token: string;
+  expiresAt: Date;
+  username: string;
 }
 
 interface UpdateRoleRequest {
-  name?: string
-  color?: string // Vuetify color for UI chips
+  name?: string;
+  color?: string; // Vuetify color for UI chips
 }
 
 interface CreateRoleRequest {
-  id: string
-  name: string
-  color: string
+  id: string;
+  name: string;
+  color: string;
 }
 
 interface Permission {
-  id: string
-  name: string
-  description: string | null
+  id: string;
+  name: string;
+  description: string | null;
 }
 
 interface RolePermission {
-  id: number
-  roleId: string
-  permissionId: string
-  allowed: boolean
+  id: number;
+  roleId: string;
+  permissionId: string;
+  allowed: boolean;
 }
 
 interface RolePermissionWithDetails {
-  id: number
-  roleId: string
-  roleName: string
-  roleColor: string
-  permissionId: string
-  permissionName: string
-  allowed: boolean
+  id: number;
+  roleId: string;
+  roleName: string;
+  roleColor: string;
+  permissionId: string;
+  permissionName: string;
+  allowed: boolean;
 }
 
 interface SetRolePermissionRequest {
-  roleId: string
-  permissionId: string
-  allowed: boolean
+  roleId: string;
+  permissionId: string;
+  allowed: boolean;
 }
 
-@Route('admin')
-@Tags('Admin')
-@Security('jwt', ['administrator'])
+@Route("admin")
+@Tags("Admin")
+@Security("jwt", ["administrator"])
 export class AdminController extends Controller {
-
   /**
    * List all users with pagination and optional search
    */
-  @Get('users')
+  @Get("users")
   public async listUsers(
     @Query() page: number = 1,
     @Query() pageSize: number = 20,
     @Query() search?: string
   ): Promise<AdminUserListResponse> {
-
-    const offset = (page - 1) * pageSize
+    const offset = (page - 1) * pageSize;
 
     // Build search condition if search term provided
     const searchCondition = search
@@ -107,15 +128,15 @@ export class AdminController extends Controller {
           ilike(users.displayName, `%${search}%`),
           ilike(users.email, `%${search}%`)
         )
-      : undefined
+      : undefined;
 
     // Get total count
     const [countResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(users)
-      .where(searchCondition)
+      .where(searchCondition);
 
-    const total = countResult?.count ?? 0
+    const total = countResult?.count ?? 0;
 
     // Get paginated users
     const userList = await db
@@ -131,7 +152,7 @@ export class AdminController extends Controller {
       .where(searchCondition)
       .orderBy(desc(users.createdAt))
       .limit(pageSize)
-      .offset(offset)
+      .offset(offset);
 
     // Get roles and FIO sync info for each user
     const usersWithDetails: AdminUser[] = await Promise.all(
@@ -145,44 +166,47 @@ export class AdminController extends Controller {
           })
           .from(userRoles)
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, user.id))
+          .where(eq(userRoles.userId, user.id));
 
         // Get FIO sync info
         const [settings] = await db
           .select({ fioUsername: userSettings.fioUsername })
           .from(userSettings)
-          .where(eq(userSettings.userId, user.id))
+          .where(eq(userSettings.userId, user.id));
 
         const [lastSync] = await db
-          .select({ lastSyncedAt: max(fioInventory.lastSyncedAt) })
-          .from(fioInventory)
-          .where(eq(fioInventory.userId, user.id))
+          .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
+          .from(fioUserStorage)
+          .where(eq(fioUserStorage.userId, user.id));
 
         return {
           ...user,
-          roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName, color: r.roleColor })),
+          roles: userRolesData.map((r) => ({
+            id: r.roleId,
+            name: r.roleName,
+            color: r.roleColor,
+          })),
           fioSync: {
             fioUsername: settings?.fioUsername || null,
             lastSyncedAt: lastSync?.lastSyncedAt || null,
           },
-        }
+        };
       })
-    )
+    );
 
     return {
       users: usersWithDetails,
       total,
       page,
       pageSize,
-    }
+    };
   }
 
   /**
    * Get a specific user by ID
    */
-  @Get('users/{userId}')
+  @Get("users/{userId}")
   public async getUser(@Path() userId: number): Promise<AdminUser> {
-
     const [user] = await db
       .select({
         id: users.id,
@@ -193,11 +217,11 @@ export class AdminController extends Controller {
         createdAt: users.createdAt,
       })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId));
 
     if (!user) {
-      this.setStatus(404)
-      throw NotFound('User not found')
+      this.setStatus(404);
+      throw NotFound("User not found");
     }
 
     // Get user roles
@@ -209,33 +233,37 @@ export class AdminController extends Controller {
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
-      .where(eq(userRoles.userId, userId))
+      .where(eq(userRoles.userId, userId));
 
     // Get FIO sync info
     const [settings] = await db
       .select({ fioUsername: userSettings.fioUsername })
       .from(userSettings)
-      .where(eq(userSettings.userId, userId))
+      .where(eq(userSettings.userId, userId));
 
     const [lastSync] = await db
-      .select({ lastSyncedAt: max(fioInventory.lastSyncedAt) })
-      .from(fioInventory)
-      .where(eq(fioInventory.userId, userId))
+      .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId));
 
     return {
       ...user,
-      roles: userRolesData.map((r) => ({ id: r.roleId, name: r.roleName, color: r.roleColor })),
+      roles: userRolesData.map((r) => ({
+        id: r.roleId,
+        name: r.roleName,
+        color: r.roleColor,
+      })),
       fioSync: {
         fioUsername: settings?.fioUsername || null,
         lastSyncedAt: lastSync?.lastSyncedAt || null,
       },
-    }
+    };
   }
 
   /**
    * Update a user's status or roles
    */
-  @Put('users/{userId}')
+  @Put("users/{userId}")
   public async updateUser(
     @Request() request: { user: JwtPayload },
     @Path() userId: number,
@@ -243,19 +271,19 @@ export class AdminController extends Controller {
   ): Promise<AdminUser> {
     // Prevent admins from modifying their own account through admin panel
     if (userId === request.user.userId) {
-      this.setStatus(400)
-      throw BadRequest('Cannot modify your own account through admin panel')
+      this.setStatus(400);
+      throw BadRequest("Cannot modify your own account through admin panel");
     }
 
     // Verify user exists
     const [existingUser] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId));
 
     if (!existingUser) {
-      this.setStatus(404)
-      throw NotFound('User not found')
+      this.setStatus(404);
+      throw NotFound("User not found");
     }
 
     // Update isActive if provided
@@ -266,29 +294,29 @@ export class AdminController extends Controller {
           isActive: body.isActive,
           updatedAt: new Date(),
         })
-        .where(eq(users.id, userId))
+        .where(eq(users.id, userId));
     }
 
     // Update roles if provided
     if (body.roles !== undefined) {
       // Prevent removing all roles - users must have at least one role
       if (body.roles.length === 0) {
-        this.setStatus(400)
-        throw BadRequest('Users must have at least one role')
+        this.setStatus(400);
+        throw BadRequest("Users must have at least one role");
       }
 
       // Validate that all role IDs exist
-      const validRoles = await db.select({ id: roles.id }).from(roles)
-      const validRoleIds = validRoles.map((r) => r.id)
-      const invalidRoles = body.roles.filter((r) => !validRoleIds.includes(r))
+      const validRoles = await db.select({ id: roles.id }).from(roles);
+      const validRoleIds = validRoles.map((r) => r.id);
+      const invalidRoles = body.roles.filter((r) => !validRoleIds.includes(r));
 
       if (invalidRoles.length > 0) {
-        this.setStatus(400)
-        throw BadRequest(`Invalid role IDs: ${invalidRoles.join(', ')}`)
+        this.setStatus(400);
+        throw BadRequest(`Invalid role IDs: ${invalidRoles.join(", ")}`);
       }
 
       // Delete existing roles
-      await db.delete(userRoles).where(eq(userRoles.userId, userId))
+      await db.delete(userRoles).where(eq(userRoles.userId, userId));
 
       // Insert new roles
       if (body.roles.length > 0) {
@@ -297,32 +325,33 @@ export class AdminController extends Controller {
             userId,
             roleId,
           }))
-        )
+        );
       }
 
       // Invalidate role cache so next request gets fresh roles
-      invalidateCachedRoles(userId)
+      invalidateCachedRoles(userId);
     }
 
     // Return updated user
-    return this.getUser(userId)
+    return this.getUser(userId);
   }
 
   /**
    * List all available roles
    */
-  @Get('roles')
+  @Get("roles")
   public async listRoles(): Promise<Role[]> {
+    const roleList = await db
+      .select({ id: roles.id, name: roles.name, color: roles.color })
+      .from(roles);
 
-    const roleList = await db.select({ id: roles.id, name: roles.name, color: roles.color }).from(roles)
-
-    return roleList
+    return roleList;
   }
 
   /**
    * Update a role's name or color
    */
-  @Put('roles/{roleId}')
+  @Put("roles/{roleId}")
   public async updateRole(
     @Path() roleId: string,
     @Body() body: UpdateRoleRequest
@@ -331,37 +360,37 @@ export class AdminController extends Controller {
     const [existingRole] = await db
       .select({ id: roles.id, name: roles.name, color: roles.color })
       .from(roles)
-      .where(eq(roles.id, roleId))
+      .where(eq(roles.id, roleId));
 
     if (!existingRole) {
-      this.setStatus(404)
-      throw NotFound('Role not found')
+      this.setStatus(404);
+      throw NotFound("Role not found");
     }
 
     // Build update object
     const updateData: { name?: string; color?: string; updatedAt: Date } = {
       updatedAt: new Date(),
-    }
-    if (body.name !== undefined) updateData.name = body.name
-    if (body.color !== undefined) updateData.color = body.color
+    };
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.color !== undefined) updateData.color = body.color;
 
     // Update role
-    await db.update(roles).set(updateData).where(eq(roles.id, roleId))
+    await db.update(roles).set(updateData).where(eq(roles.id, roleId));
 
     // Return updated role
     const [updatedRole] = await db
       .select({ id: roles.id, name: roles.name, color: roles.color })
       .from(roles)
-      .where(eq(roles.id, roleId))
+      .where(eq(roles.id, roleId));
 
-    return updatedRole
+    return updatedRole;
   }
 
   /**
    * Generate a password reset link for a user.
    * The password is NOT changed until the user uses the link.
    */
-  @Post('users/{userId}/reset-password')
+  @Post("users/{userId}/reset-password")
   public async generatePasswordResetLink(
     @Path() userId: number
   ): Promise<PasswordResetLinkResponse> {
@@ -369,17 +398,19 @@ export class AdminController extends Controller {
     const [user] = await db
       .select({ id: users.id, username: users.username })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId));
 
     if (!user) {
-      this.setStatus(404)
-      throw NotFound('User not found')
+      this.setStatus(404);
+      throw NotFound("User not found");
     }
 
     // Generate reset token
-    const token = crypto.randomBytes(32).toString('hex')
-    const expirationHours = parseInt(process.env.PASSWORD_RESET_EXPIRATION_HOURS || '24')
-    const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000)
+    const token = crypto.randomBytes(32).toString("hex");
+    const expirationHours = parseInt(
+      process.env.PASSWORD_RESET_EXPIRATION_HOURS || "24"
+    );
+    const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000);
 
     // Store reset token
     await db.insert(passwordResetTokens).values({
@@ -387,24 +418,24 @@ export class AdminController extends Controller {
       token,
       expiresAt,
       used: false,
-    })
+    });
 
     return {
       token,
       expiresAt,
       username: user.username,
-    }
+    };
   }
 
   /**
    * Trigger FIO inventory sync for a user (admin action for testing)
    */
-  @Post('users/{userId}/sync-fio')
+  @Post("users/{userId}/sync-fio")
   public async syncUserFio(@Path() userId: number): Promise<{
-    success: boolean
-    inserted: number
-    errors: string[]
-    username: string
+    success: boolean;
+    inserted: number;
+    errors: string[];
+    username: string;
   }> {
     // Get user and their FIO credentials
     const [user] = await db
@@ -413,11 +444,11 @@ export class AdminController extends Controller {
         username: users.username,
       })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId));
 
     if (!user) {
-      this.setStatus(404)
-      throw NotFound('User not found')
+      this.setStatus(404);
+      throw NotFound("User not found");
     }
 
     const [settings] = await db
@@ -426,22 +457,26 @@ export class AdminController extends Controller {
         fioApiKey: userSettings.fioApiKey,
       })
       .from(userSettings)
-      .where(eq(userSettings.userId, userId))
+      .where(eq(userSettings.userId, userId));
 
     if (!settings?.fioUsername || !settings?.fioApiKey) {
-      this.setStatus(400)
-      throw BadRequest('User does not have FIO credentials configured')
+      this.setStatus(400);
+      throw BadRequest("User does not have FIO credentials configured");
     }
 
     // Perform sync
-    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername)
+    const result = await syncUserInventory(
+      userId,
+      settings.fioApiKey,
+      settings.fioUsername
+    );
 
     return {
       success: result.success,
       inserted: result.inserted,
       errors: result.errors,
       username: user.username,
-    }
+    };
   }
 
   // ==================== ROLE MANAGEMENT ====================
@@ -449,17 +484,17 @@ export class AdminController extends Controller {
   /**
    * Create a new role
    */
-  @Post('roles')
+  @Post("roles")
   public async createRole(@Body() body: CreateRoleRequest): Promise<Role> {
     // Check if role ID already exists
     const [existing] = await db
       .select({ id: roles.id })
       .from(roles)
-      .where(eq(roles.id, body.id))
+      .where(eq(roles.id, body.id));
 
     if (existing) {
-      this.setStatus(409)
-      throw Conflict(`Role with ID '${body.id}' already exists`)
+      this.setStatus(409);
+      throw Conflict(`Role with ID '${body.id}' already exists`);
     }
 
     // Create role
@@ -467,48 +502,52 @@ export class AdminController extends Controller {
       id: body.id,
       name: body.name,
       color: body.color,
-    })
+    });
 
-    return { id: body.id, name: body.name, color: body.color }
+    return { id: body.id, name: body.name, color: body.color };
   }
 
   /**
    * Delete a role (only if no users are assigned to it)
    */
-  @Delete('roles/{roleId}')
-  public async deleteRole(@Path() roleId: string): Promise<{ success: boolean }> {
+  @Delete("roles/{roleId}")
+  public async deleteRole(
+    @Path() roleId: string
+  ): Promise<{ success: boolean }> {
     // Verify role exists
     const [existing] = await db
       .select({ id: roles.id })
       .from(roles)
-      .where(eq(roles.id, roleId))
+      .where(eq(roles.id, roleId));
 
     if (!existing) {
-      this.setStatus(404)
-      throw NotFound('Role not found')
+      this.setStatus(404);
+      throw NotFound("Role not found");
     }
 
     // Check if any users have this role
     const [userCount] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(userRoles)
-      .where(eq(userRoles.roleId, roleId))
+      .where(eq(userRoles.roleId, roleId));
 
     if (userCount && userCount.count > 0) {
-      this.setStatus(400)
-      throw BadRequest(`Cannot delete role: ${userCount.count} user(s) are assigned to this role`)
+      this.setStatus(400);
+      throw BadRequest(
+        `Cannot delete role: ${userCount.count} user(s) are assigned to this role`
+      );
     }
 
     // Delete role permissions first (cascade should handle this but being explicit)
-    await db.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId))
+    await db.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
 
     // Delete the role
-    await db.delete(roles).where(eq(roles.id, roleId))
+    await db.delete(roles).where(eq(roles.id, roleId));
 
     // Invalidate permission cache
-    invalidatePermissionCache()
+    invalidatePermissionCache();
 
-    return { success: true }
+    return { success: true };
   }
 
   // ==================== PERMISSION MANAGEMENT ====================
@@ -516,7 +555,7 @@ export class AdminController extends Controller {
   /**
    * List all permissions
    */
-  @Get('permissions')
+  @Get("permissions")
   public async listPermissions(): Promise<Permission[]> {
     const permissionList = await db
       .select({
@@ -525,15 +564,15 @@ export class AdminController extends Controller {
         description: permissions.description,
       })
       .from(permissions)
-      .orderBy(permissions.id)
+      .orderBy(permissions.id);
 
-    return permissionList
+    return permissionList;
   }
 
   /**
    * List all role-permission mappings with details
    */
-  @Get('role-permissions')
+  @Get("role-permissions")
   public async listRolePermissions(): Promise<RolePermissionWithDetails[]> {
     const mappings = await db
       .select({
@@ -548,36 +587,38 @@ export class AdminController extends Controller {
       .from(rolePermissions)
       .innerJoin(roles, eq(rolePermissions.roleId, roles.id))
       .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .orderBy(roles.id, permissions.id)
+      .orderBy(roles.id, permissions.id);
 
-    return mappings
+    return mappings;
   }
 
   /**
    * Set a role permission (create or update)
    */
-  @Post('role-permissions')
-  public async setRolePermission(@Body() body: SetRolePermissionRequest): Promise<RolePermission> {
+  @Post("role-permissions")
+  public async setRolePermission(
+    @Body() body: SetRolePermissionRequest
+  ): Promise<RolePermission> {
     // Verify role exists
     const [role] = await db
       .select({ id: roles.id })
       .from(roles)
-      .where(eq(roles.id, body.roleId))
+      .where(eq(roles.id, body.roleId));
 
     if (!role) {
-      this.setStatus(404)
-      throw NotFound(`Role '${body.roleId}' not found`)
+      this.setStatus(404);
+      throw NotFound(`Role '${body.roleId}' not found`);
     }
 
     // Verify permission exists
     const [permission] = await db
       .select({ id: permissions.id })
       .from(permissions)
-      .where(eq(permissions.id, body.permissionId))
+      .where(eq(permissions.id, body.permissionId));
 
     if (!permission) {
-      this.setStatus(404)
-      throw NotFound(`Permission '${body.permissionId}' not found`)
+      this.setStatus(404);
+      throw NotFound(`Permission '${body.permissionId}' not found`);
     }
 
     // Check if mapping already exists
@@ -589,24 +630,24 @@ export class AdminController extends Controller {
           eq(rolePermissions.roleId, body.roleId),
           eq(rolePermissions.permissionId, body.permissionId)
         )
-      )
+      );
 
     if (existing) {
       // Update existing
       await db
         .update(rolePermissions)
         .set({ allowed: body.allowed, updatedAt: new Date() })
-        .where(eq(rolePermissions.id, existing.id))
+        .where(eq(rolePermissions.id, existing.id));
 
       // Invalidate cache
-      invalidatePermissionCache()
+      invalidatePermissionCache();
 
       return {
         id: existing.id,
         roleId: body.roleId,
         permissionId: body.permissionId,
         allowed: body.allowed,
-      }
+      };
     }
 
     // Create new
@@ -617,41 +658,43 @@ export class AdminController extends Controller {
         permissionId: body.permissionId,
         allowed: body.allowed,
       })
-      .returning()
+      .returning();
 
     // Invalidate cache
-    invalidatePermissionCache()
+    invalidatePermissionCache();
 
     return {
       id: newMapping.id,
       roleId: newMapping.roleId,
       permissionId: newMapping.permissionId,
       allowed: newMapping.allowed,
-    }
+    };
   }
 
   /**
    * Delete a role permission mapping
    */
-  @Delete('role-permissions/{id}')
-  public async deleteRolePermission(@Path() id: number): Promise<{ success: boolean }> {
+  @Delete("role-permissions/{id}")
+  public async deleteRolePermission(
+    @Path() id: number
+  ): Promise<{ success: boolean }> {
     // Verify mapping exists
     const [existing] = await db
       .select({ id: rolePermissions.id })
       .from(rolePermissions)
-      .where(eq(rolePermissions.id, id))
+      .where(eq(rolePermissions.id, id));
 
     if (!existing) {
-      this.setStatus(404)
-      throw NotFound('Role permission mapping not found')
+      this.setStatus(404);
+      throw NotFound("Role permission mapping not found");
     }
 
     // Delete
-    await db.delete(rolePermissions).where(eq(rolePermissions.id, id))
+    await db.delete(rolePermissions).where(eq(rolePermissions.id, id));
 
     // Invalidate cache
-    invalidatePermissionCache()
+    invalidatePermissionCache();
 
-    return { success: true }
+    return { success: true };
   }
 }

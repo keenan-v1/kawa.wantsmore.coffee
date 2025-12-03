@@ -1,8 +1,15 @@
 // Mock API service for testing frontend without backend
 // This simulates JWT-based authentication and data storage
+// NOTE: Mock API is disabled (USE_MOCK_API = false), this is for reference only
 
 import type { Currency, User as UserProfile, Role } from '../types'
-import { roleService } from './roleService'
+
+// Mock roles for the mock API (not using roleService to avoid async issues)
+const MOCK_ROLES: Record<string, Role> = {
+  applicant: { id: 'applicant', name: 'Applicant', color: 'blue-grey' },
+  member: { id: 'member', name: 'Member', color: 'blue' },
+  administrator: { id: 'administrator', name: 'Administrator', color: 'red' },
+}
 
 interface User {
   profileName: string
@@ -39,8 +46,8 @@ const users: User[] = [
     hasFioApiKey: true,
     preferredCurrency: 'CIS',
     roles: [
-      roleService.getRoleById('member')!,
-      roleService.getRoleById('administrator')!
+      MOCK_ROLES.member,
+      MOCK_ROLES.administrator,
     ]
   }
 ]
@@ -135,7 +142,7 @@ export const mockApi = {
           fioUsername: '',
           hasFioApiKey: false,
           preferredCurrency: 'CIS', // Default currency
-          roles: [roleService.getRoleById('applicant')!]
+          roles: [MOCK_ROLES.applicant]
         }
         users.push(newUser)
 

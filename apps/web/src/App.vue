@@ -1,10 +1,11 @@
 <template>
   <v-app>
     <v-app-bar v-if="isAuthenticated" color="primary" density="compact">
-      <v-app-bar-title>KawaKawa Market</v-app-bar-title>
+      <v-app-bar-title>KawaKawa CX</v-app-bar-title>
       <v-spacer />
       <v-btn to="/market" text>Market</v-btn>
       <v-btn to="/inventory" text>My Inventory</v-btn>
+      <v-btn to="/orders" text>My Orders</v-btn>
       <v-btn to="/account" text>Account</v-btn>
       <v-btn v-if="isAdmin" to="/admin" text prepend-icon="mdi-shield-account">Admin</v-btn>
       <v-btn @click="logout" text prepend-icon="mdi-logout">Logout</v-btn>
@@ -22,6 +23,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
 import { commodityService } from './services/commodityService'
 import { locationService } from './services/locationService'
+import { roleService } from './services/roleService'
 import { api } from './services/api'
 
 const router = useRouter()
@@ -63,10 +65,11 @@ onMounted(() => {
   // Listen for token refresh events
   window.addEventListener('token-refreshed', handleTokenRefreshed)
 
-  // Prefetch commodities and locations data on app startup
+  // Prefetch reference data on app startup
   if (isAuthenticated.value) {
     commodityService.prefetch().catch(err => console.error('Failed to prefetch commodities:', err))
     locationService.prefetch().catch(err => console.error('Failed to prefetch locations:', err))
+    roleService.prefetch().catch(err => console.error('Failed to prefetch roles:', err))
   }
 })
 

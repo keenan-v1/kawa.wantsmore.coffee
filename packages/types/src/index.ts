@@ -1,4 +1,4 @@
-// Shared types for KawaKawa Market
+// Shared types for KawaKawa CX
 
 export type Currency = 'ICA' | 'CIS' | 'AIC' | 'NCC'
 
@@ -51,6 +51,11 @@ export interface FioInventoryItem {
 // Sell order limit modes
 export type SellOrderLimitMode = 'none' | 'max_sell' | 'reserve'
 
+// Order types - shared between sell and buy orders
+export type OrderType = 'internal' | 'partner'
+
+export const ORDER_TYPES: OrderType[] = ['internal', 'partner']
+
 // User sell order (offer to sell)
 export interface SellOrder {
   id: number
@@ -58,9 +63,9 @@ export interface SellOrder {
   locationId: string
   price: number
   currency: Currency
+  orderType: OrderType // internal = members only, partner = trade partners
   limitMode: SellOrderLimitMode
   limitQuantity: number | null
-  targetRoleId: string | null // null = internal order, set = visible to that role
 }
 
 // Sell order with calculated available quantity

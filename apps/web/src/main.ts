@@ -14,6 +14,14 @@ router.isReady().then(() => {
     sessionStorage.removeItem('redirectPath')
     router.replace(redirectPath)
   }
+
+  // Hide the loading spinner after router is ready
+  const loader = document.getElementById('app-loader')
+  if (loader) {
+    loader.style.opacity = '0'
+    loader.style.transition = 'opacity 0.2s ease-out'
+    setTimeout(() => loader.remove(), 200)
+  }
 })
 
 app.mount('#app')

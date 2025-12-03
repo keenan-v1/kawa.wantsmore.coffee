@@ -1,8 +1,8 @@
-# KawaKawa Market
+# KawaKawa CX
 
 ## Project Overview
 
-Full-stack internal commodity market for KawaKawa, Inc., a fictional corporation in the game **Prosperous Universe**. While the game has public commodity exchanges, this website serves the corporation's internal market where members coordinate and keep prices fixed.
+Full-stack internal commodity exchange for KawaKawa, Inc., a fictional corporation in the game **Prosperous Universe**. While the game has public commodity exchanges, this website serves the corporation's internal exchange where members coordinate and keep prices fixed.
 
 ## Tech Stack
 

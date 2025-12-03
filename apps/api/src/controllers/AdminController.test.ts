@@ -42,6 +42,10 @@ vi.mock('../db/index.js', () => ({
     userId: 'userId',
     lastSyncedAt: 'lastSyncedAt',
   },
+  fioUserStorage: {
+    userId: 'userId',
+    lastSyncedAt: 'lastSyncedAt',
+  },
   permissions: {
     id: 'id',
     name: 'name',

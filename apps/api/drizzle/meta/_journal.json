@@ -8,6 +8,13 @@
       "when": 1764530345809,
       "tag": "0000_huge_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1764732912572,
+      "tag": "0001_thin_tusk",
+      "breakpoints": true
     }
   ]
 }

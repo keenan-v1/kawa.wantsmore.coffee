@@ -1,5 +1,5 @@
 // Database schema using Drizzle ORM
-// Based on KawaKawa Market types and mock data
+// Based on KawaKawa CX types and mock data
 
 import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum, boolean, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
@@ -10,6 +10,7 @@ export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet'])
 export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names-only', 'natural-ids-only', 'both'])
 export const commodityDisplayModeEnum = pgEnum('commodity_display_mode', ['ticker-only', 'name-only', 'both'])
 export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', ['none', 'max_sell', 'reserve'])
+export const orderTypeEnum = pgEnum('order_type', ['internal', 'partner']) // Shared enum for sell/buy orders
 
 // ==================== ROLES ====================
 export const roles = pgTable('roles', {
@@ -139,12 +140,16 @@ export const sellOrders = pgTable('sell_orders', {
   locationId: varchar('location_id', { length: 20 }).notNull().references(() => fioLocations.naturalId),
   price: decimal('price', { precision: 12, scale: 2 }).notNull(),
   currency: currencyEnum('currency').notNull(),
+  orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
   limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
   limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
-  targetRoleId: varchar('target_role_id', { length: 50 }).references(() => roles.id), // null = internal, set = visible to that role
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+  // Unique constraint: one sell order per commodity/location/orderType/currency combination per user
+  uniqueUserCommodityLocationTypeCurrency: uniqueIndex('sell_orders_user_commodity_location_type_currency_idx')
+    .on(table.userId, table.commodityTicker, table.locationId, table.orderType, table.currency),
+}))
 
 // ==================== RELATIONS ====================
 
@@ -249,10 +254,6 @@ export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
   location: one(fioLocations, {
     fields: [sellOrders.locationId],
     references: [fioLocations.naturalId],
-  }),
-  targetRole: one(roles, {
-    fields: [sellOrders.targetRoleId],
-    references: [roles.id],
   }),
 }))
 

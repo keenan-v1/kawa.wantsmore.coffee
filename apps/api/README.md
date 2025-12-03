@@ -1,6 +1,6 @@
-# KawaKawa Market API
+# KawaKawa CX API
 
-Backend API for the KawaKawa internal commodity market.
+Backend API for the KawaKawa internal commodity exchange.
 
 ## Quick Start
 

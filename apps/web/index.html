@@ -4,9 +4,50 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KawaKawa Market</title>
+    <meta name="theme-color" content="#242b2f" />
+    <title>KawaKawa CX</title>
+    <style>
+      /* Immediate dark background to prevent flash of white */
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #242b2f;
+        min-height: 100vh;
+      }
+
+      /* Loading spinner styles */
+      #app-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #242b2f;
+        z-index: 9999;
+      }
+
+      .loader-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #3a454b;
+        border-top-color: #0e679a;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
+    <!-- Loading spinner shown immediately, hidden when Vue mounts -->
+    <div id="app-loader">
+      <div class="loader-spinner"></div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

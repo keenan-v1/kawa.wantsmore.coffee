@@ -1,6 +1,6 @@
 // API service that switches between mock and real backend
 import { mockApi, USE_MOCK_API } from './mockApi'
-import type { User, Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '@kawakawa/types'
+import type { User, Currency, LocationDisplayMode, CommodityDisplayMode, Role, SellOrderLimitMode, OrderType } from '@kawakawa/types'
 
 interface LoginRequest {
   profileName: string
@@ -111,6 +111,68 @@ interface FioSyncResponse {
   inserted: number
   errors: string[]
   username: string
+}
+
+// FIO Inventory types
+interface FioInventoryItem {
+  id: number
+  commodityTicker: string
+  quantity: number
+  locationId: string | null
+  lastSyncedAt: string
+  commodityName: string
+  commodityCategory: string | null
+  locationName: string | null
+  locationType: string | null
+  storageType: string
+  fioUploadedAt: string | null
+}
+
+interface FioInventorySyncResult {
+  success: boolean
+  inserted: number
+  storageLocations: number
+  errors: string[]
+  skippedUnknownLocations: number
+  skippedUnknownCommodities: number
+  fioLastSync: string | null
+}
+
+interface FioLastSyncResponse {
+  lastSyncedAt: string | null
+  fioUploadedAt: string | null
+}
+
+// Sell Order types
+interface SellOrderResponse {
+  id: number
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  orderType: OrderType
+  limitMode: SellOrderLimitMode
+  limitQuantity: number | null
+  fioQuantity: number
+  availableQuantity: number
+}
+
+interface CreateSellOrderRequest {
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  orderType?: OrderType
+  limitMode?: SellOrderLimitMode
+  limitQuantity?: number | null
+}
+
+interface UpdateSellOrderRequest {
+  price?: number
+  currency?: Currency
+  orderType?: OrderType
+  limitMode?: SellOrderLimitMode
+  limitQuantity?: number | null
 }
 
 // Helper to get JWT token from localStorage
@@ -528,6 +590,189 @@ const realApi = {
       throw new Error(`Failed to delete role permission: ${response.statusText}`)
     }
   },
+
+  // FIO Inventory methods
+  getFioInventory: async (): Promise<FioInventoryItem[]> => {
+    const response = await fetch('/api/fio/inventory', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get FIO inventory: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  syncFioInventory: async (): Promise<FioInventorySyncResult> => {
+    const response = await fetch('/api/fio/inventory/sync', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'FIO credentials not configured')
+      }
+      throw new Error(`Failed to sync FIO inventory: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getFioLastSync: async (): Promise<FioLastSyncResponse> => {
+    const response = await fetch('/api/fio/inventory/last-sync', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get last sync time: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Sell Orders methods
+  getSellOrders: async (): Promise<SellOrderResponse[]> => {
+    const response = await fetch('/api/sell-orders', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get sell orders: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getSellOrder: async (id: number): Promise<SellOrderResponse> => {
+    const response = await fetch(`/api/sell-orders/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Sell order not found')
+      }
+      throw new Error(`Failed to get sell order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createSellOrder: async (request: CreateSellOrderRequest): Promise<SellOrderResponse> => {
+    const response = await fetch('/api/sell-orders', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to create sell order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateSellOrder: async (id: number, request: UpdateSellOrderRequest): Promise<SellOrderResponse> => {
+    const response = await fetch(`/api/sell-orders/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Sell order not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to update sell order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteSellOrder: async (id: number): Promise<void> => {
+    const response = await fetch(`/api/sell-orders/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Sell order not found')
+      }
+      throw new Error(`Failed to delete sell order: ${response.statusText}`)
+    }
+  },
+
+  // Public roles endpoint (for sell order targeting)
+  getRoles: async (): Promise<Role[]> => {
+    const response = await fetch('/api/roles', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to get roles: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -560,5 +805,23 @@ export const api = {
     listRolePermissions: () => realApi.listRolePermissions(),
     setRolePermission: (request: SetRolePermissionRequest) => realApi.setRolePermission(request),
     deleteRolePermission: (id: number) => realApi.deleteRolePermission(id),
-  }
+  },
+  fioInventory: {
+    get: () => realApi.getFioInventory(),
+    sync: () => realApi.syncFioInventory(),
+    getLastSync: () => realApi.getFioLastSync(),
+  },
+  sellOrders: {
+    list: () => realApi.getSellOrders(),
+    get: (id: number) => realApi.getSellOrder(id),
+    create: (request: CreateSellOrderRequest) => realApi.createSellOrder(request),
+    update: (id: number, request: UpdateSellOrderRequest) => realApi.updateSellOrder(id, request),
+    delete: (id: number) => realApi.deleteSellOrder(id),
+  },
+  roles: {
+    list: () => realApi.getRoles(),
+  },
 }
+
+// Export types for use in components
+export type { FioInventoryItem, SellOrderResponse, CreateSellOrderRequest, UpdateSellOrderRequest }
