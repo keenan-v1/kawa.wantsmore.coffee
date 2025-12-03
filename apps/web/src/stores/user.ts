@@ -65,6 +65,20 @@ export const useUserStore = () => {
     return user?.commodityDisplayMode || 'both'
   }
 
+  // Check if user has a specific permission
+  const hasPermission = (permissionId: string): boolean => {
+    const user = getUser()
+    if (!user?.permissions) return false
+    return user.permissions.includes(permissionId)
+  }
+
+  // Check if user has any of the specified permissions
+  const hasAnyPermission = (permissionIds: string[]): boolean => {
+    const user = getUser()
+    if (!user?.permissions) return false
+    return permissionIds.some(id => user.permissions.includes(id))
+  }
+
   return {
     currentUser,
     setUser,
@@ -76,5 +90,7 @@ export const useUserStore = () => {
     getLocationDisplayMode,
     updateCommodityDisplayMode,
     getCommodityDisplayMode,
+    hasPermission,
+    hasAnyPermission,
   }
 }

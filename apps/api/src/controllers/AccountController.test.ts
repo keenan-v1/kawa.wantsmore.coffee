@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AccountController } from './AccountController.js'
 import { db } from '../db/index.js'
 import * as passwordUtils from '../utils/password.js'
+import * as permissionService from '../utils/permissionService.js'
+
+vi.mock('../utils/permissionService.js', () => ({
+  getPermissions: vi.fn(),
+}))
 
 vi.mock('../db/index.js', () => ({
   db: {
@@ -60,6 +65,13 @@ describe('AccountController', () => {
     }
     vi.mocked(db.select).mockReturnValue(mockSelect)
     vi.mocked(db.update).mockReturnValue(mockUpdate)
+    // Default mock for permissions
+    vi.mocked(permissionService.getPermissions).mockResolvedValue(
+      new Map([
+        ['orders.view_internal', true],
+        ['orders.post_internal', true],
+      ])
+    )
   })
 
   describe('getProfile', () => {
@@ -99,8 +111,10 @@ describe('AccountController', () => {
           { id: 'member', name: 'Member', color: 'blue' },
           { id: 'lead', name: 'Lead', color: 'green' },
         ],
+        permissions: ['orders.view_internal', 'orders.post_internal'],
       })
       expect(db.select).toHaveBeenCalledTimes(2)
+      expect(permissionService.getPermissions).toHaveBeenCalledWith(['member', 'lead'])
     })
 
     it('should handle user with no settings (null values)', async () => {
@@ -115,6 +129,8 @@ describe('AccountController', () => {
       }
 
       mockSelect.where.mockResolvedValueOnce([mockUser]).mockResolvedValueOnce([])
+      // No roles means empty permissions
+      vi.mocked(permissionService.getPermissions).mockResolvedValueOnce(new Map())
 
       const request = { user: { userId: 2, username: 'newuser', roles: [] } }
       const result = await controller.getProfile(request)
@@ -128,6 +144,7 @@ describe('AccountController', () => {
         locationDisplayMode: 'both',
         commodityDisplayMode: 'both',
         roles: [],
+        permissions: [],
       })
     })
 

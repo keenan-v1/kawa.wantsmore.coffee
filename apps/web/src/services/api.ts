@@ -151,6 +151,26 @@ interface FioLastSyncResponse {
   fioUploadedAt: string | null
 }
 
+interface FioStatsResponse {
+  totalItems: number
+  totalQuantity: number
+  uniqueCommodities: number
+  storageLocations: number
+  newestSyncTime: string | null
+  oldestFioUploadTime: string | null
+  oldestFioUploadLocation: {
+    storageType: string
+    locationNaturalId: string | null
+  } | null
+  newestFioUploadTime: string | null
+}
+
+interface FioClearResponse {
+  success: boolean
+  deletedItems: number
+  deletedStorages: number
+}
+
 // Sell Order types
 interface SellOrderResponse {
   id: number
@@ -801,6 +821,48 @@ const realApi = {
     return response.json()
   },
 
+  getFioStats: async (): Promise<FioStatsResponse> => {
+    const response = await fetch('/api/fio/inventory/stats', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get FIO stats: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  clearFioInventory: async (): Promise<FioClearResponse> => {
+    const response = await fetch('/api/fio/inventory', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to clear FIO inventory: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   // Sell Orders methods
   getSellOrders: async (): Promise<SellOrderResponse[]> => {
     const response = await fetch('/api/sell-orders', {
@@ -1129,6 +1191,8 @@ export const api = {
     get: () => realApi.getFioInventory(),
     sync: () => realApi.syncFioInventory(),
     getLastSync: () => realApi.getFioLastSync(),
+    getStats: () => realApi.getFioStats(),
+    clear: () => realApi.clearFioInventory(),
   },
   sellOrders: {
     list: () => realApi.getSellOrders(),

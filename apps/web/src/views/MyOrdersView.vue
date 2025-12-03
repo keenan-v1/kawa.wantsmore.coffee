@@ -49,9 +49,24 @@
                 />
               </v-col>
               <v-col cols="12" md="6" class="text-right">
-                <span class="text-body-2 text-medium-emphasis">
-                  {{ filteredSellOrders.length }} order(s)
-                </span>
+                <v-tooltip
+                  :disabled="canCreateAnyOrders"
+                  text="You do not have permission to create orders"
+                  location="bottom"
+                >
+                  <template #activator="{ props }">
+                    <span v-bind="props">
+                      <v-btn
+                        color="success"
+                        prepend-icon="mdi-plus"
+                        :disabled="!canCreateAnyOrders"
+                        @click="openSellOrderDialog"
+                      >
+                        Create Sell Order
+                      </v-btn>
+                    </span>
+                  </template>
+                </v-tooltip>
               </v-col>
             </v-row>
           </v-card-title>
@@ -145,9 +160,27 @@
                 <v-icon size="64" color="grey-lighten-1">mdi-tag-multiple</v-icon>
                 <p class="text-h6 mt-4">No sell orders</p>
                 <p class="text-body-2 text-medium-emphasis">
-                  Create sell orders from your inventory to list items for sale
+                  Create sell orders to list items for sale
                 </p>
-                <v-btn color="primary" class="mt-4" to="/inventory"> Go to Inventory </v-btn>
+                <v-tooltip
+                  :disabled="canCreateAnyOrders"
+                  text="You do not have permission to create orders"
+                  location="bottom"
+                >
+                  <template #activator="{ props }">
+                    <span v-bind="props">
+                      <v-btn
+                        color="success"
+                        class="mt-4"
+                        prepend-icon="mdi-plus"
+                        :disabled="!canCreateAnyOrders"
+                        @click="openSellOrderDialog"
+                      >
+                        Create Sell Order
+                      </v-btn>
+                    </span>
+                  </template>
+                </v-tooltip>
               </div>
             </template>
           </v-data-table>
@@ -171,9 +204,24 @@
                 />
               </v-col>
               <v-col cols="12" md="6" class="text-right">
-                <v-btn color="primary" prepend-icon="mdi-plus" @click="buyOrderDialog = true">
-                  Create Buy Order
-                </v-btn>
+                <v-tooltip
+                  :disabled="canCreateAnyOrders"
+                  text="You do not have permission to create orders"
+                  location="bottom"
+                >
+                  <template #activator="{ props }">
+                    <span v-bind="props">
+                      <v-btn
+                        color="primary"
+                        prepend-icon="mdi-plus"
+                        :disabled="!canCreateAnyOrders"
+                        @click="openBuyOrderDialog"
+                      >
+                        Create Buy Order
+                      </v-btn>
+                    </span>
+                  </template>
+                </v-tooltip>
               </v-col>
             </v-row>
           </v-card-title>
@@ -255,14 +303,25 @@
                 <p class="text-body-2 text-medium-emphasis">
                   Create buy orders to request items from other members
                 </p>
-                <v-btn
-                  color="primary"
-                  class="mt-4"
-                  prepend-icon="mdi-plus"
-                  @click="buyOrderDialog = true"
+                <v-tooltip
+                  :disabled="canCreateAnyOrders"
+                  text="You do not have permission to create orders"
+                  location="bottom"
                 >
-                  Create Buy Order
-                </v-btn>
+                  <template #activator="{ props }">
+                    <span v-bind="props">
+                      <v-btn
+                        color="primary"
+                        class="mt-4"
+                        prepend-icon="mdi-plus"
+                        :disabled="!canCreateAnyOrders"
+                        @click="openBuyOrderDialog"
+                      >
+                        Create Buy Order
+                      </v-btn>
+                    </span>
+                  </template>
+                </v-tooltip>
               </div>
             </template>
           </v-data-table>
@@ -270,8 +329,8 @@
       </v-tabs-window-item>
     </v-tabs-window>
 
-    <!-- Buy Order Dialog -->
-    <BuyOrderDialog v-model="buyOrderDialog" @created="loadBuyOrders" />
+    <!-- Order Dialog -->
+    <OrderDialog v-model="orderDialog" :initial-tab="orderDialogTab" @created="onOrderCreated" />
 
     <!-- Edit Sell Order Dialog -->
     <v-dialog v-model="editSellDialog" max-width="500" persistent>
@@ -451,12 +510,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { Currency, SellOrderLimitMode, OrderType } from '@kawakawa/types'
+import { PERMISSIONS, type Currency, type SellOrderLimitMode, type OrderType } from '@kawakawa/types'
 import { api, type SellOrderResponse, type BuyOrderResponse } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import BuyOrderDialog from '../components/BuyOrderDialog.vue'
+import OrderDialog from '../components/OrderDialog.vue'
 
 const userStore = useUserStore()
 
@@ -498,7 +557,8 @@ const sellSearch = ref('')
 const buyOrders = ref<BuyOrderResponse[]>([])
 const loadingBuy = ref(false)
 const buySearch = ref('')
-const buyOrderDialog = ref(false)
+const orderDialog = ref(false)
+const orderDialogTab = ref<'buy' | 'sell'>('buy')
 
 // Edit sell order state
 const editSellDialog = ref(false)
@@ -535,20 +595,23 @@ const limitModes = [
   { title: 'Reserve quantity (keep minimum)', value: 'reserve' },
 ]
 
-// Check if user can create partner orders (members and admins can)
-const canCreatePartnerOrders = computed(() => {
-  const user = userStore.getUser()
-  if (!user?.roles) return false
-  return user.roles.some(r => r.id === 'member' || r.id === 'administrator')
-})
+// Check permissions for order creation
+const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
+const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
 
 const orderTypes = computed(() => {
-  const types = [{ title: 'Internal (members only)', value: 'internal' as OrderType }]
+  const types: { title: string; value: OrderType }[] = []
+  if (canCreateInternalOrders.value) {
+    types.push({ title: 'Internal (members only)', value: 'internal' })
+  }
   if (canCreatePartnerOrders.value) {
-    types.push({ title: 'Partner (trade partners)', value: 'partner' as OrderType })
+    types.push({ title: 'Partner (trade partners)', value: 'partner' })
   }
   return types
 })
+
+// Check if user can create any orders at all
+const canCreateAnyOrders = computed(() => orderTypes.value.length > 0)
 
 const editSellForm = ref({
   price: 0,
@@ -626,6 +689,26 @@ const loadBuyOrders = async () => {
     showSnackbar('Failed to load buy orders', 'error')
   } finally {
     loadingBuy.value = false
+  }
+}
+
+// Open order dialogs
+const openBuyOrderDialog = () => {
+  orderDialogTab.value = 'buy'
+  orderDialog.value = true
+}
+
+const openSellOrderDialog = () => {
+  orderDialogTab.value = 'sell'
+  orderDialog.value = true
+}
+
+// Handler for OrderDialog creation
+const onOrderCreated = async (type: 'buy' | 'sell') => {
+  if (type === 'buy') {
+    await loadBuyOrders()
+  } else {
+    await loadSellOrders()
   }
 }
 

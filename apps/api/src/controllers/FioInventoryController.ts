@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Route, Security, Tags, Request, SuccessResponse } from 'tsoa'
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Route,
+  Security,
+  Tags,
+  Request,
+  SuccessResponse,
+} from 'tsoa'
 import {
   db,
   userSettings,
@@ -7,7 +17,7 @@ import {
   fioCommodities,
   fioLocations,
 } from '../db/index.js'
-import { eq } from 'drizzle-orm'
+import { eq, count, min, max } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
@@ -20,6 +30,20 @@ interface FioInventorySyncResult {
   skippedUnknownLocations: number
   skippedUnknownCommodities: number
   fioLastSync: string | null
+}
+
+interface FioStatsResponse {
+  totalItems: number
+  totalQuantity: number
+  uniqueCommodities: number
+  storageLocations: number
+  newestSyncTime: string | null
+  oldestFioUploadTime: string | null
+  oldestFioUploadLocation: {
+    storageType: string
+    locationNaturalId: string | null
+  } | null
+  newestFioUploadTime: string | null
 }
 
 interface FioInventoryResponse {
@@ -152,6 +176,111 @@ export class FioInventoryController extends Controller {
     return {
       lastSyncedAt: storage?.lastSyncedAt?.toISOString() || null,
       fioUploadedAt: storage?.fioUploadedAt?.toISOString() || null,
+    }
+  }
+
+  /**
+   * Get FIO inventory statistics for the current user
+   */
+  @Get('stats')
+  public async getStats(@Request() request: { user: JwtPayload }): Promise<FioStatsResponse> {
+    const userId = request.user.userId
+
+    // Get storage statistics
+    const [storageStats] = await db
+      .select({
+        storageCount: count(fioUserStorage.id),
+        newestSync: max(fioUserStorage.lastSyncedAt),
+        oldestFioUpload: min(fioUserStorage.fioUploadedAt),
+        newestFioUpload: max(fioUserStorage.fioUploadedAt),
+      })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId))
+
+    // Get the oldest FIO upload location details
+    const [oldestLocation] = await db
+      .select({
+        storageType: fioUserStorage.type,
+        locationNaturalId: fioUserStorage.locationId,
+        fioUploadedAt: fioUserStorage.fioUploadedAt,
+      })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId))
+      .orderBy(fioUserStorage.fioUploadedAt)
+      .limit(1)
+
+    // Get inventory statistics
+    const inventoryStats = await db
+      .select({
+        totalQuantity: fioInventory.quantity,
+        ticker: fioInventory.commodityTicker,
+      })
+      .from(fioInventory)
+      .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+      .where(eq(fioUserStorage.userId, userId))
+
+    const totalItems = inventoryStats.length
+    const totalQuantity = inventoryStats.reduce((sum, item) => sum + item.totalQuantity, 0)
+    const uniqueCommodities = new Set(inventoryStats.map(item => item.ticker)).size
+
+    return {
+      totalItems,
+      totalQuantity,
+      uniqueCommodities,
+      storageLocations: storageStats?.storageCount ?? 0,
+      newestSyncTime: storageStats?.newestSync?.toISOString() ?? null,
+      oldestFioUploadTime: storageStats?.oldestFioUpload?.toISOString() ?? null,
+      oldestFioUploadLocation: oldestLocation
+        ? {
+            storageType: oldestLocation.storageType,
+            locationNaturalId: oldestLocation.locationNaturalId,
+          }
+        : null,
+      newestFioUploadTime: storageStats?.newestFioUpload?.toISOString() ?? null,
+    }
+  }
+
+  /**
+   * Clear all FIO inventory data for the current user
+   */
+  @Delete()
+  @SuccessResponse('200', 'Inventory cleared')
+  public async clearInventory(
+    @Request() request: { user: JwtPayload }
+  ): Promise<{ success: boolean; deletedItems: number; deletedStorages: number }> {
+    const userId = request.user.userId
+
+    // Get storage IDs for this user
+    const userStorages = await db
+      .select({ id: fioUserStorage.id })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId))
+
+    const storageIds = userStorages.map(s => s.id)
+
+    let deletedItems = 0
+    if (storageIds.length > 0) {
+      // Delete inventory items first (foreign key constraint)
+      for (const storageId of storageIds) {
+        // Count items before deletion
+        const [itemCount] = await db
+          .select({ count: count(fioInventory.id) })
+          .from(fioInventory)
+          .where(eq(fioInventory.userStorageId, storageId))
+
+        await db.delete(fioInventory).where(eq(fioInventory.userStorageId, storageId))
+        deletedItems += itemCount?.count ?? 0
+      }
+    }
+
+    // Delete storage records
+    const deletedStorages = userStorages.length
+    await db.delete(fioUserStorage).where(eq(fioUserStorage.userId, userId))
+
+    return {
+      success: true,
+      deletedItems,
+      deletedStorages,
     }
   }
 }

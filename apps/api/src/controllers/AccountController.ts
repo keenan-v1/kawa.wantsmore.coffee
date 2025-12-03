@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound } from '../utils/errors.js'
+import { getPermissions } from '../utils/permissionService.js'
 
 interface UserProfile {
   profileName: string
@@ -15,6 +16,7 @@ interface UserProfile {
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
   roles: Role[]
+  permissions: string[] // Permission IDs granted to this user
 }
 
 interface UpdateProfileRequest {
@@ -70,11 +72,18 @@ export class AccountController extends Controller {
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId))
 
+    const roleIds = userRolesData.map(r => r.roleId)
     const rolesArray: Role[] = userRolesData.map(r => ({
       id: r.roleId,
       name: r.roleName,
       color: r.roleColor,
     }))
+
+    // Get permissions for these roles
+    const permissionsMap = await getPermissions(roleIds)
+    const permissionIds = Array.from(permissionsMap.entries())
+      .filter(([, allowed]) => allowed)
+      .map(([id]) => id)
 
     return {
       profileName: user.username,
@@ -85,6 +94,7 @@ export class AccountController extends Controller {
       locationDisplayMode: user.locationDisplayMode || 'both',
       commodityDisplayMode: user.commodityDisplayMode || 'both',
       roles: rolesArray,
+      permissions: permissionIds,
     }
   }
 

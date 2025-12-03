@@ -61,6 +61,15 @@ export const commodityService = {
     }
   },
 
+  // Get commodity category by ticker (synchronous, uses cache)
+  getCommodityCategory: (ticker: string): string | null => {
+    if (!cachedCommodities) {
+      return null
+    }
+    const commodity = cachedCommodities.find(c => c.ticker === ticker)
+    return commodity?.category ?? null
+  },
+
   // Get commodities for dropdown (returns array of { title, value })
   getCommodityOptions: async (mode: CommodityDisplayMode = 'both') => {
     const commodities = await fetchCommodities()

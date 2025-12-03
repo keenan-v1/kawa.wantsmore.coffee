@@ -37,7 +37,18 @@ export interface User {
   locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
   commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
   roles: Role[] // One user to many roles
+  permissions: string[] // Permission IDs granted to this user based on their roles
 }
+
+// Known permission IDs (for type safety in frontend)
+export const PERMISSIONS = {
+  ORDERS_VIEW_INTERNAL: 'orders.view_internal',
+  ORDERS_POST_INTERNAL: 'orders.post_internal',
+  ORDERS_VIEW_PARTNER: 'orders.view_partner',
+  ORDERS_POST_PARTNER: 'orders.post_partner',
+  ADMIN_MANAGE_USERS: 'admin.manage_users',
+  ADMIN_MANAGE_ROLES: 'admin.manage_roles',
+} as const
 
 // FIO inventory synced from game
 export interface FioInventoryItem {

@@ -5,6 +5,7 @@ import { db, users, userSettings, userRoles, roles, passwordResetTokens } from '
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import { generateToken } from '../utils/jwt.js'
 import { Unauthorized, Forbidden, BadRequest, NotFound } from '../utils/errors.js'
+import { getPermissions } from '../utils/permissionService.js'
 import crypto from 'crypto'
 
 interface LoginRequest {
@@ -36,6 +37,7 @@ interface AuthResponse {
     displayName: string
     email?: string
     roles: Role[]
+    permissions: string[] // Permission IDs granted to this user
   }
 }
 
@@ -98,6 +100,12 @@ export class AuthController extends Controller {
       throw Forbidden('Account has no roles assigned. Please contact an administrator.')
     }
 
+    // Get permissions for these roles
+    const permissionsMap = await getPermissions(roleIds)
+    const permissionIds = Array.from(permissionsMap.entries())
+      .filter(([, allowed]) => allowed)
+      .map(([id]) => id)
+
     // Generate JWT token (still uses role IDs for compact payload)
     const token = generateToken({
       userId: user.id,
@@ -113,6 +121,7 @@ export class AuthController extends Controller {
         displayName: user.displayName,
         email: user.email || undefined,
         roles: roleObjects,
+        permissions: permissionIds,
       },
     }
   }
@@ -164,6 +173,12 @@ export class AuthController extends Controller {
       .from(roles)
       .where(eq(roles.id, 'unverified'))
 
+    // Get permissions for unverified role (will be empty, but consistent)
+    const permissionsMap = await getPermissions(['unverified'])
+    const permissionIds = Array.from(permissionsMap.entries())
+      .filter(([, allowed]) => allowed)
+      .map(([id]) => id)
+
     // Generate JWT token
     const token = generateToken({
       userId: newUser.id,
@@ -180,6 +195,7 @@ export class AuthController extends Controller {
         displayName: newUser.displayName,
         email: newUser.email || undefined,
         roles: [{ id: unverifiedRole.id, name: unverifiedRole.name, color: unverifiedRole.color }],
+        permissions: permissionIds,
       },
     }
   }

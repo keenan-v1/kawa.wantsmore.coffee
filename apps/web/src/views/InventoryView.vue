@@ -255,19 +255,22 @@
         <template #item.actions="{ item }">
           <!-- Desktop: show buttons -->
           <div class="d-none d-sm-flex ga-1">
-            <v-tooltip location="top">
+            <v-tooltip
+              location="top"
+              :text="canCreateAnyOrders ? 'Create sell order' : 'You do not have permission to create orders'"
+            >
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
                   color="success"
                   size="small"
                   variant="tonal"
+                  :disabled="!canCreateAnyOrders"
                   @click="openSellDialog(item)"
                 >
                   Sell
                 </v-btn>
               </template>
-              Create sell order
             </v-tooltip>
           </div>
           <!-- Mobile: show menu -->
@@ -278,12 +281,24 @@
               </v-btn>
             </template>
             <v-list density="compact">
-              <v-list-item @click="openSellDialog(item)">
-                <template #prepend>
-                  <v-icon color="success">mdi-tag</v-icon>
+              <v-tooltip
+                :disabled="canCreateAnyOrders"
+                text="You do not have permission to create orders"
+                location="start"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <v-list-item
+                    v-bind="tooltipProps"
+                    :disabled="!canCreateAnyOrders"
+                    @click="openSellDialog(item)"
+                  >
+                    <template #prepend>
+                      <v-icon color="success">mdi-tag</v-icon>
+                    </template>
+                    <v-list-item-title>Sell</v-list-item-title>
+                  </v-list-item>
                 </template>
-                <v-list-item-title>Sell</v-list-item-title>
-              </v-list-item>
+              </v-tooltip>
             </v-list>
           </v-menu>
         </template>
@@ -328,9 +343,10 @@
       </v-data-table>
     </v-card>
 
-    <!-- Sell Order Dialog -->
-    <SellOrderDialog
-      v-model="sellDialog"
+    <!-- Order Dialog -->
+    <OrderDialog
+      v-model="orderDialog"
+      initial-tab="sell"
       :inventory-item="selectedItem"
       @created="onOrderCreated"
     />
@@ -339,11 +355,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { PERMISSIONS } from '@kawakawa/types'
 import { api, type FioInventoryItem } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import SellOrderDialog from '../components/SellOrderDialog.vue'
+import OrderDialog from '../components/OrderDialog.vue'
 
 const userStore = useUserStore()
 
@@ -352,6 +369,13 @@ const fioConfigured = computed(() => {
   const user = userStore.getUser()
   return user?.hasFioApiKey && user?.fioUsername
 })
+
+// Check permissions for order creation
+const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
+const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
+
+// Check if user can create any orders at all
+const canCreateAnyOrders = computed(() => canCreateInternalOrders.value || canCreatePartnerOrders.value)
 
 interface LastSync {
   lastSyncedAt: string | null
@@ -390,7 +414,7 @@ const syncing = ref(false)
 const search = ref('')
 const lastSync = ref<LastSync>({ lastSyncedAt: null, fioUploadedAt: null })
 
-const sellDialog = ref(false)
+const orderDialog = ref(false)
 const selectedItem = ref<FioInventoryItem | null>(null)
 
 // Filters
@@ -568,11 +592,11 @@ const syncInventory = async () => {
 
 const openSellDialog = (item: FioInventoryItem) => {
   selectedItem.value = item
-  sellDialog.value = true
+  orderDialog.value = true
 }
 
-const onOrderCreated = () => {
-  showSnackbar('Sell order created successfully')
+const onOrderCreated = (type: 'buy' | 'sell') => {
+  showSnackbar(`${type === 'buy' ? 'Buy' : 'Sell'} order created successfully`)
 }
 
 onMounted(() => {

@@ -10,7 +10,7 @@
     <v-card class="mb-4">
       <v-card-text>
         <v-row dense>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" sm="4" lg="2">
             <v-select
               v-model="filters.itemType"
               :items="itemTypeOptions"
@@ -22,7 +22,7 @@
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" sm="4" lg="2">
             <v-select
               v-model="filters.commodity"
               :items="commodityOptions"
@@ -32,7 +32,17 @@
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" sm="4" lg="2">
+            <v-select
+              v-model="filters.category"
+              :items="categoryOptions"
+              label="Category"
+              density="compact"
+              clearable
+              hide-details
+            />
+          </v-col>
+          <v-col cols="6" sm="4" lg="2">
             <v-select
               v-model="filters.location"
               :items="locationOptions"
@@ -42,7 +52,7 @@
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" sm="4" lg="2">
             <v-select
               v-model="filters.userName"
               :items="userOptions"
@@ -52,7 +62,7 @@
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" sm="4" lg="2">
             <v-select
               v-model="filters.orderType"
               :items="visibilityOptions"
@@ -64,7 +74,9 @@
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2" class="d-flex align-center justify-space-between">
+        </v-row>
+        <v-row dense class="mt-2">
+          <v-col cols="12" class="d-flex align-center justify-space-between">
             <v-btn
               v-if="hasActiveFilters"
               variant="text"
@@ -72,12 +84,27 @@
               size="small"
               @click="clearFilters"
             >
-              Clear
+              Clear Filters
             </v-btn>
             <v-spacer />
-            <v-btn color="primary" prepend-icon="mdi-cart-plus" @click="openBuyOrderDialog">
-              Add Buy Order
-            </v-btn>
+            <v-tooltip
+              :disabled="canCreateAnyOrders"
+              text="You do not have permission to create orders"
+              location="bottom"
+            >
+              <template #activator="{ props }">
+                <span v-bind="props">
+                  <v-btn
+                    color="primary"
+                    prepend-icon="mdi-cart-plus"
+                    :disabled="!canCreateAnyOrders"
+                    @click="openBuyOrderDialog"
+                  >
+                    Add Buy Order
+                  </v-btn>
+                </span>
+              </template>
+            </v-tooltip>
           </v-col>
         </v-row>
       </v-card-text>
@@ -132,6 +159,13 @@
             @click="setFilter('commodity', item.commodityTicker)"
           >
             {{ getCommodityDisplay(item.commodityTicker) }}
+          </div>
+          <div
+            v-if="getCommodityCategory(item.commodityTicker)"
+            class="text-caption text-medium-emphasis clickable-cell"
+            @click="setFilter('category', getCommodityCategory(item.commodityTicker))"
+          >
+            {{ getCommodityCategory(item.commodityTicker) }}
           </div>
         </template>
 
@@ -223,8 +257,8 @@
       </v-data-table>
     </v-card>
 
-    <!-- Buy Order Dialog -->
-    <BuyOrderDialog v-model="buyOrderDialog" @created="onBuyOrderCreated" />
+    <!-- Order Dialog -->
+    <OrderDialog v-model="orderDialog" :initial-tab="orderDialogTab" @created="onOrderCreated" />
 
     <!-- Edit Order Dialog -->
     <v-dialog v-model="editDialog" max-width="500" persistent>
@@ -318,12 +352,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { Currency, OrderType } from '@kawakawa/types'
+import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
 import { api } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import BuyOrderDialog from '../components/BuyOrderDialog.vue'
+import OrderDialog from '../components/OrderDialog.vue'
 
 const userStore = useUserStore()
 
@@ -346,6 +380,7 @@ interface MarketItem {
 interface Filters {
   itemType: MarketItemType | null
   commodity: string | null
+  category: string | null
   location: string | null
   userName: string | null
   orderType: OrderType | null
@@ -360,13 +395,17 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
+const getCommodityCategory = (ticker: string): string | null => {
+  return commodityService.getCommodityCategory(ticker)
+}
+
 const headers = [
   { title: '', key: 'itemType', sortable: true, width: 70 },
+  { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'User', key: 'userName', sortable: true },
   { title: 'Price', key: 'price', sortable: true, align: 'end' as const },
-  { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Visibility', key: 'orderType', sortable: true },
   { title: '', key: 'actions', sortable: false, width: 50 },
 ]
@@ -375,7 +414,8 @@ const marketItems = ref<MarketItem[]>([])
 const loading = ref(false)
 const search = ref('')
 
-const buyOrderDialog = ref(false)
+const orderDialog = ref(false)
+const orderDialogTab = ref<'buy' | 'sell'>('buy')
 
 // Edit dialog
 const editDialog = ref(false)
@@ -385,20 +425,23 @@ const saving = ref(false)
 
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
-// Check if user can create partner orders (members and admins can)
-const canCreatePartnerOrders = computed(() => {
-  const user = userStore.getUser()
-  if (!user?.roles) return false
-  return user.roles.some(r => r.id === 'member' || r.id === 'administrator')
-})
+// Check permissions for order creation
+const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
+const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
 
 const orderTypes = computed(() => {
-  const types = [{ title: 'Internal (members only)', value: 'internal' as OrderType }]
+  const types: { title: string; value: OrderType }[] = []
+  if (canCreateInternalOrders.value) {
+    types.push({ title: 'Internal (members only)', value: 'internal' })
+  }
   if (canCreatePartnerOrders.value) {
-    types.push({ title: 'Partner (trade partners)', value: 'partner' as OrderType })
+    types.push({ title: 'Partner (trade partners)', value: 'partner' })
   }
   return types
 })
+
+// Check if user can create any orders at all
+const canCreateAnyOrders = computed(() => orderTypes.value.length > 0)
 
 const editForm = ref({
   price: 0,
@@ -416,6 +459,7 @@ const deleting = ref(false)
 const filters = ref<Filters>({
   itemType: null,
   commodity: null,
+  category: null,
   location: null,
   userName: null,
   orderType: null,
@@ -435,6 +479,13 @@ const itemTypeOptions = [
 const commodityOptions = computed(() => {
   const tickers = new Set(marketItems.value.map(l => l.commodityTicker))
   return Array.from(tickers).sort()
+})
+
+const categoryOptions = computed(() => {
+  const categories = new Set(
+    marketItems.value.map(l => getCommodityCategory(l.commodityTicker)).filter(Boolean)
+  )
+  return Array.from(categories).sort() as string[]
 })
 
 const locationOptions = computed(() => {
@@ -465,6 +516,7 @@ const clearFilters = () => {
   filters.value = {
     itemType: null,
     commodity: null,
+    category: null,
     location: null,
     userName: null,
     orderType: null,
@@ -497,6 +549,9 @@ const filteredItems = computed(() => {
   if (filters.value.commodity) {
     result = result.filter(l => l.commodityTicker === filters.value.commodity)
   }
+  if (filters.value.category) {
+    result = result.filter(l => getCommodityCategory(l.commodityTicker) === filters.value.category)
+  }
   if (filters.value.location) {
     result = result.filter(l => l.locationId === filters.value.location)
   }
@@ -514,7 +569,8 @@ const filteredItems = computed(() => {
       item =>
         item.commodityTicker.toLowerCase().includes(searchLower) ||
         item.locationId.toLowerCase().includes(searchLower) ||
-        item.userName.toLowerCase().includes(searchLower)
+        item.userName.toLowerCase().includes(searchLower) ||
+        (getCommodityCategory(item.commodityTicker)?.toLowerCase().includes(searchLower) ?? false)
     )
   }
 
@@ -577,11 +633,12 @@ const loadMarketItems = async () => {
 }
 
 const openBuyOrderDialog = () => {
-  buyOrderDialog.value = true
+  orderDialogTab.value = 'buy'
+  orderDialog.value = true
 }
 
-const onBuyOrderCreated = async () => {
-  showSnackbar('Buy order created successfully')
+const onOrderCreated = async (type: 'buy' | 'sell') => {
+  showSnackbar(`${type === 'buy' ? 'Buy' : 'Sell'} order created successfully`)
   await loadMarketItems()
 }
 

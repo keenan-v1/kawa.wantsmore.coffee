@@ -2,13 +2,39 @@
 // This simulates JWT-based authentication and data storage
 // NOTE: Mock API is disabled (USE_MOCK_API = false), this is for reference only
 
-import type { Currency, User as UserProfile, Role } from '../types'
+import { PERMISSIONS, type Currency, type User as UserProfile, type Role } from '../types'
 
 // Mock roles for the mock API (not using roleService to avoid async issues)
 const MOCK_ROLES: Record<string, Role> = {
   applicant: { id: 'applicant', name: 'Applicant', color: 'blue-grey' },
   member: { id: 'member', name: 'Member', color: 'blue' },
   administrator: { id: 'administrator', name: 'Administrator', color: 'red' },
+}
+
+// Mock permissions by role (for mock API responses)
+const MOCK_PERMISSIONS_BY_ROLE: Record<string, string[]> = {
+  member: [PERMISSIONS.ORDERS_VIEW_INTERNAL, PERMISSIONS.ORDERS_VIEW_PARTNER, PERMISSIONS.ORDERS_POST_INTERNAL],
+  // Administrator role only has admin perms - combine with member/trade-partner for order posting
+  administrator: [
+    PERMISSIONS.ORDERS_VIEW_INTERNAL,
+    PERMISSIONS.ORDERS_VIEW_PARTNER,
+    PERMISSIONS.ADMIN_MANAGE_USERS,
+    PERMISSIONS.ADMIN_MANAGE_ROLES,
+  ],
+  applicant: [PERMISSIONS.ORDERS_VIEW_INTERNAL, PERMISSIONS.ORDERS_VIEW_PARTNER],
+  'trade-partner': [PERMISSIONS.ORDERS_VIEW_PARTNER, PERMISSIONS.ORDERS_POST_PARTNER],
+}
+
+// Helper to get permissions for a set of roles
+const getPermissionsForRoles = (roles: Role[]): string[] => {
+  const permSet = new Set<string>()
+  for (const role of roles) {
+    const perms = MOCK_PERMISSIONS_BY_ROLE[role.id] || []
+    for (const perm of perms) {
+      permSet.add(perm)
+    }
+  }
+  return Array.from(permSet)
 }
 
 interface User {
@@ -102,6 +128,7 @@ export const mockApi = {
             hasFioApiKey: user.hasFioApiKey,
             preferredCurrency: user.preferredCurrency,
             roles: user.roles,
+            permissions: getPermissionsForRoles(user.roles),
           },
         }
 

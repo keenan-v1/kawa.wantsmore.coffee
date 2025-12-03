@@ -71,8 +71,8 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   administrator: [
     'orders.view_internal',
     'orders.view_partner',
-    'orders.post_internal',
-    'orders.post_partner',
+    // Note: administrators do NOT get order posting permissions by default
+    // Combine with 'member' or 'trade-partner' roles if they need to create orders
     'admin.manage_users',
     'admin.manage_roles',
   ],
