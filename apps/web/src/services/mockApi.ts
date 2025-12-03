@@ -45,20 +45,19 @@ const users: User[] = [
     fioUsername: 'demo_fio',
     hasFioApiKey: true,
     preferredCurrency: 'CIS',
-    roles: [
-      MOCK_ROLES.member,
-      MOCK_ROLES.administrator,
-    ]
-  }
+    roles: [MOCK_ROLES.member, MOCK_ROLES.administrator],
+  },
 ]
 
 // Helper to generate a mock JWT
 const generateMockJWT = (profileName: string): string => {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const payload = btoa(JSON.stringify({
-    profileName,
-    exp: Date.now() + 3600000 // 1 hour
-  }))
+  const payload = btoa(
+    JSON.stringify({
+      profileName,
+      exp: Date.now() + 3600000, // 1 hour
+    })
+  )
   const signature = btoa('mock-signature')
   return `${header}.${payload}.${signature}`
 }
@@ -67,25 +66,29 @@ const generateMockJWT = (profileName: string): string => {
 export const mockApi = {
   // Login endpoint
   login: async (request: LoginRequest): Promise<Response> => {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       setTimeout(() => {
         const user = users.find(u => u.profileName === request.profileName)
 
         if (!user) {
           // Account doesn't exist
-          resolve(new Response(JSON.stringify({ message: 'Account not found' }), {
-            status: 404,
-            headers: { 'Content-Type': 'application/json' }
-          }))
+          resolve(
+            new Response(JSON.stringify({ message: 'Account not found' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
           return
         }
 
         if (user.password !== request.password) {
           // Wrong password
-          resolve(new Response(JSON.stringify({ message: 'Invalid credentials' }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-          }))
+          resolve(
+            new Response(JSON.stringify({ message: 'Invalid credentials' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
           return
         }
 
@@ -98,39 +101,48 @@ export const mockApi = {
             fioUsername: user.fioUsername,
             hasFioApiKey: user.hasFioApiKey,
             preferredCurrency: user.preferredCurrency,
-            roles: user.roles
-          }
+            roles: user.roles,
+          },
         }
 
-        resolve(new Response(JSON.stringify(response), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        }))
+        resolve(
+          new Response(JSON.stringify(response), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        )
       }, 500) // Simulate network delay
     })
   },
 
   // Register endpoint
   register: async (request: RegisterRequest): Promise<Response> => {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       setTimeout(() => {
         const existingUser = users.find(u => u.profileName === request.profileName)
 
         if (existingUser) {
           // Profile name already taken
-          resolve(new Response(JSON.stringify({ message: 'Profile name already taken' }), {
-            status: 409,
-            headers: { 'Content-Type': 'application/json' }
-          }))
+          resolve(
+            new Response(JSON.stringify({ message: 'Profile name already taken' }), {
+              status: 409,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          )
           return
         }
 
         if (request.profileName.length < 3) {
           // Validation error
-          resolve(new Response(JSON.stringify({ message: 'Profile name must be at least 3 characters' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' }
-          }))
+          resolve(
+            new Response(
+              JSON.stringify({ message: 'Profile name must be at least 3 characters' }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            )
+          )
           return
         }
 
@@ -142,17 +154,19 @@ export const mockApi = {
           fioUsername: '',
           hasFioApiKey: false,
           preferredCurrency: 'CIS', // Default currency
-          roles: [MOCK_ROLES.applicant]
+          roles: [MOCK_ROLES.applicant],
         }
         users.push(newUser)
 
-        resolve(new Response(JSON.stringify({ message: 'Registration successful' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        }))
+        resolve(
+          new Response(JSON.stringify({ message: 'Registration successful' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        )
       }, 500) // Simulate network delay
     })
-  }
+  },
 }
 
 // Check if we should use mock API (for development)

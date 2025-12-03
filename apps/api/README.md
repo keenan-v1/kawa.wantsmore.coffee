@@ -145,6 +145,7 @@ pnpm db:studio
 See [FIO_INTEGRATION.md](./FIO_INTEGRATION.md) for details.
 
 For DigitalOcean:
+
 1. Database is automatically provisioned via [.do/app.yaml](../../.do/app.yaml)
 2. Run migrations on first deploy
 3. Set up cron job or scheduled task for `fio:sync`

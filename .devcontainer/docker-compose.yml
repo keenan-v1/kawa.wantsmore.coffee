@@ -24,7 +24,7 @@ services:
       - POSTGRES_PASSWORD=kawa_dev_password
       - POSTGRES_DB=kawa_market
     ports:
-      - "5432:5432"
+      - '5432:5432'
 
 volumes:
   node-home:

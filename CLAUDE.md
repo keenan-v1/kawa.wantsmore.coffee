@@ -7,11 +7,13 @@ Full-stack internal commodity exchange for KawaKawa, Inc., a fictional corporati
 ## Tech Stack
 
 ### Frontend
+
 - **Vue 3** with **TypeScript**
 - **Vite** as build tool
 - **Vuetify** for UI components
 
 ### Backend
+
 - **Node.js 20+** with **TypeScript**
 - **Express** with **TSOA** for type-safe REST API
 - **PostgreSQL 17** with **Drizzle ORM**
@@ -22,6 +24,7 @@ Full-stack internal commodity exchange for KawaKawa, Inc., a fictional corporati
   - Per-user API keys (users provide their own FIO credentials)
 
 ### Infrastructure
+
 - **Turborepo** monorepo structure
 - **pnpm** package management
 - **Dev container** with PostgreSQL
@@ -56,12 +59,14 @@ Full-stack internal commodity exchange for KawaKawa, Inc., a fictional corporati
 ## Development
 
 ### Frontend (apps/web)
+
 ```bash
 pnpm dev     # Start dev server on port 5173
 pnpm build   # Production build
 ```
 
 ### Backend (apps/api)
+
 ```bash
 pnpm dev     # Start dev server with hot reload
 pnpm build   # Production build
@@ -91,9 +96,19 @@ pnpm test:coverage     # Run tests with coverage report
 ```
 
 ### Makefile (root)
+
 ```bash
 make dev           # Start all dev servers
 make fio-sync      # Sync FIO data
+```
+
+### Linting & Formatting (root)
+
+```bash
+pnpm lint          # Check for lint errors
+pnpm lint:fix      # Fix auto-fixable lint errors
+pnpm format        # Format all files with Prettier
+pnpm format:check  # Check formatting without modifying
 ```
 
 ## Testing Philosophy
@@ -114,6 +129,7 @@ make fio-sync      # Sync FIO data
    - Integration points: Mock external APIs
 
 3. **Run tests before committing**
+
    ```bash
    pnpm test  # Must pass before committing
    ```
@@ -125,6 +141,7 @@ See [apps/api/src/controllers/](apps/api/src/controllers/) for examples of well-
 ## Project Structure
 
 ### Monorepo Layout
+
 ```
 apps/
 ├── api/               # Backend API

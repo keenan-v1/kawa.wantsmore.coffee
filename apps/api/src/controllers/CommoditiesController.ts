@@ -35,9 +35,13 @@ export class CommoditiesController extends Controller {
       conditions.push(eq(fioCommodities.categoryName, category))
     }
 
-    const results = conditions.length > 0
-      ? await db.select().from(fioCommodities).where(sql`${conditions.join(' AND ')}`)
-      : await db.select().from(fioCommodities)
+    const results =
+      conditions.length > 0
+        ? await db
+            .select()
+            .from(fioCommodities)
+            .where(sql`${conditions.join(' AND ')}`)
+        : await db.select().from(fioCommodities)
 
     return results.map(c => ({
       ticker: c.ticker,

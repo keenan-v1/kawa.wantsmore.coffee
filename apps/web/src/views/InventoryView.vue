@@ -22,9 +22,7 @@
                 FIO data: {{ formatRelativeTime(lastSync.fioUploadedAt) }}
               </v-chip>
             </div>
-            <div v-else class="text-body-2 text-medium-emphasis">
-              No inventory synced yet
-            </div>
+            <div v-else class="text-body-2 text-medium-emphasis">No inventory synced yet</div>
           </v-col>
           <v-col cols="12" md="6" class="text-md-right">
             <v-btn
@@ -283,9 +281,7 @@
                 No items match your filters.
                 <a href="#" @click.prevent="clearFilters">Clear filters</a>
               </template>
-              <template v-else>
-                Sync your FIO inventory to see your items here
-              </template>
+              <template v-else> Sync your FIO inventory to see your items here </template>
             </p>
             <v-btn
               v-if="!hasActiveFilters"
@@ -383,10 +379,12 @@ const categoryOptions = computed(() => {
 
 const locationOptions = computed(() => {
   const locations = new Set(inventory.value.map(i => i.locationId).filter(Boolean))
-  return Array.from(locations).sort().map(id => ({
-    title: getLocationDisplay(id),
-    value: id,
-  }))
+  return Array.from(locations)
+    .sort()
+    .map(id => ({
+      title: getLocationDisplay(id),
+      value: id,
+    }))
 })
 
 const locationTypeOptions = computed(() => {
@@ -452,11 +450,12 @@ const filteredInventory = computed(() => {
   // Apply search
   if (search.value) {
     const searchLower = search.value.toLowerCase()
-    result = result.filter(item =>
-      item.commodityTicker.toLowerCase().includes(searchLower) ||
-      item.commodityName?.toLowerCase().includes(searchLower) ||
-      item.locationId?.toLowerCase().includes(searchLower) ||
-      item.locationName?.toLowerCase().includes(searchLower)
+    result = result.filter(
+      item =>
+        item.commodityTicker.toLowerCase().includes(searchLower) ||
+        item.commodityName?.toLowerCase().includes(searchLower) ||
+        item.locationId?.toLowerCase().includes(searchLower) ||
+        item.locationName?.toLowerCase().includes(searchLower)
     )
   }
 

@@ -25,9 +25,9 @@ export default createVuetify({
           'surface-bright': '#3a454b',
           'surface-variant': '#354048',
           'on-surface': '#afafaf',
-          'on-background': '#afafaf'
-        }
-      }
-    }
-  }
+          'on-background': '#afafaf',
+        },
+      },
+    },
+  },
 })

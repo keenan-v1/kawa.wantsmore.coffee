@@ -43,9 +43,14 @@ export class LocationsController extends Controller {
       conditions.push(eq(fioLocations.systemNaturalId, system))
     }
 
-    const results = conditions.length > 0
-      ? await db.select().from(fioLocations).where(sql`${conditions.join(' AND ')}`).orderBy(fioLocations.name)
-      : await db.select().from(fioLocations).orderBy(fioLocations.name)
+    const results =
+      conditions.length > 0
+        ? await db
+            .select()
+            .from(fioLocations)
+            .where(sql`${conditions.join(' AND ')}`)
+            .orderBy(fioLocations.name)
+        : await db.select().from(fioLocations).orderBy(fioLocations.name)
 
     return results.map(l => ({
       id: l.naturalId,
@@ -80,14 +85,14 @@ export class LocationsController extends Controller {
    * Get planets only
    */
   @Get('planets')
-  public async getPlanets(
-    @Query() system?: string
-  ): Promise<Location[]> {
+  public async getPlanets(@Query() system?: string): Promise<Location[]> {
     const results = system
       ? await db
           .select()
           .from(fioLocations)
-          .where(sql`${fioLocations.type} = 'Planet' AND ${fioLocations.systemNaturalId} = ${system}`)
+          .where(
+            sql`${fioLocations.type} = 'Planet' AND ${fioLocations.systemNaturalId} = ${system}`
+          )
           .orderBy(fioLocations.name)
       : await db
           .select()

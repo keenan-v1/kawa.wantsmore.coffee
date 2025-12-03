@@ -1,22 +1,167 @@
-import { Controller, Get, Route, Tags } from 'tsoa'
-import type { Currency } from '@kawakawa/types'
+import { Controller, Get, Query, Route, Security, Tags, Request } from 'tsoa'
+import type { Currency, OrderType } from '@kawakawa/types'
+import { db, sellOrders, fioInventory, fioUserStorage, users } from '../db/index.js'
+import { eq, inArray } from 'drizzle-orm'
+import type { JwtPayload } from '../utils/jwt.js'
+import { hasPermission } from '../utils/permissionService.js'
 
+// Market listing with seller info and calculated availability
 interface MarketListing {
   id: number
-  commodity: string
-  seller: string
-  quantity: number
+  sellerName: string
+  commodityTicker: string
+  locationId: string
   price: number
   currency: Currency
-  location: string
+  orderType: OrderType
+  availableQuantity: number
+  isOwn: boolean // true if this is the current user's listing
+}
+
+/**
+ * Calculate available quantity based on FIO inventory and limit settings
+ */
+function calculateAvailableQuantity(
+  fioQuantity: number,
+  limitMode: 'none' | 'max_sell' | 'reserve',
+  limitQuantity: number | null
+): number {
+  switch (limitMode) {
+    case 'none':
+      return fioQuantity
+    case 'max_sell':
+      return Math.min(fioQuantity, limitQuantity ?? 0)
+    case 'reserve':
+      return Math.max(0, fioQuantity - (limitQuantity ?? 0))
+    default:
+      return fioQuantity
+  }
 }
 
 @Route('market')
 @Tags('Market')
+@Security('jwt')
 export class MarketController extends Controller {
-  @Get()
-  public async getMarketListings(): Promise<MarketListing[]> {
-    // TODO: Aggregate inventory from all users
-    return []
+  /**
+   * Get all available sell orders on the market (from other users)
+   * Filters by order type based on user permissions
+   */
+  @Get('listings')
+  public async getMarketListings(
+    @Request() request: { user: JwtPayload },
+    @Query() commodity?: string,
+    @Query() location?: string
+  ): Promise<MarketListing[]> {
+    const userId = request.user.userId
+    const userRoles = request.user.roles
+
+    // Check what order types the user can view
+    const canViewInternal = await hasPermission(userRoles, 'orders.view_internal')
+    const canViewPartner = await hasPermission(userRoles, 'orders.view_partner')
+
+    if (!canViewInternal && !canViewPartner) {
+      return []
+    }
+
+    // Get all sell orders (including user's own)
+    const orders = await db
+      .select({
+        id: sellOrders.id,
+        userId: sellOrders.userId,
+        commodityTicker: sellOrders.commodityTicker,
+        locationId: sellOrders.locationId,
+        price: sellOrders.price,
+        currency: sellOrders.currency,
+        orderType: sellOrders.orderType,
+        limitMode: sellOrders.limitMode,
+        limitQuantity: sellOrders.limitQuantity,
+        sellerName: users.displayName,
+      })
+      .from(sellOrders)
+      .innerJoin(users, eq(sellOrders.userId, users.id))
+
+    // Get inventory for all sellers to calculate available quantities
+    const sellerIds = [...new Set(orders.map(o => o.userId))]
+
+    if (sellerIds.length === 0) {
+      return []
+    }
+
+    // Get all inventory data for sellers
+    const inventoryData = await db
+      .select({
+        userId: fioUserStorage.userId,
+        commodityTicker: fioInventory.commodityTicker,
+        quantity: fioInventory.quantity,
+        locationId: fioUserStorage.locationId,
+      })
+      .from(fioInventory)
+      .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
+      .where(inArray(fioUserStorage.userId, sellerIds))
+
+    // Build inventory lookup map: "userId:ticker:locationId" -> total quantity
+    const inventoryMap = new Map<string, number>()
+    for (const item of inventoryData) {
+      if (item.locationId) {
+        const key = `${item.userId}:${item.commodityTicker}:${item.locationId}`
+        inventoryMap.set(key, (inventoryMap.get(key) ?? 0) + item.quantity)
+      }
+    }
+
+    // Process orders and filter by permissions and availability
+    const listings: MarketListing[] = []
+
+    for (const order of orders) {
+      const isOwn = order.userId === userId
+
+      // Filter by order type permissions (always show user's own orders)
+      if (!isOwn) {
+        if (order.orderType === 'internal' && !canViewInternal) continue
+        if (order.orderType === 'partner' && !canViewPartner) continue
+      }
+
+      // Filter by commodity if specified
+      if (commodity && order.commodityTicker !== commodity) continue
+
+      // Filter by location if specified
+      if (location && order.locationId !== location) continue
+
+      // Calculate available quantity
+      const key = `${order.userId}:${order.commodityTicker}:${order.locationId}`
+      const fioQuantity = inventoryMap.get(key) ?? 0
+      const availableQuantity = calculateAvailableQuantity(
+        fioQuantity,
+        order.limitMode,
+        order.limitQuantity
+      )
+
+      // Only include if there's available quantity (always show user's own orders even if 0)
+      if (availableQuantity > 0 || isOwn) {
+        listings.push({
+          id: order.id,
+          sellerName: order.sellerName,
+          commodityTicker: order.commodityTicker,
+          locationId: order.locationId,
+          price: parseFloat(order.price),
+          currency: order.currency,
+          orderType: order.orderType,
+          availableQuantity,
+          isOwn,
+        })
+      }
+    }
+
+    // Sort by commodity, then location, then price
+    listings.sort((a, b) => {
+      if (a.commodityTicker !== b.commodityTicker) {
+        return a.commodityTicker.localeCompare(b.commodityTicker)
+      }
+      if (a.locationId !== b.locationId) {
+        return a.locationId.localeCompare(b.locationId)
+      }
+      return a.price - b.price
+    })
+
+    return listings
   }
 }

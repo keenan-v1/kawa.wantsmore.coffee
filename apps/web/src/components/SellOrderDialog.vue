@@ -6,7 +6,9 @@
         <!-- Item Info -->
         <v-alert type="info" variant="tonal" class="mb-4" density="compact">
           <div>
-            <strong>{{ inventoryItem ? getCommodityDisplay(inventoryItem.commodityTicker) : '' }}</strong>
+            <strong>{{
+              inventoryItem ? getCommodityDisplay(inventoryItem.commodityTicker) : ''
+            }}</strong>
           </div>
           <div class="text-caption">
             {{ inventoryItem ? getLocationDisplay(inventoryItem.locationId) : '' }}
@@ -29,11 +31,7 @@
               />
             </v-col>
             <v-col cols="4">
-              <v-select
-                v-model="form.currency"
-                :items="currencies"
-                label="Currency"
-              />
+              <v-select v-model="form.currency" :items="currencies" label="Currency" />
             </v-col>
           </v-row>
 
@@ -77,9 +75,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn text @click="close">Cancel</v-btn>
-        <v-btn color="success" :loading="saving" @click="submit">
-          Create Order
-        </v-btn>
+        <v-btn color="success" :loading="saving" @click="submit"> Create Order </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -117,7 +113,7 @@ const getCommodityDisplay = (ticker: string): string => {
 
 const dialog = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
+  set: value => emit('update:modelValue', value),
 })
 
 const formRef = ref()
@@ -198,7 +194,7 @@ const submit = async () => {
 }
 
 // Reset form when dialog opens
-watch(dialog, (open) => {
+watch(dialog, open => {
   if (open) {
     resetForm()
   }

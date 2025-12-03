@@ -3,9 +3,7 @@ import App from './App.vue'
 import vuetify from './plugins/vuetify'
 import router from './router'
 
-const app = createApp(App)
-  .use(vuetify)
-  .use(router)
+const app = createApp(App).use(vuetify).use(router)
 
 // Handle redirect from 404.html (for static site deployment)
 router.isReady().then(() => {

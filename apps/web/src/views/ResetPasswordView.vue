@@ -18,9 +18,7 @@
               <v-alert type="success" class="mb-4">
                 Your password has been reset successfully!
               </v-alert>
-              <v-btn color="primary" block to="/login">
-                Go to Login
-              </v-btn>
+              <v-btn color="primary" block to="/login"> Go to Login </v-btn>
             </template>
 
             <!-- Error state (invalid/expired token) -->
@@ -28,9 +26,7 @@
               <v-alert type="error" class="mb-4">
                 {{ tokenError }}
               </v-alert>
-              <v-btn color="primary" block to="/login">
-                Go to Login
-              </v-btn>
+              <v-btn color="primary" block to="/login"> Go to Login </v-btn>
             </template>
 
             <!-- Reset form -->
@@ -47,11 +43,10 @@
 
               <p class="text-body-2 mb-4">
                 <template v-if="username">
-                  Enter a new password for <strong>{{ username }}</strong>.
+                  Enter a new password for <strong>{{ username }}</strong
+                  >.
                 </template>
-                <template v-else>
-                  Enter your new password below.
-                </template>
+                <template v-else> Enter your new password below. </template>
               </p>
 
               <v-form @submit.prevent="handleReset">
@@ -124,10 +119,7 @@ const confirmPasswordRules = [
 ]
 
 const isValid = computed(() => {
-  return (
-    newPassword.value.length >= 8 &&
-    confirmPassword.value === newPassword.value
-  )
+  return newPassword.value.length >= 8 && confirmPassword.value === newPassword.value
 })
 
 onMounted(async () => {
@@ -169,7 +161,8 @@ const handleReset = async () => {
     if (error instanceof Error) {
       // Check for specific error messages
       if (error.message.includes('expired')) {
-        tokenError.value = 'This reset link has expired. Please request a new one from your administrator.'
+        tokenError.value =
+          'This reset link has expired. Please request a new one from your administrator.'
       } else if (error.message.includes('Invalid')) {
         tokenError.value = 'This reset link is invalid or has already been used.'
       } else {

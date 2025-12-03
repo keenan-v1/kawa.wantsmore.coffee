@@ -149,19 +149,19 @@ describe('SellOrdersController', () => {
     })
 
     it('should calculate reserve mode correctly', async () => {
-      const mockOrders = [{
-        id: 1,
-        commodityTicker: 'CAF',
-        locationId: 'BEN',
-        price: '75.00',
-        currency: 'CIS',
-        orderType: 'internal',
-        limitMode: 'reserve',
-        limitQuantity: 500,
-      }]
-      const mockInventory = [
-        { commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN' },
+      const mockOrders = [
+        {
+          id: 1,
+          commodityTicker: 'CAF',
+          locationId: 'BEN',
+          price: '75.00',
+          currency: 'CIS',
+          orderType: 'internal',
+          limitMode: 'reserve',
+          limitQuantity: 500,
+        },
       ]
+      const mockInventory = [{ commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN' }]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
       mockSelect.where.mockResolvedValueOnce(mockInventory)
@@ -172,16 +172,18 @@ describe('SellOrdersController', () => {
     })
 
     it('should handle null FIO inventory', async () => {
-      const mockOrders = [{
-        id: 1,
-        commodityTicker: 'H2O',
-        locationId: 'BEN',
-        price: '100.00',
-        currency: 'CIS',
-        orderType: 'internal',
-        limitMode: 'none',
-        limitQuantity: null,
-      }]
+      const mockOrders = [
+        {
+          id: 1,
+          commodityTicker: 'H2O',
+          locationId: 'BEN',
+          price: '100.00',
+          currency: 'CIS',
+          orderType: 'internal',
+          limitMode: 'none',
+          limitQuantity: null,
+        },
+      ]
       // No inventory for this location/commodity
       const mockInventory: any[] = []
 
@@ -204,19 +206,19 @@ describe('SellOrdersController', () => {
     })
 
     it('should return orders with partner orderType', async () => {
-      const mockOrders = [{
-        id: 1,
-        commodityTicker: 'H2O',
-        locationId: 'BEN',
-        price: '100.00',
-        currency: 'CIS',
-        orderType: 'partner',
-        limitMode: 'none',
-        limitQuantity: null,
-      }]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
+      const mockOrders = [
+        {
+          id: 1,
+          commodityTicker: 'H2O',
+          locationId: 'BEN',
+          price: '100.00',
+          currency: 'CIS',
+          orderType: 'partner',
+          limitMode: 'none',
+          limitQuantity: null,
+        },
       ]
+      const mockInventory = [{ commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' }]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
       mockSelect.where.mockResolvedValueOnce(mockInventory)
@@ -258,7 +260,9 @@ describe('SellOrdersController', () => {
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
-      await expect(controller.getSellOrder(999, mockRequest)).rejects.toThrow('Sell order not found')
+      await expect(controller.getSellOrder(999, mockRequest)).rejects.toThrow(
+        'Sell order not found'
+      )
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
   })
@@ -302,7 +306,10 @@ describe('SellOrdersController', () => {
       expect(result.price).toBe(100)
       expect(result.orderType).toBe('internal')
       expect(setStatusSpy).toHaveBeenCalledWith(201)
-      expect(permissionService.hasPermission).toHaveBeenCalledWith(['member'], 'orders.post_internal')
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(
+        ['member'],
+        'orders.post_internal'
+      )
     })
 
     it('should create partner order when user has permission', async () => {
@@ -337,7 +344,10 @@ describe('SellOrdersController', () => {
       )
 
       expect(result.orderType).toBe('partner')
-      expect(permissionService.hasPermission).toHaveBeenCalledWith(['member'], 'orders.post_partner')
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(
+        ['member'],
+        'orders.post_partner'
+      )
     })
 
     it('should throw 403 when user lacks permission to post internal orders', async () => {
@@ -591,11 +601,7 @@ describe('SellOrdersController', () => {
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
       mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory
 
-      const result = await controller.updateSellOrder(
-        1,
-        { price: 150 },
-        mockRequest
-      )
+      const result = await controller.updateSellOrder(1, { price: 150 }, mockRequest)
 
       expect(result.price).toBe(150)
       expect(db.update).toHaveBeenCalled()
@@ -618,14 +624,13 @@ describe('SellOrdersController', () => {
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
       mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory
 
-      const result = await controller.updateSellOrder(
-        1,
-        { orderType: 'partner' },
-        mockRequest
-      )
+      const result = await controller.updateSellOrder(1, { orderType: 'partner' }, mockRequest)
 
       expect(result.orderType).toBe('partner')
-      expect(permissionService.hasPermission).toHaveBeenCalledWith(['member'], 'orders.post_partner')
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(
+        ['member'],
+        'orders.post_partner'
+      )
     })
 
     it('should throw 403 when changing orderType without permission', async () => {
@@ -635,11 +640,7 @@ describe('SellOrdersController', () => {
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
       await expect(
-        controller.updateSellOrder(
-          1,
-          { orderType: 'partner' },
-          mockRequest
-        )
+        controller.updateSellOrder(1, { orderType: 'partner' }, mockRequest)
       ).rejects.toThrow('You do not have permission to change this order to partner')
       expect(setStatusSpy).toHaveBeenCalledWith(403)
     })
@@ -677,9 +678,9 @@ describe('SellOrdersController', () => {
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
-      await expect(
-        controller.updateSellOrder(999, { price: 100 }, mockRequest)
-      ).rejects.toThrow('Sell order not found')
+      await expect(controller.updateSellOrder(999, { price: 100 }, mockRequest)).rejects.toThrow(
+        'Sell order not found'
+      )
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
   })
@@ -710,19 +711,19 @@ describe('SellOrdersController', () => {
 
   describe('availability calculations', () => {
     it('should handle edge case: reserve more than inventory', async () => {
-      const mockOrders = [{
-        id: 1,
-        commodityTicker: 'H2O',
-        locationId: 'BEN',
-        price: '100.00',
-        currency: 'CIS',
-        orderType: 'internal',
-        limitMode: 'reserve',
-        limitQuantity: 1500, // Reserve more than we have
-      }]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
+      const mockOrders = [
+        {
+          id: 1,
+          commodityTicker: 'H2O',
+          locationId: 'BEN',
+          price: '100.00',
+          currency: 'CIS',
+          orderType: 'internal',
+          limitMode: 'reserve',
+          limitQuantity: 1500, // Reserve more than we have
+        },
       ]
+      const mockInventory = [{ commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' }]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
       mockSelect.where.mockResolvedValueOnce(mockInventory)
@@ -734,19 +735,19 @@ describe('SellOrdersController', () => {
     })
 
     it('should handle edge case: max_sell more than inventory', async () => {
-      const mockOrders = [{
-        id: 1,
-        commodityTicker: 'H2O',
-        locationId: 'BEN',
-        price: '100.00',
-        currency: 'CIS',
-        orderType: 'internal',
-        limitMode: 'max_sell',
-        limitQuantity: 2000, // Want to sell more than we have
-      }]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 500, locationId: 'BEN' },
+      const mockOrders = [
+        {
+          id: 1,
+          commodityTicker: 'H2O',
+          locationId: 'BEN',
+          price: '100.00',
+          currency: 'CIS',
+          orderType: 'internal',
+          limitMode: 'max_sell',
+          limitQuantity: 2000, // Want to sell more than we have
+        },
       ]
+      const mockInventory = [{ commodityTicker: 'H2O', quantity: 500, locationId: 'BEN' }]
 
       mockSelect.where.mockResolvedValueOnce(mockOrders)
       mockSelect.where.mockResolvedValueOnce(mockInventory)

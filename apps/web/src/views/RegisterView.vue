@@ -47,22 +47,14 @@
                 prepend-icon="mdi-lock-check"
                 :disabled="loading"
               />
-              <v-btn
-                type="submit"
-                color="primary"
-                block
-                class="mt-4"
-                :loading="loading"
-              >
+              <v-btn type="submit" color="primary" block class="mt-4" :loading="loading">
                 Register
               </v-btn>
             </v-form>
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn text to="/login" :disabled="loading">
-              Already have an account? Login
-            </v-btn>
+            <v-btn text to="/login" :disabled="loading"> Already have an account? Login </v-btn>
           </v-card-actions>
         </v-card>
       </v-col>
@@ -96,7 +88,7 @@ const handleRegister = async () => {
   try {
     const response = await api.auth.register({
       profileName: profileName.value,
-      password: password.value
+      password: password.value,
     })
 
     if (response.ok) {
@@ -110,7 +102,10 @@ const handleRegister = async () => {
     } else if (response.status === 400) {
       const data = await response.json()
       // Check if it's a duplicate username error
-      if (data.message && (data.message.includes('already exists') || data.message.includes('already taken'))) {
+      if (
+        data.message &&
+        (data.message.includes('already exists') || data.message.includes('already taken'))
+      ) {
         errorMessage.value = 'Profile name already taken. Please choose a different one.'
       } else {
         errorMessage.value = data.message || 'Invalid registration data. Please check your input.'
@@ -118,7 +113,10 @@ const handleRegister = async () => {
     } else if (response.status === 500) {
       // Backend returns 500 for validation errors, check message
       const data = await response.json()
-      if (data.message && (data.message.includes('already exists') || data.message.includes('already taken'))) {
+      if (
+        data.message &&
+        (data.message.includes('already exists') || data.message.includes('already taken'))
+      ) {
         errorMessage.value = 'Profile name already taken. Please choose a different one.'
       } else if (data.message) {
         errorMessage.value = data.message

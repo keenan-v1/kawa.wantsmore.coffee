@@ -7,9 +7,9 @@ import { db } from '../db/index.js'
 async function checkIfDatabaseNeedsSeeding(): Promise<boolean> {
   try {
     // Check if commodities table has data
-    const result = await db.execute(`
+    const result = (await db.execute(`
       SELECT COUNT(*) as count FROM commodities LIMIT 1
-    `) as any
+    `)) as any
 
     const count = parseInt(result.rows?.[0]?.count || '0')
     return count === 0

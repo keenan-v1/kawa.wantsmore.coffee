@@ -8,7 +8,7 @@ databases:
     engine: PG
     name: dev-db
     production: true
-    version: "17"
+    version: '17'
 domains:
   - domain: dev.kawakawa.cx
     type: PRIMARY
@@ -28,8 +28,7 @@ ingress:
         path:
           prefix: /
 jobs:
-  - build_command:
-      corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
       install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
       build
     environment_slug: node-js
@@ -47,8 +46,7 @@ jobs:
     name: db-migrate
     run_command: cd apps/api && pnpm db:migrate
     source_dir: /
-  - build_command:
-      corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
       install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
       build
     environment_slug: node-js
@@ -69,8 +67,7 @@ jobs:
 name: kawa-market
 region: nyc
 services:
-  - build_command:
-      corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
       install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
       build
     environment_slug: node-js
@@ -80,7 +77,7 @@ services:
         value: ${dev-db.DATABASE_URL}
       - key: PORT
         scope: RUN_TIME
-        value: "3000"
+        value: '3000'
     github:
       branch: main
       deploy_on_push: true
@@ -92,8 +89,7 @@ services:
     run_command: node apps/api/dist/index.js
     source_dir: /
 static_sites:
-  - build_command:
-      corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
       install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/web
       build
     environment_slug: node-js

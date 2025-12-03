@@ -73,3 +73,27 @@ export interface SellOrderWithAvailability extends SellOrder {
   fioQuantity: number // Raw FIO inventory quantity
   availableQuantity: number // Calculated based on limitMode
 }
+
+// User buy order (request to buy)
+export interface BuyOrder {
+  id: number
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType // internal = members only, partner = trade partners
+}
+
+// Market listing (sell order visible in market)
+export interface MarketListing {
+  id: number
+  sellerName: string
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  orderType: OrderType
+  availableQuantity: number
+  isOwn: boolean // true if this is the current user's listing
+}

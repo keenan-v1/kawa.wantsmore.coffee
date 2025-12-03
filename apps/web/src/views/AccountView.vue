@@ -136,15 +136,15 @@ import { api } from '../services/api'
 
 const userStore = useUserStore()
 const currencies = CURRENCIES
-const locationDisplayModes: { title: string, value: LocationDisplayMode }[] = [
+const locationDisplayModes: { title: string; value: LocationDisplayMode }[] = [
   { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
   { title: 'Natural IDs Only (e.g., BEN, UV-351a)', value: 'natural-ids-only' },
-  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' }
+  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' },
 ]
-const commodityDisplayModes: { title: string, value: CommodityDisplayMode }[] = [
+const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = [
   { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
   { title: 'Name Only (e.g., Basic Rations)', value: 'name-only' },
-  { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' }
+  { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
 ]
 
 const account = ref<{
@@ -164,7 +164,7 @@ const account = ref<{
   preferredCurrency: 'CIS',
   locationDisplayMode: 'both',
   commodityDisplayMode: 'both',
-  roles: []
+  roles: [],
 })
 
 // Separate ref for FIO API key (write-only, never pre-populated)
@@ -178,7 +178,7 @@ const roleNames = computed(() => {
 const passwordForm = ref({
   current: '',
   new: '',
-  confirm: ''
+  confirm: '',
 })
 
 const loading = ref(false)
@@ -187,14 +187,14 @@ const changingPassword = ref(false)
 const snackbar = ref({
   show: false,
   message: '',
-  color: 'success'
+  color: 'success',
 })
 
 const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
   snackbar.value = {
     show: true,
     message,
-    color
+    color,
   }
 }
 
@@ -205,7 +205,7 @@ onMounted(async () => {
     account.value = {
       ...profile,
       locationDisplayMode: profile.locationDisplayMode || 'both',
-      commodityDisplayMode: profile.commodityDisplayMode || 'both'
+      commodityDisplayMode: profile.commodityDisplayMode || 'both',
     }
     userStore.setUser(profile)
   } catch (error) {
@@ -216,7 +216,7 @@ onMounted(async () => {
       account.value = {
         ...cachedUser,
         locationDisplayMode: cachedUser.locationDisplayMode || 'both',
-        commodityDisplayMode: cachedUser.commodityDisplayMode || 'both'
+        commodityDisplayMode: cachedUser.commodityDisplayMode || 'both',
       }
     }
     showSnackbar('Failed to load profile from server', 'error')
@@ -240,7 +240,7 @@ const saveProfile = async () => {
       fioUsername: account.value.fioUsername || '',
       preferredCurrency: account.value.preferredCurrency,
       locationDisplayMode: account.value.locationDisplayMode,
-      commodityDisplayMode: account.value.commodityDisplayMode
+      commodityDisplayMode: account.value.commodityDisplayMode,
     }
 
     // Only include fioApiKey if user entered a new one
@@ -281,7 +281,7 @@ const changePassword = async () => {
     changingPassword.value = true
     await api.account.changePassword({
       currentPassword: passwordForm.value.current,
-      newPassword: passwordForm.value.new
+      newPassword: passwordForm.value.new,
     })
 
     showSnackbar('Password updated successfully')

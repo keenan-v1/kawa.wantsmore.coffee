@@ -80,7 +80,10 @@ describe('permissionService', () => {
         { permissionId: 'orders.post_internal', allowed: true },
       ])
 
-      const result = await hasAllPermissions(['member'], ['orders.view_internal', 'orders.post_internal'])
+      const result = await hasAllPermissions(
+        ['member'],
+        ['orders.view_internal', 'orders.post_internal']
+      )
 
       expect(result).toBe(true)
     })
@@ -90,7 +93,10 @@ describe('permissionService', () => {
         { permissionId: 'orders.view_internal', allowed: true },
       ])
 
-      const result = await hasAllPermissions(['member'], ['orders.view_internal', 'orders.post_external'])
+      const result = await hasAllPermissions(
+        ['member'],
+        ['orders.view_internal', 'orders.post_partner']
+      )
 
       expect(result).toBe(false)
     })
@@ -102,7 +108,10 @@ describe('permissionService', () => {
         { permissionId: 'orders.view_internal', allowed: true },
       ])
 
-      const result = await hasAnyPermission(['applicant'], ['orders.view_internal', 'orders.post_internal'])
+      const result = await hasAnyPermission(
+        ['applicant'],
+        ['orders.view_internal', 'orders.post_internal']
+      )
 
       expect(result).toBe(true)
     })
@@ -110,7 +119,10 @@ describe('permissionService', () => {
     it('should return false when role has none of the permissions', async () => {
       mockSelect.where.mockResolvedValueOnce([])
 
-      const result = await hasAnyPermission(['applicant'], ['admin.manage_users', 'admin.manage_roles'])
+      const result = await hasAnyPermission(
+        ['applicant'],
+        ['admin.manage_users', 'admin.manage_roles']
+      )
 
       expect(result).toBe(false)
     })
@@ -121,14 +133,14 @@ describe('permissionService', () => {
       mockSelect.where.mockResolvedValueOnce([
         // member role grants view_internal
         { permissionId: 'orders.view_internal', allowed: true },
-        // lead role grants post_external
-        { permissionId: 'orders.post_external', allowed: true },
+        // lead role grants post_partner
+        { permissionId: 'orders.post_partner', allowed: true },
       ])
 
       const permissions = await getPermissions(['member', 'lead'])
 
       expect(permissions.get('orders.view_internal')).toBe(true)
-      expect(permissions.get('orders.post_external')).toBe(true)
+      expect(permissions.get('orders.post_partner')).toBe(true)
     })
 
     it('should deny permission if any role explicitly denies it', async () => {
@@ -147,9 +159,7 @@ describe('permissionService', () => {
 
   describe('caching', () => {
     it('should cache permissions and not hit database on second call', async () => {
-      mockSelect.where.mockResolvedValue([
-        { permissionId: 'orders.view_internal', allowed: true },
-      ])
+      mockSelect.where.mockResolvedValue([{ permissionId: 'orders.view_internal', allowed: true }])
 
       await hasPermission(['member'], 'orders.view_internal')
       await hasPermission(['member'], 'orders.view_internal')
@@ -158,9 +168,7 @@ describe('permissionService', () => {
     })
 
     it('should use different cache entries for different role combinations', async () => {
-      mockSelect.where.mockResolvedValue([
-        { permissionId: 'orders.view_internal', allowed: true },
-      ])
+      mockSelect.where.mockResolvedValue([{ permissionId: 'orders.view_internal', allowed: true }])
 
       await hasPermission(['member'], 'orders.view_internal')
       await hasPermission(['lead'], 'orders.view_internal')
@@ -169,9 +177,7 @@ describe('permissionService', () => {
     })
 
     it('should use same cache for same roles in different order', async () => {
-      mockSelect.where.mockResolvedValue([
-        { permissionId: 'orders.view_internal', allowed: true },
-      ])
+      mockSelect.where.mockResolvedValue([{ permissionId: 'orders.view_internal', allowed: true }])
 
       await hasPermission(['member', 'lead'], 'orders.view_internal')
       await hasPermission(['lead', 'member'], 'orders.view_internal')
@@ -180,9 +186,7 @@ describe('permissionService', () => {
     })
 
     it('should clear cache when invalidatePermissionCache is called', async () => {
-      mockSelect.where.mockResolvedValue([
-        { permissionId: 'orders.view_internal', allowed: true },
-      ])
+      mockSelect.where.mockResolvedValue([{ permissionId: 'orders.view_internal', allowed: true }])
 
       await hasPermission(['member'], 'orders.view_internal')
       invalidatePermissionCache()

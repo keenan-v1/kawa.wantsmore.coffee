@@ -70,7 +70,7 @@ export class AccountController extends Controller {
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId))
 
-    const rolesArray: Role[] = userRolesData.map((r) => ({
+    const rolesArray: Role[] = userRolesData.map(r => ({
       id: r.roleId,
       name: r.roleName,
       color: r.roleColor,
@@ -101,7 +101,7 @@ export class AccountController extends Controller {
         .update(users)
         .set({
           displayName: body.displayName,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         })
         .where(eq(users.id, userId))
     }
@@ -110,16 +110,16 @@ export class AccountController extends Controller {
     const settingsUpdate: Partial<typeof userSettings.$inferInsert> = {}
     if (body.fioUsername !== undefined) settingsUpdate.fioUsername = body.fioUsername
     if (body.fioApiKey !== undefined) settingsUpdate.fioApiKey = body.fioApiKey
-    if (body.preferredCurrency !== undefined) settingsUpdate.preferredCurrency = body.preferredCurrency
-    if (body.locationDisplayMode !== undefined) settingsUpdate.locationDisplayMode = body.locationDisplayMode
-    if (body.commodityDisplayMode !== undefined) settingsUpdate.commodityDisplayMode = body.commodityDisplayMode
+    if (body.preferredCurrency !== undefined)
+      settingsUpdate.preferredCurrency = body.preferredCurrency
+    if (body.locationDisplayMode !== undefined)
+      settingsUpdate.locationDisplayMode = body.locationDisplayMode
+    if (body.commodityDisplayMode !== undefined)
+      settingsUpdate.commodityDisplayMode = body.commodityDisplayMode
 
     if (Object.keys(settingsUpdate).length > 0) {
       settingsUpdate.updatedAt = new Date()
-      await db
-        .update(userSettings)
-        .set(settingsUpdate)
-        .where(eq(userSettings.userId, userId))
+      await db.update(userSettings).set(settingsUpdate).where(eq(userSettings.userId, userId))
     }
 
     // Return updated profile
@@ -157,7 +157,7 @@ export class AccountController extends Controller {
       .update(users)
       .set({
         passwordHash: newPasswordHash,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
 

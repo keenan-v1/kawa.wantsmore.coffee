@@ -136,13 +136,7 @@
             <p class="text-body-2 text-medium-emphasis">
               Create sell orders from your inventory to list items for sale
             </p>
-            <v-btn
-              color="primary"
-              class="mt-4"
-              to="/inventory"
-            >
-              Go to Inventory
-            </v-btn>
+            <v-btn color="primary" class="mt-4" to="/inventory"> Go to Inventory </v-btn>
           </div>
         </template>
       </v-data-table>
@@ -179,11 +173,7 @@
                 />
               </v-col>
               <v-col cols="4">
-                <v-select
-                  v-model="editForm.currency"
-                  :items="currencies"
-                  label="Currency"
-                />
+                <v-select v-model="editForm.currency" :items="currencies" label="Currency" />
               </v-col>
             </v-row>
 
@@ -221,9 +211,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="editDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveEdit">
-            Save Changes
-          </v-btn>
+          <v-btn color="primary" :loading="saving" @click="saveEdit"> Save Changes </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -234,15 +222,16 @@
         <v-card-title>Delete Order</v-card-title>
         <v-card-text>
           Are you sure you want to delete the sell order for
-          <strong>{{ deletingOrder ? getCommodityDisplay(deletingOrder.commodityTicker) : '' }}</strong>
-          at <strong>{{ deletingOrder ? getLocationDisplay(deletingOrder.locationId) : '' }}</strong>?
+          <strong>{{
+            deletingOrder ? getCommodityDisplay(deletingOrder.commodityTicker) : ''
+          }}</strong>
+          at <strong>{{ deletingOrder ? getLocationDisplay(deletingOrder.locationId) : '' }}</strong
+          >?
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteOrder">
-            Delete
-          </v-btn>
+          <v-btn color="error" :loading="deleting" @click="deleteOrder"> Delete </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -324,9 +313,10 @@ const showSnackbar = (message: string, color: 'success' | 'error' = 'success') =
 const filteredOrders = computed(() => {
   if (!search.value) return orders.value
   const searchLower = search.value.toLowerCase()
-  return orders.value.filter(order =>
-    order.commodityTicker.toLowerCase().includes(searchLower) ||
-    order.locationId.toLowerCase().includes(searchLower)
+  return orders.value.filter(
+    order =>
+      order.commodityTicker.toLowerCase().includes(searchLower) ||
+      order.locationId.toLowerCase().includes(searchLower)
   )
 })
 
@@ -336,9 +326,12 @@ const formatPrice = (price: number): string => {
 
 const getLimitModeLabel = (mode: SellOrderLimitMode): string => {
   switch (mode) {
-    case 'max_sell': return 'Max sell'
-    case 'reserve': return 'Reserve'
-    default: return ''
+    case 'max_sell':
+      return 'Max sell'
+    case 'reserve':
+      return 'Reserve'
+    default:
+      return ''
   }
 }
 

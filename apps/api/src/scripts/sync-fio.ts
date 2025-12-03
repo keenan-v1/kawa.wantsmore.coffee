@@ -7,7 +7,7 @@ import { syncStations } from '../services/fio/sync-stations.js'
 import postgres from 'postgres'
 
 const SYNC_TYPES = ['commodities', 'locations', 'stations', 'all'] as const
-type SyncType = typeof SYNC_TYPES[number]
+type SyncType = (typeof SYNC_TYPES)[number]
 
 async function main() {
   const args = process.argv.slice(2)

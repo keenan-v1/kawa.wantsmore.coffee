@@ -58,11 +58,7 @@ export class AuthController extends Controller {
   @Response(403, 'Account is inactive')
   public async login(@Body() body: LoginRequest): Promise<AuthResponse> {
     // Find user by username
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, body.username))
-      .limit(1)
+    const [user] = await db.select().from(users).where(eq(users.username, body.username)).limit(1)
 
     if (!user) {
       throw Unauthorized('Invalid username or password')
@@ -156,23 +152,23 @@ export class AuthController extends Controller {
       userId: newUser.id,
     })
 
-    // Assign default 'applicant' role
+    // Assign default 'unverified' role - must be approved before gaining access
     await db.insert(userRoles).values({
       userId: newUser.id,
-      roleId: 'applicant',
+      roleId: 'unverified',
     })
 
-    // Get the applicant role for the response
-    const [applicantRole] = await db
+    // Get the unverified role for the response
+    const [unverifiedRole] = await db
       .select({ id: roles.id, name: roles.name, color: roles.color })
       .from(roles)
-      .where(eq(roles.id, 'applicant'))
+      .where(eq(roles.id, 'unverified'))
 
     // Generate JWT token
     const token = generateToken({
       userId: newUser.id,
       username: newUser.username,
-      roles: ['applicant'],
+      roles: ['unverified'],
     })
 
     this.setStatus(201)
@@ -183,7 +179,7 @@ export class AuthController extends Controller {
         username: newUser.username,
         displayName: newUser.displayName,
         email: newUser.email || undefined,
-        roles: [{ id: applicantRole.id, name: applicantRole.name, color: applicantRole.color }],
+        roles: [{ id: unverifiedRole.id, name: unverifiedRole.name, color: unverifiedRole.color }],
       },
     }
   }
@@ -191,7 +187,9 @@ export class AuthController extends Controller {
   @Post('request-password-reset')
   @SuccessResponse('200', 'Password reset email sent')
   @Response(404, 'User not found')
-  public async requestPasswordReset(@Body() body: RequestPasswordResetRequest): Promise<SuccessMessage> {
+  public async requestPasswordReset(
+    @Body() body: RequestPasswordResetRequest
+  ): Promise<SuccessMessage> {
     // Find user by username or email
     const [user] = await db
       .select()
@@ -242,12 +240,7 @@ export class AuthController extends Controller {
     const [resetToken] = await db
       .select()
       .from(passwordResetTokens)
-      .where(
-        and(
-          eq(passwordResetTokens.token, body.token),
-          eq(passwordResetTokens.used, false)
-        )
-      )
+      .where(and(eq(passwordResetTokens.token, body.token), eq(passwordResetTokens.used, false)))
       .limit(1)
 
     if (!resetToken) {

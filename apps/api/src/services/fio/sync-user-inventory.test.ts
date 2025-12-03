@@ -91,7 +91,12 @@ describe('syncUserInventory', () => {
               PlayerName: 'TestUser',
               StorageType: 'WAREHOUSE_STORE',
               Items: [
-                { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                {
+                  MaterialTicker: 'H2O',
+                  MaterialName: 'Water',
+                  MaterialCategoryName: 'consumables',
+                  Units: 100,
+                },
               ],
             },
           ],
@@ -111,7 +116,12 @@ describe('syncUserInventory', () => {
                 PlayerName: 'TestUser',
                 StorageType: 'STORE',
                 Items: [
-                  { MaterialTicker: 'RAT', MaterialName: 'Rations', MaterialCategoryName: 'consumables', Units: 50 },
+                  {
+                    MaterialTicker: 'RAT',
+                    MaterialName: 'Rations',
+                    MaterialCategoryName: 'consumables',
+                    Units: 50,
+                  },
                 ],
                 LastUpdated: '2025-12-03T00:00:00.000Z',
               },
@@ -128,9 +138,7 @@ describe('syncUserInventory', () => {
     mockGetGroupHub.mockResolvedValue(groupHubResponse)
 
     // Mock storage inserts - return IDs sequentially
-    mockInsertReturning
-      .mockResolvedValueOnce([{ id: 1 }])
-      .mockResolvedValueOnce([{ id: 2 }])
+    mockInsertReturning.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce([{ id: 2 }])
 
     const result = await syncUserInventory(userId, fioApiKey, fioUsername)
 
@@ -167,7 +175,12 @@ describe('syncUserInventory', () => {
                 PlayerName: 'TestUser',
                 StorageType: 'STORE',
                 Items: [
-                  { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                  {
+                    MaterialTicker: 'H2O',
+                    MaterialName: 'Water',
+                    MaterialCategoryName: 'consumables',
+                    Units: 100,
+                  },
                 ],
                 LastUpdated: '2025-12-03T00:00:00.000Z',
               },
@@ -209,7 +222,12 @@ describe('syncUserInventory', () => {
               PlayerName: 'TestUser',
               StorageType: 'WAREHOUSE_STORE',
               Items: [
-                { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                {
+                  MaterialTicker: 'H2O',
+                  MaterialName: 'Water',
+                  MaterialCategoryName: 'consumables',
+                  Units: 100,
+                },
               ],
             },
           ],
@@ -252,7 +270,12 @@ describe('syncUserInventory', () => {
               StorageType: 'WAREHOUSE_STORE',
               Items: [
                 { MaterialTicker: null, MaterialName: null, MaterialCategoryName: null, Units: 0 },
-                { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                {
+                  MaterialTicker: 'H2O',
+                  MaterialName: 'Water',
+                  MaterialCategoryName: 'consumables',
+                  Units: 100,
+                },
                 { MaterialTicker: null, MaterialName: null, MaterialCategoryName: null, Units: 0 },
               ],
             },
@@ -340,7 +363,12 @@ describe('syncUserInventory', () => {
                 PlayerName: 'TestUser',
                 StorageType: 'STORE',
                 Items: [
-                  { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                  {
+                    MaterialTicker: 'H2O',
+                    MaterialName: 'Water',
+                    MaterialCategoryName: 'consumables',
+                    Units: 100,
+                  },
                 ],
                 LastUpdated: '2025-12-03T00:00:00.000Z',
               },
@@ -348,7 +376,12 @@ describe('syncUserInventory', () => {
                 PlayerName: 'TestUser',
                 StorageType: 'WAREHOUSE_STORE',
                 Items: [
-                  { MaterialTicker: 'RAT', MaterialName: 'Rations', MaterialCategoryName: 'consumables', Units: 50 },
+                  {
+                    MaterialTicker: 'RAT',
+                    MaterialName: 'Rations',
+                    MaterialCategoryName: 'consumables',
+                    Units: 50,
+                  },
                 ],
                 LastUpdated: '2025-12-02T00:00:00.000Z',
               },
@@ -364,9 +397,7 @@ describe('syncUserInventory', () => {
     mockGetGroupHub.mockResolvedValue(groupHubResponse)
 
     // Mock storage inserts
-    mockInsertReturning
-      .mockResolvedValueOnce([{ id: 1 }])
-      .mockResolvedValueOnce([{ id: 2 }])
+    mockInsertReturning.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce([{ id: 2 }])
 
     const result = await syncUserInventory(userId, fioApiKey, fioUsername)
 
@@ -394,7 +425,12 @@ describe('syncUserInventory', () => {
               PlayerName: 'TESTUSER', // Uppercase
               StorageType: 'WAREHOUSE_STORE',
               Items: [
-                { MaterialTicker: 'H2O', MaterialName: 'Water', MaterialCategoryName: 'consumables', Units: 100 },
+                {
+                  MaterialTicker: 'H2O',
+                  MaterialName: 'Water',
+                  MaterialCategoryName: 'consumables',
+                  Units: 100,
+                },
               ],
             },
           ],
@@ -425,9 +461,7 @@ describe('syncUserInventory', () => {
   })
 
   it('should call getGroupHub with correct parameters', async () => {
-    mockSelectFrom
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
+    mockSelectFrom.mockResolvedValueOnce([]).mockResolvedValueOnce([])
 
     mockGetGroupHub.mockResolvedValue({
       GroupName: null,

@@ -117,12 +117,8 @@
           "name": "demands_user_id_users_id_fk",
           "tableFrom": "demands",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -130,12 +126,8 @@
           "name": "demands_commodity_ticker_commodities_ticker_fk",
           "tableFrom": "demands",
           "tableTo": "commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -143,12 +135,8 @@
           "name": "demands_delivery_location_id_locations_id_fk",
           "tableFrom": "demands",
           "tableTo": "locations",
-          "columnsFrom": [
-            "delivery_location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["delivery_location_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -227,12 +215,8 @@
           "name": "inventory_user_id_users_id_fk",
           "tableFrom": "inventory",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -240,12 +224,8 @@
           "name": "inventory_commodity_ticker_commodities_ticker_fk",
           "tableFrom": "inventory",
           "tableTo": "commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -253,12 +233,8 @@
           "name": "inventory_location_id_locations_id_fk",
           "tableFrom": "inventory",
           "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -395,12 +371,8 @@
           "name": "market_listings_user_id_users_id_fk",
           "tableFrom": "market_listings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -408,12 +380,8 @@
           "name": "market_listings_commodity_ticker_commodities_ticker_fk",
           "tableFrom": "market_listings",
           "tableTo": "commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -421,12 +389,8 @@
           "name": "market_listings_location_id_locations_id_fk",
           "tableFrom": "market_listings",
           "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -486,12 +450,8 @@
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -501,9 +461,7 @@
         "password_reset_tokens_token_unique": {
           "name": "password_reset_tokens_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -585,12 +543,8 @@
           "name": "user_roles_user_id_users_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -598,12 +552,8 @@
           "name": "user_roles_role_id_roles_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -687,12 +637,8 @@
           "name": "user_settings_user_id_users_id_fk",
           "tableFrom": "user_settings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -702,9 +648,7 @@
         "user_settings_user_id_unique": {
           "name": "user_settings_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         }
       },
       "policies": {},
@@ -774,9 +718,7 @@
         "users_username_unique": {
           "name": "users_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},
@@ -788,38 +730,22 @@
     "public.commodity_display_mode": {
       "name": "commodity_display_mode",
       "schema": "public",
-      "values": [
-        "ticker-only",
-        "name-only",
-        "both"
-      ]
+      "values": ["ticker-only", "name-only", "both"]
     },
     "public.currency": {
       "name": "currency",
       "schema": "public",
-      "values": [
-        "ICA",
-        "CIS",
-        "AIC",
-        "NCC"
-      ]
+      "values": ["ICA", "CIS", "AIC", "NCC"]
     },
     "public.location_display_mode": {
       "name": "location_display_mode",
       "schema": "public",
-      "values": [
-        "names-only",
-        "natural-ids-only",
-        "both"
-      ]
+      "values": ["names-only", "natural-ids-only", "both"]
     },
     "public.location_type": {
       "name": "location_type",
       "schema": "public",
-      "values": [
-        "Station",
-        "Planet"
-      ]
+      "values": ["Station", "Planet"]
     }
   },
   "schemas": {},

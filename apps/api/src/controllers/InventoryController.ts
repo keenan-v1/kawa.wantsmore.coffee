@@ -55,9 +55,7 @@ export class InventoryController extends Controller {
 
   @Post()
   @SuccessResponse('201', 'Created')
-  public async createInventoryItem(
-    @Body() body: CreateInventoryRequest
-  ): Promise<InventoryItem> {
+  public async createInventoryItem(@Body() body: CreateInventoryRequest): Promise<InventoryItem> {
     this.setStatus(201)
     // TODO: Implement database insert
     return {

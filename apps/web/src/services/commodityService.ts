@@ -68,7 +68,7 @@ export const commodityService = {
       .sort((a, b) => a.ticker.localeCompare(b.ticker))
       .map(c => ({
         title: commodityService.getCommodityDisplay(c.ticker, mode),
-        value: c.ticker
+        value: c.ticker,
       }))
   },
 
@@ -93,5 +93,5 @@ export const commodityService = {
   // Clear cache (useful for refresh)
   clearCache: (): void => {
     cachedCommodities = null
-  }
+  },
 }

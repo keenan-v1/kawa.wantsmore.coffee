@@ -1,15 +1,38 @@
 // Database schema using Drizzle ORM
 // Based on KawaKawa CX types and mock data
 
-import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum, boolean, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  serial,
+  text,
+  integer,
+  decimal,
+  timestamp,
+  varchar,
+  pgEnum,
+  boolean,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Enums
 export const currencyEnum = pgEnum('currency', ['ICA', 'CIS', 'AIC', 'NCC'])
 export const locationTypeEnum = pgEnum('location_type', ['Station', 'Planet'])
-export const locationDisplayModeEnum = pgEnum('location_display_mode', ['names-only', 'natural-ids-only', 'both'])
-export const commodityDisplayModeEnum = pgEnum('commodity_display_mode', ['ticker-only', 'name-only', 'both'])
-export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', ['none', 'max_sell', 'reserve'])
+export const locationDisplayModeEnum = pgEnum('location_display_mode', [
+  'names-only',
+  'natural-ids-only',
+  'both',
+])
+export const commodityDisplayModeEnum = pgEnum('commodity_display_mode', [
+  'ticker-only',
+  'name-only',
+  'both',
+])
+export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', [
+  'none',
+  'max_sell',
+  'reserve',
+])
 export const orderTypeEnum = pgEnum('order_type', ['internal', 'partner']) // Shared enum for sell/buy orders
 
 // ==================== ROLES ====================
@@ -23,7 +46,7 @@ export const roles = pgTable('roles', {
 
 // ==================== PERMISSIONS ====================
 export const permissions = pgTable('permissions', {
-  id: varchar('id', { length: 100 }).primaryKey(), // 'orders.view_internal', 'orders.post_external', etc.
+  id: varchar('id', { length: 100 }).primaryKey(), // 'orders.view_internal', 'orders.post_partner', etc.
   name: varchar('name', { length: 100 }).notNull(), // Display name
   description: text('description'), // Explanation of what this permission does
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -32,8 +55,12 @@ export const permissions = pgTable('permissions', {
 // ==================== ROLE PERMISSIONS (Many-to-Many) ====================
 export const rolePermissions = pgTable('role_permissions', {
   id: serial('id').primaryKey(),
-  roleId: varchar('role_id', { length: 50 }).notNull().references(() => roles.id, { onDelete: 'cascade' }),
-  permissionId: varchar('permission_id', { length: 100 }).notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  roleId: varchar('role_id', { length: 50 })
+    .notNull()
+    .references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: varchar('permission_id', { length: 100 })
+    .notNull()
+    .references(() => permissions.id, { onDelete: 'cascade' }),
   allowed: boolean('allowed').notNull().default(true), // true = granted, false = explicitly denied
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -54,12 +81,17 @@ export const users = pgTable('users', {
 // ==================== USER SETTINGS ====================
 export const userSettings = pgTable('user_settings', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  userId: integer('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
   fioUsername: varchar('fio_username', { length: 100 }), // FIO game username
   fioApiKey: text('fio_api_key'), // FIO API key (encrypted)
   preferredCurrency: currencyEnum('preferred_currency').notNull().default('CIS'),
   locationDisplayMode: locationDisplayModeEnum('location_display_mode').notNull().default('both'),
-  commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode').notNull().default('both'),
+  commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode')
+    .notNull()
+    .default('both'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -67,7 +99,9 @@ export const userSettings = pgTable('user_settings', {
 // ==================== PASSWORD RESET TOKENS ====================
 export const passwordResetTokens = pgTable('password_reset_tokens', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
   token: varchar('token', { length: 255 }).notNull().unique(), // Unique token
   expiresAt: timestamp('expires_at').notNull(), // Expiration timestamp
   used: boolean('used').notNull().default(false), // Whether token has been used
@@ -77,8 +111,12 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
 // ==================== USER ROLES (Many-to-Many) ====================
 export const userRoles = pgTable('user_roles', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  roleId: varchar('role_id', { length: 50 }).notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  roleId: varchar('role_id', { length: 50 })
+    .notNull()
+    .references(() => roles.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
@@ -108,48 +146,101 @@ export const fioLocations = pgTable('fio_locations', {
 })
 
 // ==================== FIO USER STORAGE (Storage locations from FIO API) ====================
-export const fioUserStorage = pgTable('fio_user_storage', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  storageId: varchar('storage_id', { length: 40 }).notNull(), // Generated as grouphub-{locationId}-{type}
-  locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId),
-  type: varchar('type', { length: 30 }).notNull(), // 'STORE', 'WAREHOUSE_STORE', 'SHIP_STORE', etc.
-  fioUploadedAt: timestamp('fio_uploaded_at'), // When FIO last got data from game (from LastUpdated)
-  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(), // When we last synced from FIO
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-  uniqueUserStorage: uniqueIndex('fio_user_storage_user_storage_idx').on(table.userId, table.storageId),
-}))
+export const fioUserStorage = pgTable(
+  'fio_user_storage',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    storageId: varchar('storage_id', { length: 40 }).notNull(), // Generated as grouphub-{locationId}-{type}
+    locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId),
+    type: varchar('type', { length: 30 }).notNull(), // 'STORE', 'WAREHOUSE_STORE', 'SHIP_STORE', etc.
+    fioUploadedAt: timestamp('fio_uploaded_at'), // When FIO last got data from game (from LastUpdated)
+    lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(), // When we last synced from FIO
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueUserStorage: uniqueIndex('fio_user_storage_user_storage_idx').on(
+      table.userId,
+      table.storageId
+    ),
+  })
+)
 
 // ==================== FIO INVENTORY (Items in storage from FIO API) ====================
 export const fioInventory = pgTable('fio_inventory', {
   id: serial('id').primaryKey(),
-  userStorageId: integer('user_storage_id').notNull().references(() => fioUserStorage.id, { onDelete: 'cascade' }),
-  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => fioCommodities.ticker),
+  userStorageId: integer('user_storage_id')
+    .notNull()
+    .references(() => fioUserStorage.id, { onDelete: 'cascade' }),
+  commodityTicker: varchar('commodity_ticker', { length: 10 })
+    .notNull()
+    .references(() => fioCommodities.ticker),
   quantity: integer('quantity').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 // ==================== SELL ORDERS ====================
-export const sellOrders = pgTable('sell_orders', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => fioCommodities.ticker),
-  locationId: varchar('location_id', { length: 20 }).notNull().references(() => fioLocations.naturalId),
-  price: decimal('price', { precision: 12, scale: 2 }).notNull(),
-  currency: currencyEnum('currency').notNull(),
-  orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
-  limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
-  limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-  // Unique constraint: one sell order per commodity/location/orderType/currency combination per user
-  uniqueUserCommodityLocationTypeCurrency: uniqueIndex('sell_orders_user_commodity_location_type_currency_idx')
-    .on(table.userId, table.commodityTicker, table.locationId, table.orderType, table.currency),
-}))
+export const sellOrders = pgTable(
+  'sell_orders',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    commodityTicker: varchar('commodity_ticker', { length: 10 })
+      .notNull()
+      .references(() => fioCommodities.ticker),
+    locationId: varchar('location_id', { length: 20 })
+      .notNull()
+      .references(() => fioLocations.naturalId),
+    price: decimal('price', { precision: 12, scale: 2 }).notNull(),
+    currency: currencyEnum('currency').notNull(),
+    orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
+    limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
+    limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Unique constraint: one sell order per commodity/location/orderType/currency combination per user
+    uniqueUserCommodityLocationTypeCurrency: uniqueIndex(
+      'sell_orders_user_commodity_location_type_currency_idx'
+    ).on(table.userId, table.commodityTicker, table.locationId, table.orderType, table.currency),
+  })
+)
+
+// ==================== BUY ORDERS ====================
+export const buyOrders = pgTable(
+  'buy_orders',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    commodityTicker: varchar('commodity_ticker', { length: 10 })
+      .notNull()
+      .references(() => fioCommodities.ticker),
+    locationId: varchar('location_id', { length: 20 })
+      .notNull()
+      .references(() => fioLocations.naturalId),
+    quantity: integer('quantity').notNull(),
+    price: decimal('price', { precision: 12, scale: 2 }).notNull(),
+    currency: currencyEnum('currency').notNull(),
+    orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Unique constraint: one buy order per commodity/location/orderType/currency combination per user
+    uniqueUserCommodityLocationTypeCurrency: uniqueIndex(
+      'buy_orders_user_commodity_location_type_currency_idx'
+    ).on(table.userId, table.commodityTicker, table.locationId, table.orderType, table.currency),
+  })
+)
 
 // ==================== RELATIONS ====================
 
@@ -162,6 +253,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   passwordResetTokens: many(passwordResetTokens),
   fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
+  buyOrders: many(buyOrders),
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -257,3 +349,17 @@ export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
   }),
 }))
 
+export const buyOrdersRelations = relations(buyOrders, ({ one }) => ({
+  user: one(users, {
+    fields: [buyOrders.userId],
+    references: [users.id],
+  }),
+  commodity: one(fioCommodities, {
+    fields: [buyOrders.commodityTicker],
+    references: [fioCommodities.ticker],
+  }),
+  location: one(fioLocations, {
+    fields: [buyOrders.locationId],
+    references: [fioLocations.naturalId],
+  }),
+}))

@@ -121,7 +121,10 @@ export async function hasPermission(roleIds: string[], permissionId: string): Pr
 /**
  * Check if a user with given roles has all of the specified permissions
  */
-export async function hasAllPermissions(roleIds: string[], permissionIds: string[]): Promise<boolean> {
+export async function hasAllPermissions(
+  roleIds: string[],
+  permissionIds: string[]
+): Promise<boolean> {
   const permissions = await getPermissions(roleIds)
   return permissionIds.every(id => permissions.get(id) === true)
 }
@@ -129,7 +132,10 @@ export async function hasAllPermissions(roleIds: string[], permissionIds: string
 /**
  * Check if a user with given roles has any of the specified permissions
  */
-export async function hasAnyPermission(roleIds: string[], permissionIds: string[]): Promise<boolean> {
+export async function hasAnyPermission(
+  roleIds: string[],
+  permissionIds: string[]
+): Promise<boolean> {
   const permissions = await getPermissions(roleIds)
   return permissionIds.some(id => permissions.get(id) === true)
 }

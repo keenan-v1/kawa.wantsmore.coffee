@@ -5,6 +5,7 @@ This document describes the integration with the FIO (FNAR Industries) API for P
 ## Overview
 
 FIO provides public access to game data including:
+
 - Materials/Commodities
 - Planets and Systems
 - Market prices and orders
@@ -27,13 +28,17 @@ apps/api/src/services/fio/
 ## Data Sync
 
 ### Commodities (Materials)
+
 Syncs from `/csv/materials` endpoint to `commodities` table:
+
 - `ticker` - Material ticker (H2O, FE, etc.)
 - `name` - Material name (Water, Iron, etc.)
 - `category` - Category (Agricultural, Mineral, etc.)
 
 ### Locations (Planets)
+
 Syncs from `/csv/planets` and `/csv/systems` endpoints to `locations` table:
+
 - `id` - Planet natural ID (UV-351a, KW-689c, etc.)
 - `name` - Planet name (Benton, Katoa, etc.)
 - `type` - Station or Planet (auto-detected)
@@ -89,6 +94,7 @@ const locationsResult = await syncLocations()
 ## Error Handling
 
 All sync operations return a `SyncResult`:
+
 ```typescript
 {
   success: boolean

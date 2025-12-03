@@ -32,7 +32,7 @@ export class FioClient {
     url.searchParams.set('include_header', includeHeader.toString())
 
     const headers: Record<string, string> = {
-      'Accept': 'text/csv',
+      Accept: 'text/csv',
     }
 
     if (this.apiKey) {
@@ -74,7 +74,7 @@ export class FioClient {
     }
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
+      Accept: 'application/json',
     }
 
     if (this.apiKey) {
@@ -92,7 +92,7 @@ export class FioClient {
         )
       }
 
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof FioApiError) {
         throw error
@@ -142,7 +142,7 @@ export class FioClient {
     url.searchParams.set('include_header', includeHeader.toString())
 
     const headers: Record<string, string> = {
-      'Accept': 'text/csv',
+      Accept: 'text/csv',
     }
 
     try {
@@ -178,7 +178,7 @@ export class FioClient {
     url.searchParams.set('include_header', includeHeader.toString())
 
     const headers: Record<string, string> = {
-      'Accept': 'text/csv',
+      Accept: 'text/csv',
     }
 
     try {
@@ -212,8 +212,8 @@ export class FioClient {
     const url = new URL(`${this.baseUrl}/storage/${username}`)
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
-      'Authorization': apiKey,
+      Accept: 'application/json',
+      Authorization: apiKey,
     }
 
     try {
@@ -227,7 +227,7 @@ export class FioClient {
         )
       }
 
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof FioApiError) {
         throw error
@@ -244,12 +244,16 @@ export class FioClient {
    * Returns storage data for that location, or null if not found (404)
    * Requires API key authentication via Authorization header
    */
-  async getUserStorageByLocation<T>(apiKey: string, username: string, storageDescription: string): Promise<T | null> {
+  async getUserStorageByLocation<T>(
+    apiKey: string,
+    username: string,
+    storageDescription: string
+  ): Promise<T | null> {
     const url = new URL(`${this.baseUrl}/storage/${username}/${storageDescription}`)
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
-      'Authorization': apiKey,
+      Accept: 'application/json',
+      Authorization: apiKey,
     }
 
     try {
@@ -268,7 +272,7 @@ export class FioClient {
         )
       }
 
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof FioApiError) {
         throw error
@@ -288,8 +292,8 @@ export class FioClient {
     const url = new URL(`${this.baseUrl}/user/${username}`)
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
-      'Authorization': apiKey,
+      Accept: 'application/json',
+      Authorization: apiKey,
     }
 
     try {
@@ -303,7 +307,7 @@ export class FioClient {
         )
       }
 
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof FioApiError) {
         throw error
@@ -325,9 +329,9 @@ export class FioClient {
     const url = new URL(`${this.baseUrl}/fioweb/GroupHub`)
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': apiKey,
+      Authorization: apiKey,
     }
 
     try {
@@ -345,7 +349,7 @@ export class FioClient {
         )
       }
 
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       if (error instanceof FioApiError) {
         throw error

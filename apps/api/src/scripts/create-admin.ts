@@ -23,11 +23,7 @@ async function createAdmin(username: string, displayName?: string, email?: strin
   console.log('🔑 Creating administrator account...\n')
 
   // Check if user already exists
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username))
-    .limit(1)
+  const existingUser = await db.select().from(users).where(eq(users.username, username)).limit(1)
 
   if (existingUser.length > 0) {
     console.error(`❌ Error: User '${username}' already exists`)

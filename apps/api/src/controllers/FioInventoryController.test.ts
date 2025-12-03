@@ -167,10 +167,12 @@ describe('FioInventoryController', () => {
     })
 
     it('should throw error when FIO username is not configured', async () => {
-      mockSelect.where.mockResolvedValueOnce([{
-        fioUsername: null,
-        fioApiKey: 'some-key',
-      }])
+      mockSelect.where.mockResolvedValueOnce([
+        {
+          fioUsername: null,
+          fioApiKey: 'some-key',
+        },
+      ])
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -182,10 +184,12 @@ describe('FioInventoryController', () => {
     })
 
     it('should throw error when FIO API key is not configured', async () => {
-      mockSelect.where.mockResolvedValueOnce([{
-        fioUsername: 'fiouser',
-        fioApiKey: null,
-      }])
+      mockSelect.where.mockResolvedValueOnce([
+        {
+          fioUsername: 'fiouser',
+          fioApiKey: null,
+        },
+      ])
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -207,10 +211,12 @@ describe('FioInventoryController', () => {
     })
 
     it('should return sync errors when some items fail', async () => {
-      mockSelect.where.mockResolvedValueOnce([{
-        fioUsername: 'fiouser',
-        fioApiKey: 'fio-api-key',
-      }])
+      mockSelect.where.mockResolvedValueOnce([
+        {
+          fioUsername: 'fiouser',
+          fioApiKey: 'fio-api-key',
+        },
+      ])
 
       vi.mocked(syncUserInventoryModule.syncUserInventory).mockResolvedValueOnce({
         success: false,
@@ -234,10 +240,12 @@ describe('FioInventoryController', () => {
     it('should return last sync time when storage exists', async () => {
       const syncDate = new Date('2024-01-15T10:30:00Z')
       const fioDate = new Date('2024-01-15T09:00:00Z')
-      mockSelect.limit.mockResolvedValueOnce([{
-        lastSyncedAt: syncDate,
-        fioUploadedAt: fioDate,
-      }])
+      mockSelect.limit.mockResolvedValueOnce([
+        {
+          lastSyncedAt: syncDate,
+          fioUploadedAt: fioDate,
+        },
+      ])
 
       const result = await controller.getLastSyncTime(mockRequest)
 

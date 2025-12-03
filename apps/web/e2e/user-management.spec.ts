@@ -25,7 +25,6 @@ async function login(page: Page, username: string, password: string): Promise<vo
 }
 
 test.describe('User Management Flow', () => {
-
   test('should register a new user account', async ({ page }) => {
     const username = `testuser${Date.now()}`
     await page.goto('/register')
@@ -39,7 +38,9 @@ test.describe('User Management Flow', () => {
     await page.getByRole('button', { name: 'Register' }).click()
 
     // Should show success message (wait for it with longer timeout since it redirects after 2s)
-    await expect(page.locator('.v-alert')).toContainText('Registration successful', { timeout: 1000 })
+    await expect(page.locator('.v-alert')).toContainText('Registration successful', {
+      timeout: 1000,
+    })
 
     // Should redirect to login page after successful registration
     await expect(page).toHaveURL('/login', { timeout: 3000 })
@@ -209,7 +210,9 @@ test.describe('User Management Flow', () => {
     await page.getByRole('button', { name: 'Update Password' }).click()
 
     // Should show error message
-    await expect(page.locator('.v-snackbar')).toContainText('Password must be at least 8 characters')
+    await expect(page.locator('.v-snackbar')).toContainText(
+      'Password must be at least 8 characters'
+    )
   })
 })
 
@@ -239,7 +242,9 @@ test.describe('Authentication Error Cases', () => {
     await page.getByRole('button', { name: 'Register' }).click()
 
     // Wait for success and redirect
-    await expect(page.locator('.v-alert')).toContainText('Registration successful', { timeout: 1000 })
+    await expect(page.locator('.v-alert')).toContainText('Registration successful', {
+      timeout: 1000,
+    })
     await expect(page).toHaveURL('/login', { timeout: 3000 })
 
     // Now try to register again with the same username

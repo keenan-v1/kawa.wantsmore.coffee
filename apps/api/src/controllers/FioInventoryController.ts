@@ -1,14 +1,12 @@
+import { Controller, Get, Post, Route, Security, Tags, Request, SuccessResponse } from 'tsoa'
 import {
-  Controller,
-  Get,
-  Post,
-  Route,
-  Security,
-  Tags,
-  Request,
-  SuccessResponse,
-} from 'tsoa'
-import { db, userSettings, fioInventory, fioUserStorage, fioCommodities, fioLocations } from '../db/index.js'
+  db,
+  userSettings,
+  fioInventory,
+  fioUserStorage,
+  fioCommodities,
+  fioLocations,
+} from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
@@ -112,7 +110,9 @@ export class FioInventoryController extends Controller {
 
     if (!settings?.fioUsername || !settings?.fioApiKey) {
       this.setStatus(400)
-      throw BadRequest('FIO credentials not configured. Please set your FIO username and API key in your profile.')
+      throw BadRequest(
+        'FIO credentials not configured. Please set your FIO username and API key in your profile.'
+      )
     }
 
     // Perform sync

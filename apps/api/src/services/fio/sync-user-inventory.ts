@@ -49,12 +49,16 @@ export async function syncUserInventory(
     const groupHubData = await client.getGroupHub<FioGroupHubResponse>(fioApiKey, [fioUsername])
 
     // Build lookup maps for validation
-    const existingLocations = await db.select({
-      naturalId: fioLocations.naturalId,
-    }).from(fioLocations)
+    const existingLocations = await db
+      .select({
+        naturalId: fioLocations.naturalId,
+      })
+      .from(fioLocations)
     const locationIds = new Set(existingLocations.map(l => l.naturalId))
 
-    const existingCommodities = await db.select({ ticker: fioCommodities.ticker }).from(fioCommodities)
+    const existingCommodities = await db
+      .select({ ticker: fioCommodities.ticker })
+      .from(fioCommodities)
     const commodityTickers = new Set(existingCommodities.map(c => c.ticker))
 
     // Clear existing storage and inventory for this user
@@ -107,14 +111,17 @@ export async function syncUserInventory(
       // Create storage record
       let storageRecord: { id: number }
       try {
-        const [inserted] = await db.insert(fioUserStorage).values({
-          userId,
-          storageId: `grouphub-${locationId}-${storage.StorageType}`,
-          locationId,
-          type: storage.StorageType,
-          fioUploadedAt: storage.LastUpdated ? new Date(storage.LastUpdated) : null,
-          lastSyncedAt: now,
-        }).returning({ id: fioUserStorage.id })
+        const [inserted] = await db
+          .insert(fioUserStorage)
+          .values({
+            userId,
+            storageId: `grouphub-${locationId}-${storage.StorageType}`,
+            locationId,
+            type: storage.StorageType,
+            fioUploadedAt: storage.LastUpdated ? new Date(storage.LastUpdated) : null,
+            lastSyncedAt: now,
+          })
+          .returning({ id: fioUserStorage.id })
 
         storageRecord = inserted
         result.storageLocations++
@@ -217,13 +224,19 @@ export async function syncUserInventory(
     }
 
     result.success = result.errors.length === 0
-    console.log(`✅ Synced ${result.storageLocations} storage locations with ${result.inserted} inventory entries for ${fioUsername}`)
+    console.log(
+      `✅ Synced ${result.storageLocations} storage locations with ${result.inserted} inventory entries for ${fioUsername}`
+    )
 
     if (result.skippedUnknownLocations > 0) {
-      console.log(`⚠️  Skipped ${result.skippedUnknownLocations} items at ${unknownLocations.size} unknown locations`)
+      console.log(
+        `⚠️  Skipped ${result.skippedUnknownLocations} items at ${unknownLocations.size} unknown locations`
+      )
     }
     if (result.skippedUnknownCommodities > 0) {
-      console.log(`⚠️  Skipped ${result.skippedUnknownCommodities} items with ${unknownCommodities.size} unknown commodities`)
+      console.log(
+        `⚠️  Skipped ${result.skippedUnknownCommodities} items with ${unknownCommodities.size} unknown commodities`
+      )
     }
     if (result.errors.length > 0) {
       console.log(`⚠️  ${result.errors.length} errors occurred`)

@@ -75,6 +75,6 @@ export const useUserStore = () => {
     updateLocationDisplayMode,
     getLocationDisplayMode,
     updateCommodityDisplayMode,
-    getCommodityDisplayMode
+    getCommodityDisplayMode,
   }
 }

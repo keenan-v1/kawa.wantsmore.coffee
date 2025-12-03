@@ -81,8 +81,22 @@ describe('AdminController', () => {
   describe('listUsers', () => {
     it('should return paginated list of users with FIO sync info', async () => {
       const mockUsers = [
-        { id: 1, username: 'user1', email: 'user1@test.com', displayName: 'User 1', isActive: true, createdAt: new Date() },
-        { id: 2, username: 'user2', email: null, displayName: 'User 2', isActive: false, createdAt: new Date() },
+        {
+          id: 1,
+          username: 'user1',
+          email: 'user1@test.com',
+          displayName: 'User 1',
+          isActive: true,
+          createdAt: new Date(),
+        },
+        {
+          id: 2,
+          username: 'user2',
+          email: null,
+          displayName: 'User 2',
+          isActive: false,
+          createdAt: new Date(),
+        },
       ]
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
       const mockSettings = [{ fioUsername: 'fiouser' }]
@@ -108,16 +122,21 @@ describe('AdminController', () => {
           // Every 3rd query is roles (after innerJoin), then settings, then lastSync per user
           // But with Promise.all, order is non-deterministic, so return a combined mock
           // that works for any query type (controller only reads fields it needs)
-          return Promise.resolve([{
-            roleId: 'member', roleName: 'Member', roleColor: 'blue',
-            fioUsername: 'fiouser',
-            lastSyncedAt: new Date(),
-          }])
+          return Promise.resolve([
+            {
+              roleId: 'member',
+              roleName: 'Member',
+              roleColor: 'blue',
+              fioUsername: 'fiouser',
+              lastSyncedAt: new Date(),
+            },
+          ])
         }),
       }
 
       vi.mocked(db.select).mockReturnValue({
-        from: vi.fn()
+        from: vi
+          .fn()
           .mockReturnValueOnce(countMock)
           .mockReturnValueOnce(usersMock)
           .mockReturnValue(genericMock),
@@ -134,7 +153,14 @@ describe('AdminController', () => {
 
     it('should support search filtering', async () => {
       const mockUsers = [
-        { id: 1, username: 'searchuser', email: 'search@test.com', displayName: 'Search User', isActive: true, createdAt: new Date() },
+        {
+          id: 1,
+          username: 'searchuser',
+          email: 'search@test.com',
+          displayName: 'Search User',
+          isActive: true,
+          createdAt: new Date(),
+        },
       ]
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
       const mockSettings = [{ fioUsername: null }]
@@ -149,14 +175,16 @@ describe('AdminController', () => {
       }
       const genericMock = {
         innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn()
+        where: vi
+          .fn()
           .mockResolvedValueOnce(mockRoles)
           .mockResolvedValueOnce(mockSettings)
           .mockResolvedValueOnce(mockLastSync),
       }
 
       vi.mocked(db.select).mockReturnValue({
-        from: vi.fn()
+        from: vi
+          .fn()
           .mockReturnValueOnce(countMock)
           .mockReturnValueOnce(usersMock)
           .mockReturnValue(genericMock),
@@ -190,10 +218,11 @@ describe('AdminController', () => {
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn()
-          .mockResolvedValueOnce([mockUser])    // user query
-          .mockResolvedValueOnce(mockRoles)     // roles query
-          .mockResolvedValueOnce(mockSettings)  // settings query
+        where: vi
+          .fn()
+          .mockResolvedValueOnce([mockUser]) // user query
+          .mockResolvedValueOnce(mockRoles) // roles query
+          .mockResolvedValueOnce(mockSettings) // settings query
           .mockResolvedValueOnce(mockLastSync), // lastSync query
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
@@ -221,7 +250,14 @@ describe('AdminController', () => {
 
   describe('updateUser', () => {
     it('should update user isActive status', async () => {
-      const mockUser = { id: 5, username: 'testuser', email: null, displayName: 'Test', isActive: false, createdAt: new Date() }
+      const mockUser = {
+        id: 5,
+        username: 'testuser',
+        email: null,
+        displayName: 'Test',
+        isActive: false,
+        createdAt: new Date(),
+      }
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
       const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
@@ -230,11 +266,12 @@ describe('AdminController', () => {
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn()
-          .mockResolvedValueOnce([{ id: 5 }])   // existence check
-          .mockResolvedValueOnce([mockUser])    // getUser - user
-          .mockResolvedValueOnce(mockRoles)     // getUser - roles
-          .mockResolvedValueOnce(mockSettings)  // getUser - settings
+        where: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 5 }]) // existence check
+          .mockResolvedValueOnce([mockUser]) // getUser - user
+          .mockResolvedValueOnce(mockRoles) // getUser - roles
+          .mockResolvedValueOnce(mockSettings) // getUser - settings
           .mockResolvedValueOnce(mockLastSync), // getUser - lastSync
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
@@ -256,11 +293,26 @@ describe('AdminController', () => {
     })
 
     it('should update user roles', async () => {
-      const mockUser = { id: 5, username: 'testuser', email: null, displayName: 'Test', isActive: true, createdAt: new Date() }
-      const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }, { roleId: 'lead', roleName: 'Lead', roleColor: 'green' }]
+      const mockUser = {
+        id: 5,
+        username: 'testuser',
+        email: null,
+        displayName: 'Test',
+        isActive: true,
+        createdAt: new Date(),
+      }
+      const mockRoles = [
+        { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
+        { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
+      ]
       const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
-      const validRoles = [{ id: 'applicant' }, { id: 'member' }, { id: 'lead' }, { id: 'administrator' }]
+      const validRoles = [
+        { id: 'applicant' },
+        { id: 'member' },
+        { id: 'lead' },
+        { id: 'administrator' },
+      ]
 
       // Existence check
       const existenceCheckMock = {
@@ -275,7 +327,8 @@ describe('AdminController', () => {
       const getUserMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn()
+        where: vi
+          .fn()
           .mockResolvedValueOnce([mockUser])
           .mockResolvedValueOnce(mockRoles)
           .mockResolvedValueOnce(mockSettings)
@@ -293,7 +346,9 @@ describe('AdminController', () => {
       const insertMock = { values: vi.fn().mockResolvedValue(undefined) }
       vi.mocked(db.insert).mockReturnValue(insertMock as any)
 
-      const result = await controller.updateUser({ user: adminUser }, 5, { roles: ['member', 'lead'] })
+      const result = await controller.updateUser({ user: adminUser }, 5, {
+        roles: ['member', 'lead'],
+      })
 
       expect(db.delete).toHaveBeenCalled()
       expect(db.insert).toHaveBeenCalled()
@@ -317,9 +372,9 @@ describe('AdminController', () => {
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
-      await expect(controller.updateUser({ user: adminUser }, 999, { isActive: false })).rejects.toThrow(
-        'User not found'
-      )
+      await expect(
+        controller.updateUser({ user: adminUser }, 999, { isActive: false })
+      ).rejects.toThrow('User not found')
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
 
@@ -345,9 +400,9 @@ describe('AdminController', () => {
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
-      await expect(
-        controller.updateUser({ user: adminUser }, 5, { roles: [] })
-      ).rejects.toThrow('Users must have at least one role')
+      await expect(controller.updateUser({ user: adminUser }, 5, { roles: [] })).rejects.toThrow(
+        'Users must have at least one role'
+      )
       expect(setStatusSpy).toHaveBeenCalledWith(400)
     })
   })
@@ -379,9 +434,7 @@ describe('AdminController', () => {
 
       const selectMock = {
         from: vi.fn().mockReturnThis(),
-        where: vi.fn()
-          .mockResolvedValueOnce([existingRole])
-          .mockResolvedValueOnce([updatedRole]),
+        where: vi.fn().mockResolvedValueOnce([existingRole]).mockResolvedValueOnce([updatedRole]),
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
@@ -408,9 +461,7 @@ describe('AdminController', () => {
 
       const selectMock = {
         from: vi.fn().mockReturnThis(),
-        where: vi.fn()
-          .mockResolvedValueOnce([existingRole])
-          .mockResolvedValueOnce([updatedRole]),
+        where: vi.fn().mockResolvedValueOnce([existingRole]).mockResolvedValueOnce([updatedRole]),
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
@@ -436,7 +487,9 @@ describe('AdminController', () => {
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
-      await expect(controller.updateRole('nonexistent', { name: 'Test' })).rejects.toThrow('Role not found')
+      await expect(controller.updateRole('nonexistent', { name: 'Test' })).rejects.toThrow(
+        'Role not found'
+      )
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
   })

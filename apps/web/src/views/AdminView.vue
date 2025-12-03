@@ -7,12 +7,106 @@
     </v-snackbar>
 
     <v-tabs v-model="activeTab" class="mb-4">
+      <v-tab value="approvals">
+        Pending Approvals
+        <v-badge
+          v-if="pendingApprovals.length > 0"
+          :content="pendingApprovals.length"
+          color="error"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
       <v-tab value="users">User Management</v-tab>
       <v-tab value="permissions">Permissions</v-tab>
       <v-tab value="roles">Roles</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
+      <!-- PENDING APPROVALS TAB -->
+      <v-tabs-window-item value="approvals">
+        <v-card>
+          <v-card-title>
+            <v-row align="center">
+              <v-col>
+                <span>Pending User Approvals</span>
+              </v-col>
+              <v-col cols="auto">
+                <v-btn
+                  color="primary"
+                  variant="text"
+                  prepend-icon="mdi-refresh"
+                  :loading="loadingApprovals"
+                  @click="loadPendingApprovals"
+                >
+                  Refresh
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+
+          <v-card-text v-if="pendingApprovals.length === 0 && !loadingApprovals">
+            <v-alert type="success" variant="tonal">
+              No users pending approval. All registrations have been reviewed.
+            </v-alert>
+          </v-card-text>
+
+          <v-list v-else lines="two">
+            <v-list-item v-for="user in pendingApprovals" :key="user.id">
+              <template #prepend>
+                <v-avatar color="grey">
+                  <v-icon>mdi-account</v-icon>
+                </v-avatar>
+              </template>
+
+              <v-list-item-title class="font-weight-medium">
+                {{ user.displayName }}
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                @{{ user.username }} &bull; Registered {{ formatRelativeTime(user.createdAt) }}
+              </v-list-item-subtitle>
+
+              <template #append>
+                <div class="d-flex align-center ga-2">
+                  <v-select
+                    v-model="approvalRoleSelections[user.id]"
+                    :items="approvalRoleOptions"
+                    item-title="name"
+                    item-value="id"
+                    label="Approve as"
+                    density="compact"
+                    hide-details
+                    style="min-width: 180px"
+                  >
+                    <template #selection="{ item }">
+                      <v-chip :color="item.raw.color" size="small">{{ item.title }}</v-chip>
+                    </template>
+                  </v-select>
+                  <v-btn
+                    color="success"
+                    variant="tonal"
+                    :loading="approvingUsers.has(user.id)"
+                    @click="approveUser(user)"
+                  >
+                    Approve
+                  </v-btn>
+                  <v-btn
+                    color="error"
+                    variant="text"
+                    icon
+                    size="small"
+                    @click="openRejectDialog(user)"
+                  >
+                    <v-icon>mdi-close</v-icon>
+                    <v-tooltip activator="parent" location="top">Reject (deactivate)</v-tooltip>
+                  </v-btn>
+                </div>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-tabs-window-item>
+
       <!-- USER MANAGEMENT TAB -->
       <v-tabs-window-item value="users">
         <v-card>
@@ -30,9 +124,7 @@
                 />
               </v-col>
               <v-col cols="12" md="6" class="text-right">
-                <span class="text-body-2 text-medium-emphasis">
-                  {{ total }} user(s) found
-                </span>
+                <span class="text-body-2 text-medium-emphasis"> {{ total }} user(s) found </span>
               </v-col>
             </v-row>
           </v-card-title>
@@ -54,12 +146,7 @@
 
             <template #item.roles="{ item }">
               <div class="d-flex flex-wrap ga-1">
-                <v-chip
-                  v-for="role in item.roles"
-                  :key="role.id"
-                  size="small"
-                  :color="role.color"
-                >
+                <v-chip v-for="role in item.roles" :key="role.id" size="small" :color="role.color">
                   {{ role.name }}
                 </v-chip>
               </div>
@@ -119,10 +206,7 @@
                   </v-btn>
                 </template>
                 <v-list density="compact">
-                  <v-list-item
-                    :disabled="!item.fioSync.fioUsername"
-                    @click="syncUserFio(item)"
-                  >
+                  <v-list-item :disabled="!item.fioSync.fioUsername" @click="syncUserFio(item)">
                     <template #prepend>
                       <v-icon>mdi-sync</v-icon>
                     </template>
@@ -147,8 +231,8 @@
           <v-card-title>Role Permission Matrix</v-card-title>
           <v-card-text>
             <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-              This matrix shows which permissions are granted to each role.
-              Click a cell to toggle the permission.
+              This matrix shows which permissions are granted to each role. Click a cell to toggle
+              the permission.
             </v-alert>
 
             <div v-if="loadingPermissions" class="text-center py-4">
@@ -160,11 +244,7 @@
                 <tr>
                   <th class="text-left">Permission</th>
                   <th style="width: 28px"></th>
-                  <th
-                    v-for="role in availableRoles"
-                    :key="role.id"
-                    class="text-center"
-                  >
+                  <th v-for="role in availableRoles" :key="role.id" class="text-center">
                     <v-chip :color="role.color" size="small">{{ role.name }}</v-chip>
                   </th>
                 </tr>
@@ -178,22 +258,14 @@
                   <td class="px-0">
                     <v-tooltip v-if="permission.description" location="right">
                       <template #activator="{ props }">
-                        <v-icon
-                          v-bind="props"
-                          size="small"
-                          class="text-medium-emphasis"
-                        >
+                        <v-icon v-bind="props" size="small" class="text-medium-emphasis">
                           mdi-information-outline
                         </v-icon>
                       </template>
                       {{ permission.description }}
                     </v-tooltip>
                   </td>
-                  <td
-                    v-for="role in availableRoles"
-                    :key="role.id"
-                    class="text-center"
-                  >
+                  <td v-for="role in availableRoles" :key="role.id" class="text-center">
                     <v-btn
                       icon
                       size="small"
@@ -202,7 +274,13 @@
                       @click="togglePermission(role.id, permission.id)"
                     >
                       <v-icon
-                        :color="getPermissionStatus(role.id, permission.id) === true ? 'success' : getPermissionStatus(role.id, permission.id) === false ? 'error' : 'grey'"
+                        :color="
+                          getPermissionStatus(role.id, permission.id) === true
+                            ? 'success'
+                            : getPermissionStatus(role.id, permission.id) === false
+                              ? 'error'
+                              : 'grey'
+                        "
                       >
                         {{
                           getPermissionStatus(role.id, permission.id) === true
@@ -222,7 +300,8 @@
               <strong>Legend:</strong>
               <v-icon color="success" size="small" class="mx-1">mdi-check-circle</v-icon> Granted
               <v-icon color="error" size="small" class="mx-1">mdi-close-circle</v-icon> Denied
-              <v-icon color="grey" size="small" class="mx-1">mdi-circle-outline</v-icon> Not set (inherits default: denied)
+              <v-icon color="grey" size="small" class="mx-1">mdi-circle-outline</v-icon> Not set
+              (inherits default: denied)
             </v-alert>
           </v-card-text>
         </v-card>
@@ -261,12 +340,7 @@
                     <v-chip :color="role.color" size="small">{{ role.name }}</v-chip>
                   </td>
                   <td class="text-right">
-                    <v-btn
-                      icon
-                      size="small"
-                      variant="text"
-                      @click="openEditRoleDialog(role)"
-                    >
+                    <v-btn icon size="small" variant="text" @click="openEditRoleDialog(role)">
                       <v-icon>mdi-pencil</v-icon>
                     </v-btn>
                     <v-btn
@@ -341,9 +415,7 @@
           </v-btn>
           <v-spacer />
           <v-btn text @click="editDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveUser">
-            Save Changes
-          </v-btn>
+          <v-btn color="primary" :loading="saving" @click="saveUser"> Save Changes </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -354,8 +426,8 @@
         <v-card-title>Password Reset Link Generated</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" class="mb-4">
-            Share this link with <strong>{{ resetLinkData?.username }}</strong> to allow them to reset their password.
-            The password will NOT be changed until they use this link.
+            Share this link with <strong>{{ resetLinkData?.username }}</strong> to allow them to
+            reset their password. The password will NOT be changed until they use this link.
           </v-alert>
 
           <v-text-field
@@ -433,15 +505,29 @@
       <v-card>
         <v-card-title>Delete Role</v-card-title>
         <v-card-text>
-          Are you sure you want to delete the role <strong>{{ deletingRole?.name }}</strong>?
-          This action cannot be undone.
+          Are you sure you want to delete the role <strong>{{ deletingRole?.name }}</strong
+          >? This action cannot be undone.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deleteRoleDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="deletingRoleLoading" @click="deleteRole">
-            Delete
-          </v-btn>
+          <v-btn color="error" :loading="deletingRoleLoading" @click="deleteRole"> Delete </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Reject User Dialog -->
+    <v-dialog v-model="rejectDialog" max-width="400">
+      <v-card>
+        <v-card-title>Reject Registration</v-card-title>
+        <v-card-text>
+          Are you sure you want to reject <strong>{{ rejectingUser?.displayName }}</strong
+          >? This will deactivate their account.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="rejectDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="rejectingLoading" @click="rejectUser"> Reject </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -491,7 +577,7 @@ interface RolePermissionWithDetails {
   allowed: boolean
 }
 
-const activeTab = ref('users')
+const activeTab = ref('approvals')
 
 const userHeaders = [
   { title: 'Username', key: 'username', sortable: false },
@@ -530,6 +616,20 @@ const snackbar = ref({
 const resetLinkDialog = ref(false)
 const resetLinkData = ref<PasswordResetLinkData | null>(null)
 const generatingResetLink = ref(false)
+
+// Pending approvals state
+const pendingApprovals = ref<AdminUser[]>([])
+const loadingApprovals = ref(false)
+const approvingUsers = ref<Set<number>>(new Set())
+const approvalRoleSelections = ref<Record<number, string>>({})
+const rejectDialog = ref(false)
+const rejectingUser = ref<AdminUser | null>(null)
+const rejectingLoading = ref(false)
+
+// Computed: Roles available for approval (exclude unverified)
+const approvalRoleOptions = computed(() => {
+  return availableRoles.value.filter(r => r.id !== 'unverified')
+})
 
 // Permissions state
 const permissionList = ref<Permission[]>([])
@@ -626,7 +726,11 @@ const debouncedSearch = () => {
 const loadUsers = async () => {
   try {
     loading.value = true
-    const response = await api.admin.listUsers(page.value, pageSize.value, search.value || undefined)
+    const response = await api.admin.listUsers(
+      page.value,
+      pageSize.value,
+      search.value || undefined
+    )
     userList.value = response.users
     total.value = response.total
   } catch (error) {
@@ -692,7 +796,7 @@ const openEditDialog = (user: AdminUser) => {
   editingUser.value = user
   editForm.value = {
     isActive: user.isActive,
-    roles: user.roles.map((r) => r.id),
+    roles: user.roles.map(r => r.id),
   }
   editDialog.value = true
 }
@@ -747,7 +851,7 @@ const copyResetLink = async () => {
 // Permission matrix functions
 const getPermissionStatus = (roleId: string, permissionId: string): boolean | null => {
   const mapping = rolePermissionsList.value.find(
-    (rp) => rp.roleId === roleId && rp.permissionId === permissionId
+    rp => rp.roleId === roleId && rp.permissionId === permissionId
   )
   if (!mapping) return null
   return mapping.allowed
@@ -761,7 +865,7 @@ const togglePermission = async (roleId: string, permissionId: string) => {
   const key = `${roleId}:${permissionId}`
   const currentStatus = getPermissionStatus(roleId, permissionId)
   const existingMapping = rolePermissionsList.value.find(
-    (rp) => rp.roleId === roleId && rp.permissionId === permissionId
+    rp => rp.roleId === roleId && rp.permissionId === permissionId
   )
 
   try {
@@ -881,8 +985,78 @@ const deleteRole = async () => {
   }
 }
 
+// Pending approvals functions
+const loadPendingApprovals = async () => {
+  try {
+    loadingApprovals.value = true
+    pendingApprovals.value = await api.admin.listPendingApprovals()
+    // Set default role selection for each user
+    for (const user of pendingApprovals.value) {
+      if (!approvalRoleSelections.value[user.id]) {
+        approvalRoleSelections.value[user.id] = 'trade-partner'
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load pending approvals', error)
+    showSnackbar('Failed to load pending approvals', 'error')
+  } finally {
+    loadingApprovals.value = false
+  }
+}
+
+const approveUser = async (user: AdminUser) => {
+  try {
+    approvingUsers.value.add(user.id)
+    const selectedRole = approvalRoleSelections.value[user.id] || 'trade-partner'
+    await api.admin.approveUser(user.id, selectedRole)
+    showSnackbar(`${user.displayName} approved as ${selectedRole}`)
+    // Remove from pending list
+    pendingApprovals.value = pendingApprovals.value.filter(u => u.id !== user.id)
+    delete approvalRoleSelections.value[user.id]
+    // Notify App.vue to update the badge count
+    window.dispatchEvent(new CustomEvent('approval-queue-updated'))
+  } catch (error) {
+    console.error('Failed to approve user', error)
+    const message = error instanceof Error ? error.message : 'Failed to approve user'
+    showSnackbar(message, 'error')
+  } finally {
+    approvingUsers.value.delete(user.id)
+  }
+}
+
+const openRejectDialog = (user: AdminUser) => {
+  rejectingUser.value = user
+  rejectDialog.value = true
+}
+
+const rejectUser = async () => {
+  if (!rejectingUser.value) return
+
+  try {
+    rejectingLoading.value = true
+    // Rejecting = deactivating the account
+    await api.admin.updateUser(rejectingUser.value.id, {
+      isActive: false,
+      roles: ['unverified'],
+    })
+    showSnackbar(`${rejectingUser.value.displayName} has been rejected`)
+    rejectDialog.value = false
+    // Remove from pending list
+    pendingApprovals.value = pendingApprovals.value.filter(u => u.id !== rejectingUser.value?.id)
+    // Notify App.vue to update the badge count
+    window.dispatchEvent(new CustomEvent('approval-queue-updated'))
+  } catch (error) {
+    console.error('Failed to reject user', error)
+    const message = error instanceof Error ? error.message : 'Failed to reject user'
+    showSnackbar(message, 'error')
+  } finally {
+    rejectingLoading.value = false
+    rejectingUser.value = null
+  }
+}
+
 // Watch for tab changes to load data
-watch(activeTab, async (newTab) => {
+watch(activeTab, async newTab => {
   if (newTab === 'permissions') {
     // Always reload permissions to ensure fresh data
     if (permissionList.value.length === 0) {
@@ -898,6 +1072,7 @@ watch(activeTab, async (newTab) => {
 onMounted(() => {
   loadRoles()
   loadUsers()
+  loadPendingApprovals()
 })
 </script>
 

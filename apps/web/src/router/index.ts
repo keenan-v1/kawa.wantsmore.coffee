@@ -13,58 +13,58 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/market'
+      redirect: '/market',
     },
     {
       path: '/login',
       name: 'login',
-      component: LoginView
+      component: LoginView,
     },
     {
       path: '/register',
       name: 'register',
-      component: RegisterView
+      component: RegisterView,
     },
     {
       path: '/reset-password',
       name: 'reset-password',
-      component: ResetPasswordView
+      component: ResetPasswordView,
     },
     {
       path: '/market',
       name: 'market',
       component: MarketView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
     {
       path: '/inventory',
       name: 'inventory',
       component: InventoryView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
     {
       path: '/orders',
       name: 'my-orders',
       component: MyOrdersView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
     {
       path: '/account',
       name: 'account',
       component: AccountView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
     {
       path: '/admin',
       name: 'admin',
       component: AdminView,
-      meta: { requiresAuth: true, requiresAdmin: true }
+      meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/market'
-    }
-  ]
+      redirect: '/market',
+    },
+  ],
 })
 
 // Helper to check if user has a role
@@ -88,7 +88,7 @@ router.beforeEach((to, _from, next) => {
     const redirectPath = to.fullPath !== '/login' ? to.fullPath : '/market'
     next({
       path: '/login',
-      query: { redirect: redirectPath }
+      query: { redirect: redirectPath },
     })
   } else if (to.meta.requiresAdmin && !hasRole('administrator')) {
     // Redirect non-admins away from admin pages

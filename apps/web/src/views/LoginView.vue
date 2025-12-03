@@ -30,22 +30,14 @@
                 prepend-icon="mdi-lock"
                 :disabled="loading"
               />
-              <v-btn
-                type="submit"
-                color="primary"
-                block
-                class="mt-4"
-                :loading="loading"
-              >
+              <v-btn type="submit" color="primary" block class="mt-4" :loading="loading">
                 Login
               </v-btn>
             </v-form>
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn text to="/register" :disabled="loading">
-              Don't have an account? Register
-            </v-btn>
+            <v-btn text to="/register" :disabled="loading"> Don't have an account? Register </v-btn>
           </v-card-actions>
         </v-card>
       </v-col>
@@ -74,7 +66,7 @@ const handleLogin = async () => {
   try {
     const response = await api.auth.login({
       profileName: profileName.value,
-      password: password.value
+      password: password.value,
     })
 
     if (response.ok) {

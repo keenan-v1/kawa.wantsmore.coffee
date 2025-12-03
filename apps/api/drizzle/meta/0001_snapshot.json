@@ -122,12 +122,8 @@
           "name": "fio_inventory_user_storage_id_fio_user_storage_id_fk",
           "tableFrom": "fio_inventory",
           "tableTo": "fio_user_storage",
-          "columnsFrom": [
-            "user_storage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_storage_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -135,12 +131,8 @@
           "name": "fio_inventory_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "fio_inventory",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -305,12 +297,8 @@
           "name": "fio_user_storage_user_id_users_id_fk",
           "tableFrom": "fio_user_storage",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -318,12 +306,8 @@
           "name": "fio_user_storage_location_id_fio_locations_natural_id_fk",
           "tableFrom": "fio_user_storage",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -383,12 +367,8 @@
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -398,9 +378,7 @@
         "password_reset_tokens_token_unique": {
           "name": "password_reset_tokens_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -495,12 +473,8 @@
           "name": "role_permissions_role_id_roles_id_fk",
           "tableFrom": "role_permissions",
           "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -508,12 +482,8 @@
           "name": "role_permissions_permission_id_permissions_id_fk",
           "tableFrom": "role_permissions",
           "tableTo": "permissions",
-          "columnsFrom": [
-            "permission_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["permission_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -694,12 +664,8 @@
           "name": "sell_orders_user_id_users_id_fk",
           "tableFrom": "sell_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -707,12 +673,8 @@
           "name": "sell_orders_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "sell_orders",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -720,12 +682,8 @@
           "name": "sell_orders_location_id_fio_locations_natural_id_fk",
           "tableFrom": "sell_orders",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -772,12 +730,8 @@
           "name": "user_roles_user_id_users_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -785,12 +739,8 @@
           "name": "user_roles_role_id_roles_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -874,12 +824,8 @@
           "name": "user_settings_user_id_users_id_fk",
           "tableFrom": "user_settings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -889,9 +835,7 @@
         "user_settings_user_id_unique": {
           "name": "user_settings_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         }
       },
       "policies": {},
@@ -961,9 +905,7 @@
         "users_username_unique": {
           "name": "users_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},
@@ -975,55 +917,32 @@
     "public.commodity_display_mode": {
       "name": "commodity_display_mode",
       "schema": "public",
-      "values": [
-        "ticker-only",
-        "name-only",
-        "both"
-      ]
+      "values": ["ticker-only", "name-only", "both"]
     },
     "public.currency": {
       "name": "currency",
       "schema": "public",
-      "values": [
-        "ICA",
-        "CIS",
-        "AIC",
-        "NCC"
-      ]
+      "values": ["ICA", "CIS", "AIC", "NCC"]
     },
     "public.location_display_mode": {
       "name": "location_display_mode",
       "schema": "public",
-      "values": [
-        "names-only",
-        "natural-ids-only",
-        "both"
-      ]
+      "values": ["names-only", "natural-ids-only", "both"]
     },
     "public.location_type": {
       "name": "location_type",
       "schema": "public",
-      "values": [
-        "Station",
-        "Planet"
-      ]
+      "values": ["Station", "Planet"]
     },
     "public.order_type": {
       "name": "order_type",
       "schema": "public",
-      "values": [
-        "internal",
-        "partner"
-      ]
+      "values": ["internal", "partner"]
     },
     "public.sell_order_limit_mode": {
       "name": "sell_order_limit_mode",
       "schema": "public",
-      "values": [
-        "none",
-        "max_sell",
-        "reserve"
-      ]
+      "values": ["none", "max_sell", "reserve"]
     }
   },
   "schemas": {},

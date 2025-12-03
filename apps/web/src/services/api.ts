@@ -1,6 +1,14 @@
 // API service that switches between mock and real backend
 import { mockApi, USE_MOCK_API } from './mockApi'
-import type { User, Currency, LocationDisplayMode, CommodityDisplayMode, Role, SellOrderLimitMode, OrderType } from '@kawakawa/types'
+import type {
+  User,
+  Currency,
+  LocationDisplayMode,
+  CommodityDisplayMode,
+  Role,
+  SellOrderLimitMode,
+  OrderType,
+} from '@kawakawa/types'
 
 interface LoginRequest {
   profileName: string
@@ -175,6 +183,46 @@ interface UpdateSellOrderRequest {
   limitQuantity?: number | null
 }
 
+// Buy Order types
+interface BuyOrderResponse {
+  id: number
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType
+}
+
+interface CreateBuyOrderRequest {
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType?: OrderType
+}
+
+interface UpdateBuyOrderRequest {
+  quantity?: number
+  price?: number
+  currency?: Currency
+  orderType?: OrderType
+}
+
+// Market listing types
+interface MarketListing {
+  id: number
+  sellerName: string
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  orderType: OrderType
+  availableQuantity: number
+  isOwn: boolean
+}
+
 // Helper to get JWT token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('jwt')
@@ -185,7 +233,7 @@ const getAuthHeaders = (): HeadersInit => {
   const token = getAuthToken()
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 }
 
@@ -205,12 +253,12 @@ const realApi = {
     return fetch('/api/auth/login', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         username: request.profileName, // Map profileName to username
-        password: request.password
-      })
+        password: request.password,
+      }),
     })
   },
 
@@ -218,20 +266,20 @@ const realApi = {
     return fetch('/api/auth/register', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         username: request.profileName, // Map profileName to username
         password: request.password,
-        displayName: request.profileName
-      })
+        displayName: request.profileName,
+      }),
     })
   },
 
   getProfile: async (): Promise<User> => {
     const response = await fetch('/api/account', {
       method: 'GET',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     })
 
     handleRefreshedToken(response)
@@ -254,7 +302,7 @@ const realApi = {
     const response = await fetch('/api/account', {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(updates)
+      body: JSON.stringify(updates),
     })
 
     handleRefreshedToken(response)
@@ -276,7 +324,7 @@ const realApi = {
     const response = await fetch('/api/account/password', {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
     })
 
     handleRefreshedToken(response)
@@ -295,7 +343,11 @@ const realApi = {
     }
   },
 
-  listUsers: async (page: number = 1, pageSize: number = 20, search?: string): Promise<AdminUserListResponse> => {
+  listUsers: async (
+    page: number = 1,
+    pageSize: number = 20,
+    search?: string
+  ): Promise<AdminUserListResponse> => {
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
@@ -435,6 +487,87 @@ const realApi = {
     return response.json()
   },
 
+  // Pending approvals
+  getPendingApprovalsCount: async (): Promise<{ count: number }> => {
+    const response = await fetch('/api/admin/pending-approvals/count', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get pending approvals count: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  listPendingApprovals: async (): Promise<AdminUser[]> => {
+    const response = await fetch('/api/admin/pending-approvals', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to list pending approvals: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  approveUser: async (userId: number, roleId?: string): Promise<AdminUser> => {
+    const response = await fetch(`/api/admin/users/${userId}/approve`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ roleId }),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('User not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      throw new Error(`Failed to approve user: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   resetPassword: async (request: ResetPasswordRequest): Promise<void> => {
     const response = await fetch('/api/auth/reset-password', {
       method: 'POST',
@@ -454,9 +587,12 @@ const realApi = {
   },
 
   validateResetToken: async (token: string): Promise<ValidateTokenResponse> => {
-    const response = await fetch(`/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
-      method: 'GET',
-    })
+    const response = await fetch(
+      `/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
+      {
+        method: 'GET',
+      }
+    )
 
     if (!response.ok) {
       return { valid: false }
@@ -717,7 +853,10 @@ const realApi = {
     return response.json()
   },
 
-  updateSellOrder: async (id: number, request: UpdateSellOrderRequest): Promise<SellOrderResponse> => {
+  updateSellOrder: async (
+    id: number,
+    request: UpdateSellOrderRequest
+  ): Promise<SellOrderResponse> => {
     const response = await fetch(`/api/sell-orders/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
@@ -773,6 +912,140 @@ const realApi = {
 
     return response.json()
   },
+
+  // Market methods
+  getMarketListings: async (commodity?: string, location?: string): Promise<MarketListing[]> => {
+    const params = new URLSearchParams()
+    if (commodity) params.append('commodity', commodity)
+    if (location) params.append('location', location)
+
+    const url = `/api/market/listings${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get market listings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Buy Orders methods
+  getBuyOrders: async (): Promise<BuyOrderResponse[]> => {
+    const response = await fetch('/api/buy-orders', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get buy orders: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getBuyOrder: async (id: number): Promise<BuyOrderResponse> => {
+    const response = await fetch(`/api/buy-orders/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Buy order not found')
+      }
+      throw new Error(`Failed to get buy order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createBuyOrder: async (request: CreateBuyOrderRequest): Promise<BuyOrderResponse> => {
+    const response = await fetch('/api/buy-orders', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to create buy order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateBuyOrder: async (id: number, request: UpdateBuyOrderRequest): Promise<BuyOrderResponse> => {
+    const response = await fetch(`/api/buy-orders/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Buy order not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to update buy order: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteBuyOrder: async (id: number): Promise<void> => {
+    const response = await fetch(`/api/buy-orders/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Buy order not found')
+      }
+      throw new Error(`Failed to delete buy order: ${response.statusText}`)
+    }
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -790,14 +1063,16 @@ export const api = {
   account: {
     getProfile: () => realApi.getProfile(),
     updateProfile: (updates: UpdateProfileRequest) => realApi.updateProfile(updates),
-    changePassword: (request: ChangePasswordRequest) => realApi.changePassword(request)
+    changePassword: (request: ChangePasswordRequest) => realApi.changePassword(request),
   },
   admin: {
-    listUsers: (page?: number, pageSize?: number, search?: string) => realApi.listUsers(page, pageSize, search),
+    listUsers: (page?: number, pageSize?: number, search?: string) =>
+      realApi.listUsers(page, pageSize, search),
     updateUser: (userId: number, updates: UpdateUserRequest) => realApi.updateUser(userId, updates),
     listRoles: () => realApi.listRoles(),
     createRole: (request: CreateRoleRequest) => realApi.createRole(request),
-    updateRole: (roleId: string, updates: { name?: string; color?: string }) => realApi.updateRole(roleId, updates),
+    updateRole: (roleId: string, updates: { name?: string; color?: string }) =>
+      realApi.updateRole(roleId, updates),
     deleteRole: (roleId: string) => realApi.deleteRole(roleId),
     generatePasswordResetLink: (userId: number) => realApi.generatePasswordResetLink(userId),
     syncUserFio: (userId: number) => realApi.syncUserFio(userId),
@@ -805,6 +1080,9 @@ export const api = {
     listRolePermissions: () => realApi.listRolePermissions(),
     setRolePermission: (request: SetRolePermissionRequest) => realApi.setRolePermission(request),
     deleteRolePermission: (id: number) => realApi.deleteRolePermission(id),
+    getPendingApprovalsCount: () => realApi.getPendingApprovalsCount(),
+    listPendingApprovals: () => realApi.listPendingApprovals(),
+    approveUser: (userId: number, roleId?: string) => realApi.approveUser(userId, roleId),
   },
   fioInventory: {
     get: () => realApi.getFioInventory(),
@@ -818,10 +1096,30 @@ export const api = {
     update: (id: number, request: UpdateSellOrderRequest) => realApi.updateSellOrder(id, request),
     delete: (id: number) => realApi.deleteSellOrder(id),
   },
+  buyOrders: {
+    list: () => realApi.getBuyOrders(),
+    get: (id: number) => realApi.getBuyOrder(id),
+    create: (request: CreateBuyOrderRequest) => realApi.createBuyOrder(request),
+    update: (id: number, request: UpdateBuyOrderRequest) => realApi.updateBuyOrder(id, request),
+    delete: (id: number) => realApi.deleteBuyOrder(id),
+  },
+  market: {
+    getListings: (commodity?: string, location?: string) =>
+      realApi.getMarketListings(commodity, location),
+  },
   roles: {
     list: () => realApi.getRoles(),
   },
 }
 
 // Export types for use in components
-export type { FioInventoryItem, SellOrderResponse, CreateSellOrderRequest, UpdateSellOrderRequest }
+export type {
+  FioInventoryItem,
+  SellOrderResponse,
+  CreateSellOrderRequest,
+  UpdateSellOrderRequest,
+  BuyOrderResponse,
+  CreateBuyOrderRequest,
+  UpdateBuyOrderRequest,
+  MarketListing,
+}

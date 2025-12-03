@@ -74,7 +74,7 @@ export const locationService = {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
         title: locationService.getLocationDisplay(l.id, mode),
-        value: l.id
+        value: l.id,
       }))
   },
 
@@ -112,7 +112,7 @@ export const locationService = {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
         title: locationService.getLocationDisplay(l.id, mode),
-        value: l.id
+        value: l.id,
       }))
   },
 
@@ -124,7 +124,7 @@ export const locationService = {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(l => ({
         title: locationService.getLocationDisplay(l.id, mode),
-        value: l.id
+        value: l.id,
       }))
   },
 
@@ -136,5 +136,5 @@ export const locationService = {
   // Clear cache (useful for refresh)
   clearCache: (): void => {
     cachedLocations = null
-  }
+  },
 }

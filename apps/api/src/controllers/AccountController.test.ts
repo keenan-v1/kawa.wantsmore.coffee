@@ -114,9 +114,7 @@ describe('AccountController', () => {
         commodityDisplayMode: null,
       }
 
-      mockSelect.where
-        .mockResolvedValueOnce([mockUser])
-        .mockResolvedValueOnce([])
+      mockSelect.where.mockResolvedValueOnce([mockUser]).mockResolvedValueOnce([])
 
       const request = { user: { userId: 2, username: 'newuser', roles: [] } }
       const result = await controller.getProfile(request)
@@ -258,9 +256,7 @@ describe('AccountController', () => {
 
   describe('changePassword', () => {
     it('should change password when current password is correct', async () => {
-      mockSelect.where.mockResolvedValueOnce([
-        { passwordHash: 'old-hash' },
-      ])
+      mockSelect.where.mockResolvedValueOnce([{ passwordHash: 'old-hash' }])
       vi.mocked(passwordUtils.verifyPassword).mockResolvedValue(true)
       vi.mocked(passwordUtils.hashPassword).mockResolvedValue('new-hash')
 
@@ -283,9 +279,7 @@ describe('AccountController', () => {
 
     it('should throw 400 when current password is incorrect', async () => {
       vi.clearAllMocks() // Clear previous test mocks
-      mockSelect.where.mockResolvedValueOnce([
-        { passwordHash: 'old-hash' },
-      ])
+      mockSelect.where.mockResolvedValueOnce([{ passwordHash: 'old-hash' }])
       vi.mocked(passwordUtils.verifyPassword).mockResolvedValueOnce(false)
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 

@@ -41,9 +41,9 @@ describe('expressAuthentication', () => {
     it('should reject when no token is provided', async () => {
       mockRequest.headers = {}
 
-      await expect(
-        expressAuthentication(mockRequest as Request, 'jwt')
-      ).rejects.toThrow('No token provided')
+      await expect(expressAuthentication(mockRequest as Request, 'jwt')).rejects.toThrow(
+        'No token provided'
+      )
     })
 
     it('should reject when token is invalid', async () => {
@@ -51,9 +51,9 @@ describe('expressAuthentication', () => {
         throw new Error('Invalid token')
       })
 
-      await expect(
-        expressAuthentication(mockRequest as Request, 'jwt')
-      ).rejects.toThrow('Invalid or expired token')
+      await expect(expressAuthentication(mockRequest as Request, 'jwt')).rejects.toThrow(
+        'Invalid or expired token'
+      )
     })
 
     it('should authenticate valid token without scopes', async () => {
@@ -71,11 +71,7 @@ describe('expressAuthentication', () => {
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
       vi.mocked(roleCache.getCachedRoles).mockReturnValue(['administrator'])
 
-      const result = await expressAuthentication(
-        mockRequest as Request,
-        'jwt',
-        ['administrator']
-      )
+      const result = await expressAuthentication(mockRequest as Request, 'jwt', ['administrator'])
 
       expect(result).toEqual(payload)
     })
@@ -85,11 +81,10 @@ describe('expressAuthentication', () => {
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
       vi.mocked(roleCache.getCachedRoles).mockReturnValue(['administrator', 'member'])
 
-      const result = await expressAuthentication(
-        mockRequest as Request,
-        'jwt',
-        ['administrator', 'member']
-      )
+      const result = await expressAuthentication(mockRequest as Request, 'jwt', [
+        'administrator',
+        'member',
+      ])
 
       expect(result).toEqual(payload)
     })
@@ -123,11 +118,7 @@ describe('expressAuthentication', () => {
       vi.mocked(jwtUtils.generateToken).mockReturnValue('new-token')
 
       // Should pass because current roles (not token roles) include administrator
-      const result = await expressAuthentication(
-        mockRequest as Request,
-        'jwt',
-        ['administrator']
-      )
+      const result = await expressAuthentication(mockRequest as Request, 'jwt', ['administrator'])
 
       expect(result).toEqual({
         userId: 1,
@@ -140,9 +131,9 @@ describe('expressAuthentication', () => {
 
   describe('unknown security type', () => {
     it('should reject unknown security types', async () => {
-      await expect(
-        expressAuthentication(mockRequest as Request, 'unknown')
-      ).rejects.toThrow('Unknown security type')
+      await expect(expressAuthentication(mockRequest as Request, 'unknown')).rejects.toThrow(
+        'Unknown security type'
+      )
     })
   })
 })

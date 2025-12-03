@@ -5,11 +5,9 @@ import { getCachedRoles, setCachedRoles } from '../utils/roleCache.js'
 import { db, userRoles } from '../db/index.js'
 
 // Extend Express Request to include refreshed token
-declare global {
-  namespace Express {
-    interface Request {
-      refreshedToken?: string
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    refreshedToken?: string
   }
 }
 
@@ -79,7 +77,7 @@ export async function expressAuthentication(
 
       // Check scopes (required roles) if specified
       if (scopes && scopes.length > 0) {
-        const hasRequiredRoles = scopes.every((scope) => payload.roles.includes(scope))
+        const hasRequiredRoles = scopes.every(scope => payload.roles.includes(scope))
         if (!hasRequiredRoles) {
           return Promise.reject(new Error('Insufficient permissions'))
         }
