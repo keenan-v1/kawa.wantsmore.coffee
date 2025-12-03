@@ -1,7 +1,7 @@
 // Database schema using Drizzle ORM
 // Based on KawaKawa Market types and mock data
 
-import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text, integer, decimal, timestamp, varchar, pgEnum, boolean, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Enums
@@ -97,7 +97,6 @@ export const fioCommodities = pgTable('fio_commodities', {
 // ==================== FIO LOCATIONS (Planets/Stations from FIO API) ====================
 export const fioLocations = pgTable('fio_locations', {
   naturalId: varchar('natural_id', { length: 20 }).primaryKey(), // 'BEN', 'UV-351a', 'KW-689c', etc.
-  addressableId: varchar('addressable_id', { length: 40 }), // FIO UUID for storage mapping
   name: varchar('name', { length: 100 }).notNull(), // 'Benton Station', 'Katoa', etc.
   type: locationTypeEnum('type').notNull(), // 'Station' or 'Planet'
   systemId: varchar('system_id', { length: 40 }), // FIO system UUID
@@ -111,28 +110,23 @@ export const fioLocations = pgTable('fio_locations', {
 export const fioUserStorage = pgTable('fio_user_storage', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  storageId: varchar('storage_id', { length: 40 }).notNull(), // FIO's StorageId
-  addressableId: varchar('addressable_id', { length: 40 }).notNull(), // UUID for the location
-  locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // Resolved from addressableId (null if unknown)
+  storageId: varchar('storage_id', { length: 40 }).notNull(), // Generated as grouphub-{locationId}-{type}
+  locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId),
   type: varchar('type', { length: 30 }).notNull(), // 'STORE', 'WAREHOUSE_STORE', 'SHIP_STORE', etc.
-  weightLoad: decimal('weight_load', { precision: 12, scale: 2 }),
-  weightCapacity: decimal('weight_capacity', { precision: 12, scale: 2 }),
-  volumeLoad: decimal('volume_load', { precision: 12, scale: 2 }),
-  volumeCapacity: decimal('volume_capacity', { precision: 12, scale: 2 }),
-  fioTimestamp: timestamp('fio_timestamp'), // FIO's sync timestamp from game
-  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
+  fioUploadedAt: timestamp('fio_uploaded_at'), // When FIO last got data from game (from LastUpdated)
+  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(), // When we last synced from FIO
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+  uniqueUserStorage: uniqueIndex('fio_user_storage_user_storage_idx').on(table.userId, table.storageId),
+}))
 
 // ==================== FIO INVENTORY (Items in storage from FIO API) ====================
 export const fioInventory = pgTable('fio_inventory', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   userStorageId: integer('user_storage_id').notNull().references(() => fioUserStorage.id, { onDelete: 'cascade' }),
   commodityTicker: varchar('commodity_ticker', { length: 10 }).notNull().references(() => fioCommodities.ticker),
   quantity: integer('quantity').notNull(),
-  lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -162,7 +156,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   userRoles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
   fioUserStorage: many(fioUserStorage),
-  fioInventory: many(fioInventory),
   sellOrders: many(sellOrders),
 }))
 
@@ -234,10 +227,6 @@ export const fioUserStorageRelations = relations(fioUserStorage, ({ one, many })
 }))
 
 export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
-  user: one(users, {
-    fields: [fioInventory.userId],
-    references: [users.id],
-  }),
   userStorage: one(fioUserStorage, {
     fields: [fioInventory.userStorageId],
     references: [fioUserStorage.id],

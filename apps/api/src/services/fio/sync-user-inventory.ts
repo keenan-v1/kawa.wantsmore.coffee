@@ -67,6 +67,8 @@ export async function syncUserInventory(
     // Track unknown locations and commodities
     const unknownLocations = new Set<string>()
     const unknownCommodities = new Set<string>()
+    // Track processed storages to avoid duplicates (location can appear in both CXWarehouses and PlayerModels)
+    const processedStorages = new Set<string>()
 
     // Helper to process a storage and its items
     const processStorage = async (
@@ -77,6 +79,13 @@ export async function syncUserInventory(
       if (!storage || !storage.Items || storage.Items.length === 0) {
         return
       }
+
+      // Skip if already processed (same location+type can appear in both CXWarehouses and PlayerModels)
+      const storageKey = `${locationId}-${storage.StorageType}`
+      if (processedStorages.has(storageKey)) {
+        return
+      }
+      processedStorages.add(storageKey)
 
       // Validate location exists
       if (!locationIds.has(locationId)) {
@@ -101,15 +110,9 @@ export async function syncUserInventory(
         const [inserted] = await db.insert(fioUserStorage).values({
           userId,
           storageId: `grouphub-${locationId}-${storage.StorageType}`,
-          addressableId: '', // Not available from GroupHub
           locationId,
           type: storage.StorageType,
-          // Capacity fields not available from GroupHub
-          weightLoad: null,
-          weightCapacity: null,
-          volumeLoad: null,
-          volumeCapacity: null,
-          fioTimestamp: storage.LastUpdated ? new Date(storage.LastUpdated) : null,
+          fioUploadedAt: storage.LastUpdated ? new Date(storage.LastUpdated) : null,
           lastSyncedAt: now,
         }).returning({ id: fioUserStorage.id })
 
@@ -141,11 +144,9 @@ export async function syncUserInventory(
 
         try {
           await db.insert(fioInventory).values({
-            userId,
             userStorageId: storageRecord.id,
             commodityTicker: item.MaterialTicker,
             quantity: item.Units,
-            lastSyncedAt: now,
           })
           result.inserted++
         } catch (error) {

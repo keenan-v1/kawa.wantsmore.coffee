@@ -4,13 +4,13 @@ import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
 
 interface FioExchangeStation {
-  StationId: string // UUID (addressableId for storage mapping)
+  StationId: string // UUID (not stored, we use NaturalId as key)
   NaturalId: string // Station natural ID like "HUB", "HRT", "ANT", "ARC"
   Name: string // Station name like "Hortus Station", "Hubur Station"
   SystemId: string
   SystemNaturalId: string // System code like "TD-203", "VH-331", "ZV-307", "AM-783"
   SystemName: string // System name like "Hubur", "Hortus", "Antares I", "Arclight"
-  WarehouseId: string // UUID for warehouse storage
+  WarehouseId: string // UUID for warehouse storage (not stored)
 }
 
 /**
@@ -41,7 +41,6 @@ export async function syncStations(): Promise<SyncResult> {
           .insert(fioLocations)
           .values({
             naturalId: station.NaturalId, // e.g., "HUB", "HRT", "ANT", "ARC"
-            addressableId: station.StationId, // UUID for storage mapping
             name: station.Name, // e.g., "Hortus Station", "Hubur Station"
             type: 'Station',
             systemId: station.SystemId,
@@ -51,7 +50,6 @@ export async function syncStations(): Promise<SyncResult> {
           .onConflictDoUpdate({
             target: fioLocations.naturalId,
             set: {
-              addressableId: station.StationId,
               name: station.Name,
               type: 'Station',
               systemId: station.SystemId,

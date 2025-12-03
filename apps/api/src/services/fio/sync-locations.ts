@@ -4,7 +4,7 @@ import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
 
 interface FioPlanetFull {
-  PlanetId: string // UUID (addressableId)
+  PlanetId: string // UUID (not stored, we use NaturalId as key)
   PlanetNaturalId: string // Natural ID like "KW-688c"
   PlanetName: string
   SystemId: string
@@ -19,7 +19,6 @@ interface FioSystemJson {
 
 /**
  * Sync planet locations from FIO /planet/allplanets/full endpoint (JSON)
- * Populates addressableId (UUID) for storage mapping
  * Stations are synced separately via syncStations
  */
 export async function syncLocations(): Promise<SyncResult> {
@@ -68,7 +67,6 @@ export async function syncLocations(): Promise<SyncResult> {
             .insert(fioLocations)
             .values({
               naturalId: planet.PlanetNaturalId,
-              addressableId: planet.PlanetId, // UUID for storage mapping
               name: planet.PlanetName,
               type: 'Planet',
               systemId: planet.SystemId,
@@ -78,7 +76,6 @@ export async function syncLocations(): Promise<SyncResult> {
             .onConflictDoUpdate({
               target: fioLocations.naturalId,
               set: {
-                addressableId: planet.PlanetId,
                 name: planet.PlanetName,
                 systemId: planet.SystemId,
                 systemNaturalId: system.NaturalId,

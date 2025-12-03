@@ -29,18 +29,14 @@ interface FioInventoryResponse {
   commodityTicker: string
   quantity: number
   locationId: string | null
-  lastSyncedAt: string
+  lastSyncedAt: string // From storage (when we last synced from FIO)
   commodityName: string
   commodityCategory: string | null
   locationName: string | null
   locationType: string | null
   // Storage info
   storageType: string
-  weightLoad: number | null
-  weightCapacity: number | null
-  volumeLoad: number | null
-  volumeCapacity: number | null
-  fioTimestamp: string | null
+  fioUploadedAt: string | null // When FIO last got data from game
 }
 
 @Route('fio/inventory')
@@ -61,14 +57,10 @@ export class FioInventoryController extends Controller {
         id: fioInventory.id,
         commodityTicker: fioInventory.commodityTicker,
         quantity: fioInventory.quantity,
-        lastSyncedAt: fioInventory.lastSyncedAt,
         // Storage fields
         storageType: fioUserStorage.type,
-        weightLoad: fioUserStorage.weightLoad,
-        weightCapacity: fioUserStorage.weightCapacity,
-        volumeLoad: fioUserStorage.volumeLoad,
-        volumeCapacity: fioUserStorage.volumeCapacity,
-        fioTimestamp: fioUserStorage.fioTimestamp,
+        lastSyncedAt: fioUserStorage.lastSyncedAt,
+        fioUploadedAt: fioUserStorage.fioUploadedAt,
         // Location fields (via storage)
         locationId: fioUserStorage.locationId,
         locationName: fioLocations.name,
@@ -81,7 +73,7 @@ export class FioInventoryController extends Controller {
       .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
       .innerJoin(fioCommodities, eq(fioInventory.commodityTicker, fioCommodities.ticker))
       .leftJoin(fioLocations, eq(fioUserStorage.locationId, fioLocations.naturalId))
-      .where(eq(fioInventory.userId, userId))
+      .where(eq(fioUserStorage.userId, userId))
 
     return items.map(item => ({
       id: item.id,
@@ -94,11 +86,7 @@ export class FioInventoryController extends Controller {
       locationName: item.locationName,
       locationType: item.locationType,
       storageType: item.storageType,
-      weightLoad: item.weightLoad ? parseFloat(item.weightLoad) : null,
-      weightCapacity: item.weightCapacity ? parseFloat(item.weightCapacity) : null,
-      volumeLoad: item.volumeLoad ? parseFloat(item.volumeLoad) : null,
-      volumeCapacity: item.volumeCapacity ? parseFloat(item.volumeCapacity) : null,
-      fioTimestamp: item.fioTimestamp?.toISOString() ?? null,
+      fioUploadedAt: item.fioUploadedAt?.toISOString() ?? null,
     }))
   }
 
@@ -147,14 +135,14 @@ export class FioInventoryController extends Controller {
   @Get('last-sync')
   public async getLastSyncTime(
     @Request() request: { user: JwtPayload }
-  ): Promise<{ lastSyncedAt: string | null; fioTimestamp: string | null }> {
+  ): Promise<{ lastSyncedAt: string | null; fioUploadedAt: string | null }> {
     const userId = request.user.userId
 
-    // Get the most recent sync time from storage (when we synced from FIO)
+    // Get the most recent sync time from storage
     const [storage] = await db
       .select({
         lastSyncedAt: fioUserStorage.lastSyncedAt,
-        fioTimestamp: fioUserStorage.fioTimestamp,
+        fioUploadedAt: fioUserStorage.fioUploadedAt,
       })
       .from(fioUserStorage)
       .where(eq(fioUserStorage.userId, userId))
@@ -163,7 +151,7 @@ export class FioInventoryController extends Controller {
 
     return {
       lastSyncedAt: storage?.lastSyncedAt?.toISOString() || null,
-      fioTimestamp: storage?.fioTimestamp?.toISOString() || null,
+      fioUploadedAt: storage?.fioUploadedAt?.toISOString() || null,
     }
   }
 }

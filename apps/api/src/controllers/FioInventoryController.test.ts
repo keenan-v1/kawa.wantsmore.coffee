@@ -16,24 +16,17 @@ vi.mock('../db/index.js', () => ({
   },
   fioInventory: {
     id: 'id',
-    userId: 'userId',
     userStorageId: 'userStorageId',
     commodityTicker: 'commodityTicker',
     quantity: 'quantity',
-    lastSyncedAt: 'lastSyncedAt',
   },
   fioUserStorage: {
     id: 'id',
     userId: 'userId',
     storageId: 'storageId',
-    addressableId: 'addressableId',
     locationId: 'locationId',
     type: 'type',
-    weightLoad: 'weightLoad',
-    weightCapacity: 'weightCapacity',
-    volumeLoad: 'volumeLoad',
-    volumeCapacity: 'volumeCapacity',
-    fioTimestamp: 'fioTimestamp',
+    fioUploadedAt: 'fioUploadedAt',
     lastSyncedAt: 'lastSyncedAt',
   },
   fioCommodities: {
@@ -78,14 +71,10 @@ describe('FioInventoryController', () => {
           id: 1,
           commodityTicker: 'H2O',
           quantity: 1000,
-          lastSyncedAt: new Date('2024-01-01T00:00:00Z'),
           // Storage fields
           storageType: 'STORE',
-          weightLoad: '100.00',
-          weightCapacity: '500.00',
-          volumeLoad: '50.00',
-          volumeCapacity: '200.00',
-          fioTimestamp: new Date('2024-01-01T00:00:00Z'),
+          lastSyncedAt: new Date('2024-01-01T00:00:00Z'),
+          fioUploadedAt: new Date('2024-01-01T00:00:00Z'),
           // Location fields
           locationId: 'BEN',
           locationName: 'Benton Station',
@@ -98,13 +87,9 @@ describe('FioInventoryController', () => {
           id: 2,
           commodityTicker: 'RAT',
           quantity: 500,
-          lastSyncedAt: new Date('2024-01-01T00:00:00Z'),
           storageType: 'STORE',
-          weightLoad: '200.00',
-          weightCapacity: '500.00',
-          volumeLoad: '100.00',
-          volumeCapacity: '200.00',
-          fioTimestamp: new Date('2024-01-01T00:00:00Z'),
+          lastSyncedAt: new Date('2024-01-01T00:00:00Z'),
+          fioUploadedAt: new Date('2024-01-01T00:00:00Z'),
           locationId: 'UV-351a',
           locationName: 'Katoa',
           locationType: 'Planet',
@@ -129,11 +114,7 @@ describe('FioInventoryController', () => {
         locationName: 'Benton Station',
         locationType: 'Station',
         storageType: 'STORE',
-        weightLoad: 100,
-        weightCapacity: 500,
-        volumeLoad: 50,
-        volumeCapacity: 200,
-        fioTimestamp: '2024-01-01T00:00:00.000Z',
+        fioUploadedAt: '2024-01-01T00:00:00.000Z',
       })
       expect(db.select).toHaveBeenCalled()
     })
@@ -255,14 +236,14 @@ describe('FioInventoryController', () => {
       const fioDate = new Date('2024-01-15T09:00:00Z')
       mockSelect.limit.mockResolvedValueOnce([{
         lastSyncedAt: syncDate,
-        fioTimestamp: fioDate,
+        fioUploadedAt: fioDate,
       }])
 
       const result = await controller.getLastSyncTime(mockRequest)
 
       expect(result).toEqual({
         lastSyncedAt: '2024-01-15T10:30:00.000Z',
-        fioTimestamp: '2024-01-15T09:00:00.000Z',
+        fioUploadedAt: '2024-01-15T09:00:00.000Z',
       })
     })
 
@@ -273,7 +254,7 @@ describe('FioInventoryController', () => {
 
       expect(result).toEqual({
         lastSyncedAt: null,
-        fioTimestamp: null,
+        fioUploadedAt: null,
       })
     })
   })
