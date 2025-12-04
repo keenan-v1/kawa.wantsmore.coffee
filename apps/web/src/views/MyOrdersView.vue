@@ -510,7 +510,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { PERMISSIONS, type Currency, type SellOrderLimitMode, type OrderType } from '@kawakawa/types'
+import {
+  PERMISSIONS,
+  type Currency,
+  type SellOrderLimitMode,
+  type OrderType,
+} from '@kawakawa/types'
 import { api, type SellOrderResponse, type BuyOrderResponse } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
@@ -596,8 +601,12 @@ const limitModes = [
 ]
 
 // Check permissions for order creation
-const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
-const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
+const canCreateInternalOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL)
+)
+const canCreatePartnerOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
+)
 
 const orderTypes = computed(() => {
   const types: { title: string; value: OrderType }[] = []

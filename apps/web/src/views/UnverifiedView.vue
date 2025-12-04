@@ -19,12 +19,7 @@
               In the meantime, join our Discord community to connect with other members:
             </p>
 
-            <v-btn
-              href="https://discord.gg/QmqcS2zgZR"
-              target="_blank"
-              color="indigo"
-              size="large"
-            >
+            <v-btn href="https://discord.gg/QmqcS2zgZR" target="_blank" color="indigo" size="large">
               <template #prepend>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

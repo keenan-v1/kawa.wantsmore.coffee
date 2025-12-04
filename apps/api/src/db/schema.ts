@@ -92,6 +92,9 @@ export const userSettings = pgTable('user_settings', {
   commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode')
     .notNull()
     .default('both'),
+  // FIO sync preferences
+  fioAutoSync: boolean('fio_auto_sync').notNull().default(true), // Auto-sync inventory on schedule
+  fioExcludedLocations: text('fio_excluded_locations').array(), // Location NaturalIds or Names to exclude
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })

@@ -133,6 +133,7 @@ describe('FioInventoryController', () => {
       const mockSettings = {
         fioUsername: 'fiouser',
         fioApiKey: 'fio-api-key-123',
+        fioExcludedLocations: ['UV-351a'],
       }
 
       mockSelect.where.mockResolvedValueOnce([mockSettings])
@@ -145,6 +146,7 @@ describe('FioInventoryController', () => {
         storageLocations: 3,
         skippedUnknownLocations: 2,
         skippedUnknownCommodities: 1,
+        skippedExcludedLocations: 5,
         fioLastSync: '2024-01-01T12:00:00.000Z',
       })
 
@@ -157,12 +159,14 @@ describe('FioInventoryController', () => {
         errors: [],
         skippedUnknownLocations: 2,
         skippedUnknownCommodities: 1,
+        skippedExcludedLocations: 5,
         fioLastSync: '2024-01-01T12:00:00.000Z',
       })
       expect(syncUserInventoryModule.syncUserInventory).toHaveBeenCalledWith(
         1,
         'fio-api-key-123',
-        'fiouser'
+        'fiouser',
+        { excludedLocations: ['UV-351a'] }
       )
     })
 
@@ -215,6 +219,7 @@ describe('FioInventoryController', () => {
         {
           fioUsername: 'fiouser',
           fioApiKey: 'fio-api-key',
+          fioExcludedLocations: null,
         },
       ])
 
@@ -226,6 +231,7 @@ describe('FioInventoryController', () => {
         storageLocations: 2,
         skippedUnknownLocations: 0,
         skippedUnknownCommodities: 0,
+        skippedExcludedLocations: 0,
         fioLastSync: null,
       })
 

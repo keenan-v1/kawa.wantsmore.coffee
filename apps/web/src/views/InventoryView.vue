@@ -257,7 +257,11 @@
           <div class="d-none d-sm-flex ga-1">
             <v-tooltip
               location="top"
-              :text="canCreateAnyOrders ? 'Create sell order' : 'You do not have permission to create orders'"
+              :text="
+                canCreateAnyOrders
+                  ? 'Create sell order'
+                  : 'You do not have permission to create orders'
+              "
             >
               <template #activator="{ props }">
                 <v-btn
@@ -371,11 +375,17 @@ const fioConfigured = computed(() => {
 })
 
 // Check permissions for order creation
-const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
-const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
+const canCreateInternalOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL)
+)
+const canCreatePartnerOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
+)
 
 // Check if user can create any orders at all
-const canCreateAnyOrders = computed(() => canCreateInternalOrders.value || canCreatePartnerOrders.value)
+const canCreateAnyOrders = computed(
+  () => canCreateInternalOrders.value || canCreatePartnerOrders.value
+)
 
 interface LastSync {
   lastSyncedAt: string | null

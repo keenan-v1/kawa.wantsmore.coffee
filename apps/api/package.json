@@ -26,7 +26,11 @@
     "fio:sync:commodities": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts commodities",
     "fio:sync:locations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts locations",
     "fio:sync:stations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts stations",
-    "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts"
+    "fio:sync:users": "tsx --env-file-if-exists=.env src/scripts/sync-all-users.ts",
+    "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts",
+    "admin:password": "tsx --env-file-if-exists=.env src/scripts/admin-password.ts",
+    "admin:add-role": "tsx --env-file-if-exists=.env src/scripts/admin-add-role.ts",
+    "admin:rm-role": "tsx --env-file-if-exists=.env src/scripts/admin-rm-role.ts"
   },
   "dependencies": {
     "@kawakawa/types": "workspace:*",

@@ -204,20 +204,10 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="close">Cancel</v-btn>
-        <v-btn
-          v-if="activeTab === 'buy'"
-          color="warning"
-          :loading="saving"
-          @click="submitBuyOrder"
-        >
+        <v-btn v-if="activeTab === 'buy'" color="warning" :loading="saving" @click="submitBuyOrder">
           Create Buy Order
         </v-btn>
-        <v-btn
-          v-else
-          color="success"
-          :loading="saving"
-          @click="submitSellOrder"
-        >
+        <v-btn v-else color="success" :loading="saving" @click="submitSellOrder">
           Create Sell Order
         </v-btn>
       </v-card-actions>
@@ -227,7 +217,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { PERMISSIONS, type Currency, type SellOrderLimitMode, type OrderType } from '@kawakawa/types'
+import {
+  PERMISSIONS,
+  type Currency,
+  type SellOrderLimitMode,
+  type OrderType,
+} from '@kawakawa/types'
 import { api, type FioInventoryItem } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
@@ -295,8 +290,12 @@ const getCommodityDisplay = (ticker: string): string => {
 }
 
 // Check permissions for order creation
-const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
-const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
+const canCreateInternalOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL)
+)
+const canCreatePartnerOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
+)
 
 const orderTypes = computed(() => {
   const types: { title: string; value: OrderType }[] = []
@@ -357,7 +356,10 @@ const loadCommodities = async () => {
     commodities.value = data
       .map(c => ({
         ticker: c.ticker,
-        display: commodityService.getCommodityDisplay(c.ticker, userStore.getCommodityDisplayMode()),
+        display: commodityService.getCommodityDisplay(
+          c.ticker,
+          userStore.getCommodityDisplayMode()
+        ),
       }))
       .sort((a, b) => a.display.localeCompare(b.display))
   } catch (error) {

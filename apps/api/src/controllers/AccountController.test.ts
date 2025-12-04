@@ -84,6 +84,8 @@ describe('AccountController', () => {
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'ticker-only',
+        fioAutoSync: true,
+        fioExcludedLocations: ['UV-351a'],
       }
       const mockRoles = [
         { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
@@ -107,6 +109,8 @@ describe('AccountController', () => {
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'ticker-only',
+        fioAutoSync: true,
+        fioExcludedLocations: ['UV-351a'],
         roles: [
           { id: 'member', name: 'Member', color: 'blue' },
           { id: 'lead', name: 'Lead', color: 'green' },
@@ -126,6 +130,8 @@ describe('AccountController', () => {
         preferredCurrency: null,
         locationDisplayMode: null,
         commodityDisplayMode: null,
+        fioAutoSync: null,
+        fioExcludedLocations: null,
       }
 
       mockSelect.where.mockResolvedValueOnce([mockUser]).mockResolvedValueOnce([])
@@ -143,6 +149,8 @@ describe('AccountController', () => {
         preferredCurrency: 'CIS',
         locationDisplayMode: 'both',
         commodityDisplayMode: 'both',
+        fioAutoSync: true,
+        fioExcludedLocations: [],
         roles: [],
         permissions: [],
       })

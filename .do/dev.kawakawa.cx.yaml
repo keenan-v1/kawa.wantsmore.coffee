@@ -2,7 +2,7 @@ alerts:
   - rule: DEPLOYMENT_FAILED
   - rule: DOMAIN_FAILED
 databases:
-  - cluster_name: app-a763f094-647f-42ec-81ae-3974d9d68f0a
+  - cluster_name: db.dev.kawakawa.cx
     db_name: dev-db
     db_user: dev-db
     engine: PG
@@ -63,6 +63,25 @@ jobs:
     kind: POST_DEPLOY
     name: db-init
     run_command: cd apps/api && pnpm db:init
+    source_dir: /
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
+      build
+    environment_slug: node-js
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${dev-db.DATABASE_URL}
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: SCHEDULED
+    name: fio-sync-users
+    run_command: cd apps/api && pnpm fio:sync:users
+    schedule: 0 */3 * * *
     source_dir: /
 name: kawa-market
 region: nyc

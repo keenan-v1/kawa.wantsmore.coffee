@@ -13,7 +13,11 @@ const MOCK_ROLES: Record<string, Role> = {
 
 // Mock permissions by role (for mock API responses)
 const MOCK_PERMISSIONS_BY_ROLE: Record<string, string[]> = {
-  member: [PERMISSIONS.ORDERS_VIEW_INTERNAL, PERMISSIONS.ORDERS_VIEW_PARTNER, PERMISSIONS.ORDERS_POST_INTERNAL],
+  member: [
+    PERMISSIONS.ORDERS_VIEW_INTERNAL,
+    PERMISSIONS.ORDERS_VIEW_PARTNER,
+    PERMISSIONS.ORDERS_POST_INTERNAL,
+  ],
   // Administrator role only has admin perms - combine with member/trade-partner for order posting
   administrator: [
     PERMISSIONS.ORDERS_VIEW_INTERNAL,
@@ -44,6 +48,8 @@ interface User {
   fioUsername: string
   hasFioApiKey: boolean
   preferredCurrency: Currency
+  fioAutoSync: boolean
+  fioExcludedLocations: string[]
   roles: Role[]
 }
 
@@ -71,6 +77,8 @@ const users: User[] = [
     fioUsername: 'demo_fio',
     hasFioApiKey: true,
     preferredCurrency: 'CIS',
+    fioAutoSync: true,
+    fioExcludedLocations: [],
     roles: [MOCK_ROLES.member, MOCK_ROLES.administrator],
   },
 ]
@@ -127,6 +135,8 @@ export const mockApi = {
             fioUsername: user.fioUsername,
             hasFioApiKey: user.hasFioApiKey,
             preferredCurrency: user.preferredCurrency,
+            fioAutoSync: user.fioAutoSync,
+            fioExcludedLocations: user.fioExcludedLocations,
             roles: user.roles,
             permissions: getPermissionsForRoles(user.roles),
           },
@@ -181,6 +191,8 @@ export const mockApi = {
           fioUsername: '',
           hasFioApiKey: false,
           preferredCurrency: 'CIS', // Default currency
+          fioAutoSync: true,
+          fioExcludedLocations: [],
           roles: [MOCK_ROLES.applicant],
         }
         users.push(newUser)

@@ -29,6 +29,7 @@ interface FioInventorySyncResult {
   errors: string[]
   skippedUnknownLocations: number
   skippedUnknownCommodities: number
+  skippedExcludedLocations: number
   fioLastSync: string | null
 }
 
@@ -123,11 +124,12 @@ export class FioInventoryController extends Controller {
   ): Promise<FioInventorySyncResult> {
     const userId = request.user.userId
 
-    // Get user's FIO credentials
+    // Get user's FIO credentials and sync preferences
     const [settings] = await db
       .select({
         fioUsername: userSettings.fioUsername,
         fioApiKey: userSettings.fioApiKey,
+        fioExcludedLocations: userSettings.fioExcludedLocations,
       })
       .from(userSettings)
       .where(eq(userSettings.userId, userId))
@@ -139,8 +141,10 @@ export class FioInventoryController extends Controller {
       )
     }
 
-    // Perform sync
-    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername)
+    // Perform sync with excluded locations
+    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername, {
+      excludedLocations: settings.fioExcludedLocations ?? [],
+    })
 
     return {
       success: result.success,
@@ -149,6 +153,7 @@ export class FioInventoryController extends Controller {
       errors: result.errors,
       skippedUnknownLocations: result.skippedUnknownLocations,
       skippedUnknownCommodities: result.skippedUnknownCommodities,
+      skippedExcludedLocations: result.skippedExcludedLocations,
       fioLastSync: result.fioLastSync,
     }
   }

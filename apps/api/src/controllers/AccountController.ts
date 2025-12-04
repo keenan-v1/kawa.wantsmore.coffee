@@ -15,6 +15,9 @@ interface UserProfile {
   preferredCurrency: Currency
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
+  // FIO sync preferences
+  fioAutoSync: boolean
+  fioExcludedLocations: string[]
   roles: Role[]
   permissions: string[] // Permission IDs granted to this user
 }
@@ -26,6 +29,9 @@ interface UpdateProfileRequest {
   preferredCurrency?: Currency
   locationDisplayMode?: LocationDisplayMode
   commodityDisplayMode?: CommodityDisplayMode
+  // FIO sync preferences
+  fioAutoSync?: boolean
+  fioExcludedLocations?: string[]
 }
 
 interface ChangePasswordRequest {
@@ -51,6 +57,8 @@ export class AccountController extends Controller {
         preferredCurrency: userSettings.preferredCurrency,
         locationDisplayMode: userSettings.locationDisplayMode,
         commodityDisplayMode: userSettings.commodityDisplayMode,
+        fioAutoSync: userSettings.fioAutoSync,
+        fioExcludedLocations: userSettings.fioExcludedLocations,
       })
       .from(users)
       .leftJoin(userSettings, eq(users.id, userSettings.userId))
@@ -93,6 +101,8 @@ export class AccountController extends Controller {
       preferredCurrency: user.preferredCurrency || 'CIS',
       locationDisplayMode: user.locationDisplayMode || 'both',
       commodityDisplayMode: user.commodityDisplayMode || 'both',
+      fioAutoSync: user.fioAutoSync ?? true,
+      fioExcludedLocations: user.fioExcludedLocations || [],
       roles: rolesArray,
       permissions: permissionIds,
     }
@@ -126,6 +136,9 @@ export class AccountController extends Controller {
       settingsUpdate.locationDisplayMode = body.locationDisplayMode
     if (body.commodityDisplayMode !== undefined)
       settingsUpdate.commodityDisplayMode = body.commodityDisplayMode
+    if (body.fioAutoSync !== undefined) settingsUpdate.fioAutoSync = body.fioAutoSync
+    if (body.fioExcludedLocations !== undefined)
+      settingsUpdate.fioExcludedLocations = body.fioExcludedLocations
 
     if (Object.keys(settingsUpdate).length > 0) {
       settingsUpdate.updatedAt = new Date()

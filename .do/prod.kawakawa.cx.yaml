@@ -1,0 +1,121 @@
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+databases:
+  - cluster_name: db.kawakawa.cx
+    db_name: kawa
+    db_user: kawa
+    engine: PG
+    name: kawa-db
+    production: true
+    version: '17'
+domains:
+  - domain: kawakawa.cx
+    type: PRIMARY
+    zone: kawakawa.cx
+features:
+  - buildpack-stack=ubuntu-22
+ingress:
+  rules:
+    - component:
+        name: kawa-api
+      match:
+        path:
+          prefix: /api
+    - component:
+        name: kawa-web
+      match:
+        path:
+          prefix: /
+jobs:
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
+      build
+    environment_slug: node-js
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: PRE_DEPLOY
+    name: db-migrate
+    run_command: cd apps/api && pnpm db:migrate
+    source_dir: /
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
+      build
+    environment_slug: node-js
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: POST_DEPLOY
+    name: db-init
+    run_command: cd apps/api && pnpm db:init
+    source_dir: /
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
+      build
+    environment_slug: node-js
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: SCHEDULED
+    name: fio-sync-users
+    run_command: cd apps/api && pnpm fio:sync:users
+    schedule: 0 */3 * * *
+    source_dir: /
+name: kawa-market
+region: nyc
+services:
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/api
+      build
+    environment_slug: node-js
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+      - key: PORT
+        scope: RUN_TIME
+        value: '3000'
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    name: kawa-api
+    run_command: node apps/api/dist/index.js
+    source_dir: /
+static_sites:
+  - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
+      install && pnpm --filter @kawakawa/types build && pnpm --filter @kawakawa/web
+      build
+    environment_slug: node-js
+    github:
+      branch: main
+      deploy_on_push: false
+      repo: keenan-v1/kawa.wantsmore.coffee
+    name: kawa-web
+    output_dir: apps/web/dist
+    source_dir: /

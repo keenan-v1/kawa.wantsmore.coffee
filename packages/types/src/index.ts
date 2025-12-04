@@ -36,6 +36,9 @@ export interface User {
   preferredCurrency: Currency
   locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
   commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
+  // FIO sync preferences
+  fioAutoSync: boolean // Auto-sync inventory on schedule (default: true)
+  fioExcludedLocations: string[] // Location NaturalIds or Names to exclude from sync
   roles: Role[] // One user to many roles
   permissions: string[] // Permission IDs granted to this user based on their roles
 }

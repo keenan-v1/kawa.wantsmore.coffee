@@ -32,9 +32,7 @@
                 <v-avatar size="150" color="grey-darken-3" class="mb-4">
                   <v-icon size="80">mdi-account</v-icon>
                 </v-avatar>
-                <div class="text-body-2 text-medium-emphasis">
-                  Profile picture coming soon
-                </div>
+                <div class="text-body-2 text-medium-emphasis">Profile picture coming soon</div>
 
                 <!-- Role Chips -->
                 <div class="mt-4 text-center">
@@ -114,9 +112,9 @@
             <v-spacer />
             <v-btn
               color="primary"
-              @click="saveProfile"
               :loading="savingProfile"
               :disabled="savingProfile || loading"
+              @click="saveProfile"
             >
               Save Changes
             </v-btn>
@@ -160,9 +158,9 @@
             <v-spacer />
             <v-btn
               color="primary"
-              @click="changePassword"
               :loading="changingPassword"
               :disabled="changingPassword || loading"
+              @click="changePassword"
             >
               Update Password
             </v-btn>
@@ -192,12 +190,42 @@
                   <v-text-field
                     v-model="fioApiKey"
                     :label="account.hasFioApiKey ? 'FIO API Key (configured)' : 'FIO API Key'"
-                    :placeholder="account.hasFioApiKey ? '••••••••••••••••' : 'Enter your FIO API key'"
+                    :placeholder="
+                      account.hasFioApiKey ? '••••••••••••••••' : 'Enter your FIO API key'
+                    "
                     prepend-icon="mdi-key"
                     :append-inner-icon="showFioApiKey ? 'mdi-eye-off' : 'mdi-eye'"
                     :type="showFioApiKey ? 'text' : 'password'"
-                    @click:append-inner="showFioApiKey = !showFioApiKey"
                     hint="Get your API key from https://fio.fnar.net/settings"
+                    persistent-hint
+                    class="mb-4"
+                    @click:append-inner="showFioApiKey = !showFioApiKey"
+                  />
+
+                  <v-divider class="my-4" />
+
+                  <div class="text-subtitle-2 mb-3">Sync Preferences</div>
+
+                  <v-switch
+                    v-model="account.fioAutoSync"
+                    label="Auto Sync"
+                    color="primary"
+                    hide-details
+                    class="mb-2"
+                  >
+                    <template #prepend>
+                      <v-icon>mdi-sync-circle</v-icon>
+                    </template>
+                  </v-switch>
+                  <div class="text-caption text-medium-emphasis mb-4 ml-10">
+                    Automatically sync your inventory every 3 hours
+                  </div>
+
+                  <v-text-field
+                    v-model="excludedLocationsText"
+                    label="Excluded Locations"
+                    prepend-icon="mdi-map-marker-off"
+                    hint="Comma-separated list of location IDs or names to exclude (e.g., UV-351a, Katoa)"
                     persistent-hint
                   />
                 </v-form>
@@ -206,9 +234,9 @@
                 <v-spacer />
                 <v-btn
                   color="primary"
-                  @click="saveFioSettings"
                   :loading="savingProfile"
                   :disabled="savingProfile || loading"
+                  @click="saveFioSettings"
                 >
                   Save FIO Settings
                 </v-btn>
@@ -232,9 +260,9 @@
                     <v-btn
                       color="primary"
                       block
-                      @click="syncFio"
                       :loading="syncing"
                       :disabled="syncing || clearing || !account.hasFioApiKey"
+                      @click="syncFio"
                     >
                       <v-icon start>mdi-cloud-download</v-icon>
                       Sync Now
@@ -245,9 +273,9 @@
                       color="error"
                       variant="outlined"
                       block
-                      @click="confirmClearFio"
                       :loading="clearing"
                       :disabled="syncing || clearing || fioStats.totalItems === 0"
+                      @click="confirmClearFio"
                     >
                       <v-icon start>mdi-delete</v-icon>
                       Clear Data
@@ -274,11 +302,10 @@
                   @click:close="syncResult = null"
                 >
                   <template v-if="syncResult.success">
-                    Synced {{ syncResult.inserted }} items from {{ syncResult.storageLocations }} storage locations.
+                    Synced {{ syncResult.inserted }} items from
+                    {{ syncResult.storageLocations }} storage locations.
                   </template>
-                  <template v-else>
-                    Sync failed: {{ syncResult.errors.join(', ') }}
-                  </template>
+                  <template v-else> Sync failed: {{ syncResult.errors.join(', ') }} </template>
                 </v-alert>
               </v-card-text>
             </v-card>
@@ -301,7 +328,9 @@
                   </v-col>
                   <v-col cols="6" sm="4" md="2">
                     <div class="text-center">
-                      <div class="text-h4 font-weight-bold">{{ formatNumber(fioStats.totalQuantity) }}</div>
+                      <div class="text-h4 font-weight-bold">
+                        {{ formatNumber(fioStats.totalQuantity) }}
+                      </div>
                       <div class="text-caption text-medium-emphasis">Total Quantity</div>
                     </div>
                   </v-col>
@@ -319,7 +348,9 @@
                   </v-col>
                   <v-col cols="6" sm="4" md="4">
                     <div class="text-center">
-                      <div class="text-body-1 font-weight-bold">{{ formatDateTime(fioStats.newestSyncTime) }}</div>
+                      <div class="text-body-1 font-weight-bold">
+                        {{ formatDateTime(fioStats.newestSyncTime) }}
+                      </div>
                       <div class="text-caption text-medium-emphasis">Last Synced</div>
                     </div>
                   </v-col>
@@ -330,7 +361,10 @@
                 <v-row>
                   <v-col cols="12" sm="6">
                     <div class="d-flex align-center">
-                      <v-icon class="mr-2" :color="getDataAgeInfo(fioStats.oldestFioUploadTime).color">
+                      <v-icon
+                        class="mr-2"
+                        :color="getDataAgeInfo(fioStats.oldestFioUploadTime).color"
+                      >
                         {{ getDataAgeInfo(fioStats.oldestFioUploadTime).icon }}
                       </v-icon>
                       <div>
@@ -339,15 +373,22 @@
                           {{ formatDateTime(fioStats.oldestFioUploadTime) }}
                         </div>
                         <div v-if="fioStats.oldestFioUploadLocation" class="text-caption">
-                          <v-chip size="x-small" class="mr-1">{{ fioStats.oldestFioUploadLocation.storageType }}</v-chip>
-                          <span class="text-medium-emphasis">{{ fioStats.oldestFioUploadLocation.locationNaturalId || 'Unknown' }}</span>
+                          <v-chip size="x-small" class="mr-1">{{
+                            fioStats.oldestFioUploadLocation.storageType
+                          }}</v-chip>
+                          <span class="text-medium-emphasis">{{
+                            fioStats.oldestFioUploadLocation.locationNaturalId || 'Unknown'
+                          }}</span>
                         </div>
                       </div>
                     </div>
                   </v-col>
                   <v-col cols="12" sm="6">
                     <div class="d-flex align-center">
-                      <v-icon class="mr-2" :color="getDataAgeInfo(fioStats.newestFioUploadTime).color">
+                      <v-icon
+                        class="mr-2"
+                        :color="getDataAgeInfo(fioStats.newestFioUploadTime).color"
+                      >
                         {{ getDataAgeInfo(fioStats.newestFioUploadTime).icon }}
                       </v-icon>
                       <div>
@@ -374,12 +415,13 @@
           Clear FIO Data?
         </v-card-title>
         <v-card-text>
-          This will permanently delete all your synced FIO inventory data. This action cannot be undone.
+          This will permanently delete all your synced FIO inventory data. This action cannot be
+          undone.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="clearDialog = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="clearFio" :loading="clearing">
+          <v-btn color="error" variant="flat" :loading="clearing" @click="clearFio">
             Clear All Data
           </v-btn>
         </v-card-actions>
@@ -418,6 +460,8 @@ const account = ref<{
   preferredCurrency: Currency
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
+  fioAutoSync: boolean
+  fioExcludedLocations: string[]
   roles: Role[]
 }>({
   profileName: '',
@@ -427,12 +471,15 @@ const account = ref<{
   preferredCurrency: 'CIS',
   locationDisplayMode: 'both',
   commodityDisplayMode: 'both',
+  fioAutoSync: true,
+  fioExcludedLocations: [],
   roles: [],
 })
 
 // FIO-specific state
 const fioApiKey = ref('')
 const showFioApiKey = ref(false)
+const excludedLocationsText = ref('') // Comma-separated string for UI
 const fioStats = ref({
   totalItems: 0,
   totalQuantity: 0,
@@ -487,9 +534,7 @@ const formatDateTime = (dateStr: string | null): string => {
   return date.toLocaleString()
 }
 
-const getDataAgeInfo = (
-  dateStr: string | null
-): { color: string; icon: string } => {
+const getDataAgeInfo = (dateStr: string | null): { color: string; icon: string } => {
   if (!dateStr) return { color: 'grey', icon: 'mdi-clock-outline' }
 
   const date = new Date(dateStr)
@@ -525,7 +570,11 @@ onMounted(async () => {
       ...profile,
       locationDisplayMode: profile.locationDisplayMode || 'both',
       commodityDisplayMode: profile.commodityDisplayMode || 'both',
+      fioAutoSync: profile.fioAutoSync ?? true,
+      fioExcludedLocations: profile.fioExcludedLocations || [],
     }
+    // Initialize excluded locations text from array
+    excludedLocationsText.value = (profile.fioExcludedLocations || []).join(', ')
     userStore.setUser(profile)
 
     // Load FIO stats
@@ -539,7 +588,10 @@ onMounted(async () => {
         ...cachedUser,
         locationDisplayMode: cachedUser.locationDisplayMode || 'both',
         commodityDisplayMode: cachedUser.commodityDisplayMode || 'both',
+        fioAutoSync: cachedUser.fioAutoSync ?? true,
+        fioExcludedLocations: cachedUser.fioExcludedLocations || [],
       }
+      excludedLocationsText.value = (cachedUser.fioExcludedLocations || []).join(', ')
     }
     showSnackbar('Failed to load profile from server', 'error')
   } finally {
@@ -571,11 +623,22 @@ const saveProfile = async () => {
 const saveFioSettings = async () => {
   try {
     savingProfile.value = true
+
+    // Parse excluded locations from comma-separated text
+    const excludedLocations = excludedLocationsText.value
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
     const updateData: {
       fioUsername: string
       fioApiKey?: string
+      fioAutoSync: boolean
+      fioExcludedLocations: string[]
     } = {
       fioUsername: account.value.fioUsername || '',
+      fioAutoSync: account.value.fioAutoSync,
+      fioExcludedLocations: excludedLocations,
     }
 
     // Only include fioApiKey if user entered a new one
@@ -585,6 +648,8 @@ const saveFioSettings = async () => {
 
     const updated = await api.account.updateProfile(updateData)
     account.value.hasFioApiKey = updated.hasFioApiKey
+    account.value.fioAutoSync = updated.fioAutoSync
+    account.value.fioExcludedLocations = updated.fioExcludedLocations
     userStore.setUser(updated)
 
     // Clear the API key field after successful save
@@ -636,7 +701,9 @@ const clearFio = async () => {
     await loadFioStats()
     syncResult.value = null
 
-    showSnackbar(`Cleared ${result.deletedItems} items from ${result.deletedStorages} storage locations`)
+    showSnackbar(
+      `Cleared ${result.deletedItems} items from ${result.deletedStorages} storage locations`
+    )
   } catch (error) {
     console.error('Failed to clear FIO data', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to clear FIO data'

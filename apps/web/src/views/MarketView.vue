@@ -426,8 +426,12 @@ const saving = ref(false)
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
 // Check permissions for order creation
-const canCreateInternalOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL))
-const canCreatePartnerOrders = computed(() => userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER))
+const canCreateInternalOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_INTERNAL)
+)
+const canCreatePartnerOrders = computed(() =>
+  userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
+)
 
 const orderTypes = computed(() => {
   const types: { title: string; value: OrderType }[] = []

@@ -10,7 +10,12 @@ export interface UserInventorySyncResult extends SyncResult {
   storageLocations: number
   skippedUnknownLocations: number
   skippedUnknownCommodities: number
+  skippedExcludedLocations: number // Locations excluded by user preference
   fioLastSync: string | null // Most recent FIO sync timestamp from game
+}
+
+export interface SyncUserInventoryOptions {
+  excludedLocations?: string[] // Location NaturalIds or Names to exclude
 }
 
 /**
@@ -24,11 +29,13 @@ export interface UserInventorySyncResult extends SyncResult {
  * @param userId - The internal user ID
  * @param fioApiKey - User's FIO API key
  * @param fioUsername - User's FIO username
+ * @param options - Sync options including excluded locations
  */
 export async function syncUserInventory(
   userId: number,
   fioApiKey: string,
-  fioUsername: string
+  fioUsername: string,
+  options: SyncUserInventoryOptions = {}
 ): Promise<UserInventorySyncResult> {
   const result: UserInventorySyncResult = {
     success: false,
@@ -38,8 +45,12 @@ export async function syncUserInventory(
     storageLocations: 0,
     skippedUnknownLocations: 0,
     skippedUnknownCommodities: 0,
+    skippedExcludedLocations: 0,
     fioLastSync: null,
   }
+
+  // Normalize excluded locations to lowercase for case-insensitive matching
+  const excludedLocations = new Set((options.excludedLocations || []).map(l => l.toLowerCase()))
 
   try {
     const client = new FioClient()
@@ -74,6 +85,9 @@ export async function syncUserInventory(
     // Track processed storages to avoid duplicates (location can appear in both CXWarehouses and PlayerModels)
     const processedStorages = new Set<string>()
 
+    // Track excluded locations for logging
+    const skippedExcluded = new Set<string>()
+
     // Helper to process a storage and its items
     const processStorage = async (
       locationId: string,
@@ -90,6 +104,20 @@ export async function syncUserInventory(
         return
       }
       processedStorages.add(storageKey)
+
+      // Check if location is excluded (match by NaturalId or Name, case-insensitive)
+      if (
+        excludedLocations.has(locationId.toLowerCase()) ||
+        excludedLocations.has(locationName.toLowerCase())
+      ) {
+        if (!skippedExcluded.has(locationId)) {
+          skippedExcluded.add(locationId)
+          console.log(`⏭️  Skipping excluded location: ${locationId} (${locationName})`)
+        }
+        const validItems = storage.Items.filter(i => i.MaterialTicker && i.Units > 0)
+        result.skippedExcludedLocations += validItems.length
+        return
+      }
 
       // Validate location exists
       if (!locationIds.has(locationId)) {
@@ -228,6 +256,11 @@ export async function syncUserInventory(
       `✅ Synced ${result.storageLocations} storage locations with ${result.inserted} inventory entries for ${fioUsername}`
     )
 
+    if (result.skippedExcludedLocations > 0) {
+      console.log(
+        `⏭️  Skipped ${result.skippedExcludedLocations} items at ${skippedExcluded.size} excluded locations`
+      )
+    }
     if (result.skippedUnknownLocations > 0) {
       console.log(
         `⚠️  Skipped ${result.skippedUnknownLocations} items at ${unknownLocations.size} unknown locations`

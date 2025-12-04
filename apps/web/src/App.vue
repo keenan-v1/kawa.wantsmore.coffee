@@ -56,7 +56,7 @@
       </template>
       <v-tooltip location="bottom">
         <template #activator="{ props }">
-          <v-btn v-bind="props" @click="logout" icon size="small" class="mx-1">
+          <v-btn v-bind="props" icon size="small" class="mx-1" @click="logout">
             <v-icon>mdi-logout</v-icon>
           </v-btn>
         </template>
