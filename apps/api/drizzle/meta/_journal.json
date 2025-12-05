@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1764530345809,
-      "tag": "0000_huge_young_avengers",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1764732912572,
-      "tag": "0001_thin_tusk",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1764911302961,
-      "tag": "0002_lean_smasher",
+      "when": 1764912143529,
+      "tag": "0000_sharp_jamie_braddock",
       "breakpoints": true
     }
   ]

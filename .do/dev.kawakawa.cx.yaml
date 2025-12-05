@@ -37,7 +37,7 @@ jobs:
         scope: RUN_TIME
         value: ${dev-db.DATABASE_URL}
     github:
-      branch: main
+      branch: dev
       deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
