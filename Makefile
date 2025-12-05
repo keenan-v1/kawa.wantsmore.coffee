@@ -1,6 +1,6 @@
 # Kawakawa CX - Development Commands
 
-.PHONY: help install dev build test db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
+.PHONY: help install dev build test lint lint-fix format format-check db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -24,7 +24,19 @@ build: ## Build all packages
 	pnpm build
 
 test: ## Run all tests
-	pnpm -r test -- --run
+	pnpm --filter @kawakawa/api test -- --run
+
+lint: ## Check for lint errors
+	pnpm lint
+
+lint-fix: ## Fix auto-fixable lint errors
+	pnpm lint:fix
+
+format: ## Format all files with Prettier
+	pnpm format
+
+format-check: ## Check formatting without modifying
+	pnpm format:check
 
 db-init: ## Initialize database (migrate, seed, sync FIO) - idempotent, production-ready
 	pnpm --filter @kawakawa/api db:migrate

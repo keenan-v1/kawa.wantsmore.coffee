@@ -23,7 +23,7 @@
             />
           </v-col>
           <v-col cols="6" sm="4" lg="2">
-            <v-select
+            <KeyValueAutocomplete
               v-model="filters.commodity"
               :items="commodityOptions"
               label="Commodity"
@@ -43,7 +43,7 @@
             />
           </v-col>
           <v-col cols="6" sm="4" lg="2">
-            <v-select
+            <KeyValueAutocomplete
               v-model="filters.location"
               :items="locationOptions"
               label="Location"
@@ -358,6 +358,7 @@ import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
+import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
 
@@ -480,9 +481,12 @@ const itemTypeOptions = [
   { title: 'Buy', value: 'buy' as MarketItemType },
 ]
 
-const commodityOptions = computed(() => {
+const commodityOptions = computed((): KeyValueItem[] => {
   const tickers = new Set(marketItems.value.map(l => l.commodityTicker))
-  return Array.from(tickers).sort()
+  return Array.from(tickers).map(ticker => ({
+    key: ticker,
+    display: getCommodityDisplay(ticker),
+  }))
 })
 
 const categoryOptions = computed(() => {
@@ -492,14 +496,12 @@ const categoryOptions = computed(() => {
   return Array.from(categories).sort() as string[]
 })
 
-const locationOptions = computed(() => {
+const locationOptions = computed((): KeyValueItem[] => {
   const locations = new Set(marketItems.value.map(l => l.locationId))
-  return Array.from(locations)
-    .sort()
-    .map(id => ({
-      title: getLocationDisplay(id),
-      value: id,
-    }))
+  return Array.from(locations).map(id => ({
+    key: id,
+    display: getLocationDisplay(id),
+  }))
 })
 
 const userOptions = computed(() => {

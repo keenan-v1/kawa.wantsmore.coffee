@@ -32,11 +32,9 @@
           <v-tabs-window-item value="buy">
             <v-form ref="buyFormRef" @submit.prevent="submitBuyOrder">
               <!-- Commodity -->
-              <v-autocomplete
+              <KeyValueAutocomplete
                 v-model="buyForm.commodityTicker"
                 :items="commodities"
-                item-title="display"
-                item-value="ticker"
                 label="Commodity"
                 :rules="[v => !!v || 'Commodity is required']"
                 :loading="loadingCommodities"
@@ -44,11 +42,9 @@
               />
 
               <!-- Location -->
-              <v-autocomplete
+              <KeyValueAutocomplete
                 v-model="buyForm.locationId"
                 :items="locations"
-                item-title="display"
-                item-value="id"
                 label="Location"
                 :rules="[v => !!v || 'Location is required']"
                 :loading="loadingLocations"
@@ -119,22 +115,18 @@
 
               <!-- Commodity/Location (when no inventoryItem) -->
               <template v-if="!inventoryItem">
-                <v-autocomplete
+                <KeyValueAutocomplete
                   v-model="sellForm.commodityTicker"
                   :items="commodities"
-                  item-title="display"
-                  item-value="ticker"
                   label="Commodity"
                   :rules="[v => !!v || 'Commodity is required']"
                   :loading="loadingCommodities"
                   required
                 />
 
-                <v-autocomplete
+                <KeyValueAutocomplete
                   v-model="sellForm.locationId"
                   :items="locations"
-                  item-title="display"
-                  item-value="id"
                   label="Location"
                   :rules="[v => !!v || 'Location is required']"
                   :loading="loadingLocations"
@@ -227,6 +219,7 @@ import { api, type FioInventoryItem } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import KeyValueAutocomplete, { type KeyValueItem } from './KeyValueAutocomplete.vue'
 
 type OrderTab = 'buy' | 'sell'
 
@@ -346,22 +339,17 @@ const limitQuantityHint = computed(() => {
 })
 
 // Commodity and location options
-const commodities = ref<{ ticker: string; display: string }[]>([])
-const locations = ref<{ id: string; display: string }[]>([])
+const commodities = ref<KeyValueItem[]>([])
+const locations = ref<KeyValueItem[]>([])
 
 const loadCommodities = async () => {
   try {
     loadingCommodities.value = true
     const data = await commodityService.getAllCommodities()
-    commodities.value = data
-      .map(c => ({
-        ticker: c.ticker,
-        display: commodityService.getCommodityDisplay(
-          c.ticker,
-          userStore.getCommodityDisplayMode()
-        ),
-      }))
-      .sort((a, b) => a.display.localeCompare(b.display))
+    commodities.value = data.map(c => ({
+      key: c.ticker,
+      display: commodityService.getCommodityDisplay(c.ticker, userStore.getCommodityDisplayMode()),
+    }))
   } catch (error) {
     console.error('Failed to load commodities', error)
     errorMessage.value = 'Failed to load commodities'
@@ -374,12 +362,10 @@ const loadLocations = async () => {
   try {
     loadingLocations.value = true
     const data = await locationService.getAllLocations()
-    locations.value = data
-      .map(l => ({
-        id: l.id,
-        display: locationService.getLocationDisplay(l.id, userStore.getLocationDisplayMode()),
-      }))
-      .sort((a, b) => a.display.localeCompare(b.display))
+    locations.value = data.map(l => ({
+      key: l.id,
+      display: locationService.getLocationDisplay(l.id, userStore.getLocationDisplayMode()),
+    }))
   } catch (error) {
     console.error('Failed to load locations', error)
     errorMessage.value = 'Failed to load locations'

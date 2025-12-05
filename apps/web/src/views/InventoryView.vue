@@ -59,7 +59,7 @@
       <v-card-text>
         <v-row dense>
           <v-col cols="12" sm="6" md="4" lg="2">
-            <v-select
+            <KeyValueAutocomplete
               v-model="filters.commodity"
               :items="commodityOptions"
               label="Commodity"
@@ -79,7 +79,7 @@
             />
           </v-col>
           <v-col cols="12" sm="6" md="4" lg="2">
-            <v-select
+            <KeyValueAutocomplete
               v-model="filters.location"
               :items="locationOptions"
               label="Location"
@@ -365,6 +365,7 @@ import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
+import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
 
@@ -437,9 +438,12 @@ const filters = ref<Filters>({
 })
 
 // Computed filter options based on inventory data
-const commodityOptions = computed(() => {
+const commodityOptions = computed((): KeyValueItem[] => {
   const tickers = new Set(inventory.value.map(i => i.commodityTicker))
-  return Array.from(tickers).sort()
+  return Array.from(tickers).map(ticker => ({
+    key: ticker,
+    display: getCommodityDisplay(ticker),
+  }))
 })
 
 const categoryOptions = computed(() => {
@@ -447,14 +451,14 @@ const categoryOptions = computed(() => {
   return Array.from(categories).sort() as string[]
 })
 
-const locationOptions = computed(() => {
-  const locations = new Set(inventory.value.map(i => i.locationId).filter(Boolean))
-  return Array.from(locations)
-    .sort()
-    .map(id => ({
-      title: getLocationDisplay(id),
-      value: id,
-    }))
+const locationOptions = computed((): KeyValueItem[] => {
+  const locations = new Set(
+    inventory.value.map(i => i.locationId).filter((id): id is string => id !== null)
+  )
+  return Array.from(locations).map(id => ({
+    key: id,
+    display: getLocationDisplay(id),
+  }))
 })
 
 const locationTypeOptions = computed(() => {
