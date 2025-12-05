@@ -3,8 +3,8 @@ alerts:
   - rule: DOMAIN_FAILED
 databases:
   - cluster_name: db-dev-kawakawa-cx
-    db_name: kawa-db
-    db_user: kawa-db
+    db_name: dev-db
+    db_user: dev-db
     engine: PG
     name: kawa-db
     production: true
@@ -82,7 +82,7 @@ jobs:
     name: fio-sync
     run_command: cd apps/api && pnpm fio:sync && pnpm fio:sync:users
     schedule:
-      cron: '42 * * * *'
+      cron: '0 */3 * * *'
     source_dir: /
 name: dev-kawakawa-cx
 region: nyc
