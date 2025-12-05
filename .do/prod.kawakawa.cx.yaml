@@ -2,9 +2,9 @@ alerts:
   - rule: DEPLOYMENT_FAILED
   - rule: DOMAIN_FAILED
 databases:
-  - cluster_name: db.kawakawa.cx
-    db_name: kawa
-    db_user: kawa
+  - cluster_name: prod-db-kawakawa-cx
+    db_name: kawa-db
+    db_user: kawa-db
     engine: PG
     name: kawa-db
     production: true
@@ -37,8 +37,8 @@ jobs:
         scope: RUN_TIME
         value: ${kawa-db.DATABASE_URL}
     github:
-      branch: main
-      deploy_on_push: false
+      branch: prod
+      deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
@@ -55,7 +55,7 @@ jobs:
         scope: RUN_TIME
         value: ${kawa-db.DATABASE_URL}
     github:
-      branch: main
+      branch: prod
       deploy_on_push: false
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
@@ -71,9 +71,9 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${dev-db.DATABASE_URL}
+        value: ${kawa-db.DATABASE_URL}
     github:
-      branch: main
+      branch: prod
       deploy_on_push: false
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
@@ -81,9 +81,10 @@ jobs:
     kind: SCHEDULED
     name: fio-sync
     run_command: cd apps/api && pnpm fio:sync && pnpm fio:sync:users
-    schedule: 0 */3 * * *
+    schedule:
+      cron: '42 * * * *'
     source_dir: /
-name: kawa-market
+name: prod-kawakawa-cx
 region: nyc
 services:
   - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm
@@ -98,8 +99,8 @@ services:
         scope: RUN_TIME
         value: '3000'
     github:
-      branch: main
-      deploy_on_push: false
+      branch: prod
+      deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     http_port: 3000
     instance_count: 1
@@ -113,8 +114,8 @@ static_sites:
       build
     environment_slug: node-js
     github:
-      branch: main
-      deploy_on_push: false
+      branch: prod
+      deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     name: kawa-web
     output_dir: apps/web/dist
