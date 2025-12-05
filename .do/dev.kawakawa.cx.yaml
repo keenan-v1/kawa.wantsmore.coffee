@@ -55,8 +55,8 @@ jobs:
         scope: RUN_TIME
         value: ${dev-db.DATABASE_URL}
     github:
-      branch: main
-      deploy_on_push: true
+      branch: dev
+      deploy_on_push: false
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
@@ -73,7 +73,7 @@ jobs:
         scope: RUN_TIME
         value: ${dev-db.DATABASE_URL}
     github:
-      branch: main
+      branch: dev
       deploy_on_push: false
       repo: keenan-v1/kawa.wantsmore.coffee
     instance_count: 1
@@ -99,7 +99,7 @@ services:
         scope: RUN_TIME
         value: '3000'
     github:
-      branch: main
+      branch: dev
       deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     http_port: 3000
@@ -114,7 +114,7 @@ static_sites:
       build
     environment_slug: node-js
     github:
-      branch: main
+      branch: dev
       deploy_on_push: true
       repo: keenan-v1/kawa.wantsmore.coffee
     name: kawa-web
