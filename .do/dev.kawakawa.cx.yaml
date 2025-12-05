@@ -2,7 +2,7 @@ alerts:
   - rule: DEPLOYMENT_FAILED
   - rule: DOMAIN_FAILED
 databases:
-  - cluster_name: db.dev.kawakawa.cx
+  - cluster_name: db-dev-kawakawa-cx
     db_name: dev-db
     db_user: dev-db
     engine: PG
@@ -81,9 +81,10 @@ jobs:
     kind: SCHEDULED
     name: fio-sync
     run_command: cd apps/api && pnpm fio:sync && pnpm fio:sync:users
-    schedule: 0 */3 * * *
+    schedule:
+      cron: '0 */3 * * *'
     source_dir: /
-name: kawa-market
+name: dev-kawakawa-cx
 region: nyc
 services:
   - build_command: corepack enable && corepack prepare pnpm@9.14.2 --activate && pnpm

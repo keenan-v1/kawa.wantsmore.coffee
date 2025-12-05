@@ -15,6 +15,13 @@
       "when": 1764732912572,
       "tag": "0001_thin_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764911302961,
+      "tag": "0002_lean_smasher",
+      "breakpoints": true
     }
   ]
 }
