@@ -4,7 +4,7 @@
 import { syncCommodities } from '../services/fio/sync-commodities.js'
 import { syncLocations } from '../services/fio/sync-locations.js'
 import { syncStations } from '../services/fio/sync-stations.js'
-import postgres from 'postgres'
+import { client } from '../db/index.js'
 
 const SYNC_TYPES = ['commodities', 'locations', 'stations', 'all'] as const
 type SyncType = (typeof SYNC_TYPES)[number]
@@ -74,7 +74,7 @@ async function main() {
     process.exit(1)
   } finally {
     // Close postgres connection
-    await postgres(process.env.DATABASE_URL!).end()
+    await client.end()
   }
 }
 
