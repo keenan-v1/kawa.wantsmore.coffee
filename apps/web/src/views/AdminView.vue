@@ -492,8 +492,8 @@
               </v-card-title>
               <v-card-text>
                 <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-                  Used for server integration features like role syncing and auto-approval. Add a Bot
-                  to your application and invite it to your server.
+                  Used for server integration features like role syncing and auto-approval. Add a
+                  Bot to your application and invite it to your server.
                 </v-alert>
 
                 <v-text-field
@@ -843,9 +843,7 @@
               deletingUser?.username
             }})?
           </p>
-          <p class="text-body-2 text-medium-emphasis mt-2">
-            This will permanently delete:
-          </p>
+          <p class="text-body-2 text-medium-emphasis mt-2">This will permanently delete:</p>
           <ul class="text-body-2 text-medium-emphasis ml-4">
             <li>User account and profile</li>
             <li>All sell and buy orders</li>
@@ -1243,7 +1241,7 @@ const syncUserFio = async (user: AdminUser) => {
 }
 
 const disconnectUserDiscord = async (user: AdminUser) => {
-  if (!confirm(`Disconnect Discord for ${user.username}?`)) {
+  if (!window.confirm(`Disconnect Discord for ${user.username}?`)) {
     return
   }
   try {

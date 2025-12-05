@@ -1586,6 +1586,31 @@ const realApi = {
     }
   },
 
+  syncDiscordRoles: async (): Promise<{ synced: boolean; rolesAdded: string[] }> => {
+    const response = await fetch('/api/discord/sync-roles', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to sync Discord roles')
+      }
+      throw new Error(`Failed to sync Discord roles: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   getDiscordStatus: async (): Promise<DiscordConnectionStatus> => {
     const response = await fetch('/api/discord/status', {
       method: 'GET',
@@ -1762,15 +1787,12 @@ export const api = {
     handleCallback: (request: DiscordCallbackRequest) => realApi.handleDiscordCallback(request),
     disconnect: () => realApi.disconnectDiscord(),
     getStatus: () => realApi.getDiscordStatus(),
+    syncRoles: () => realApi.syncDiscordRoles(),
   },
   discordAuth: {
     getAuthUrl: (prompt?: 'none' | 'consent') => realApi.getDiscordLoginAuthUrl(prompt),
-    handleCallback: (
-      code?: string,
-      state?: string,
-      error?: string,
-      errorDescription?: string
-    ) => realApi.handleDiscordAuthCallback(code, state, error, errorDescription),
+    handleCallback: (code?: string, state?: string, error?: string, errorDescription?: string) =>
+      realApi.handleDiscordAuthCallback(code, state, error, errorDescription),
     completeRegistration: (request: DiscordRegisterRequest) =>
       realApi.completeDiscordRegistration(request),
   },

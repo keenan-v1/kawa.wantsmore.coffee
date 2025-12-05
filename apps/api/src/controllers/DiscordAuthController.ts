@@ -58,9 +58,7 @@ export class DiscordAuthController extends Controller {
    * @param prompt - Optional prompt parameter: 'none' to skip consent for returning users (login), 'consent' to always show
    */
   @Get('auth-url')
-  public async getAuthUrl(
-    @Query() prompt?: 'none' | 'consent'
-  ): Promise<DiscordAuthUrlResponse> {
+  public async getAuthUrl(@Query() prompt?: 'none' | 'consent'): Promise<DiscordAuthUrlResponse> {
     // Generate secure state token
     const state = crypto.randomBytes(32).toString('hex')
 
@@ -319,7 +317,7 @@ export class DiscordAuthController extends Controller {
 
   /**
    * Check if user qualifies for auto-approval based on Discord roles
-   * Returns the assigned role ID if auto-approved, null otherwise
+   * Assigns ALL matching roles, returns the highest priority one if any were assigned
    */
   private async checkAutoApprovalAndAssignRole(
     userId: number,
@@ -339,25 +337,37 @@ export class DiscordAuthController extends Controller {
         return null
       }
 
-      // Get role mappings ordered by priority
+      // Get role mappings ordered by priority (highest first)
       const mappings = await db
         .select()
         .from(discordRoleMappings)
         .orderBy(desc(discordRoleMappings.priority))
 
-      // Find the highest priority matching mapping
+      // Find ALL matching mappings and collect unique app roles to assign
+      const rolesToAssign = new Set<string>()
+      let highestPriorityRole: string | null = null
+
       for (const mapping of mappings) {
         if (member.roles.includes(mapping.discordRoleId)) {
-          // Found a match - assign the mapped role
-          await db.insert(userRoles).values({
-            userId,
-            roleId: mapping.appRoleId,
-          })
-          return mapping.appRoleId
+          // Track the highest priority role (first match since ordered by priority desc)
+          if (!highestPriorityRole) {
+            highestPriorityRole = mapping.appRoleId
+          }
+          rolesToAssign.add(mapping.appRoleId)
         }
       }
 
-      return null
+      // Assign all matched roles
+      if (rolesToAssign.size > 0) {
+        await db.insert(userRoles).values(
+          Array.from(rolesToAssign).map(roleId => ({
+            userId,
+            roleId,
+          }))
+        )
+      }
+
+      return highestPriorityRole
     } catch (error) {
       console.error('Auto-approval check failed:', error)
       return null

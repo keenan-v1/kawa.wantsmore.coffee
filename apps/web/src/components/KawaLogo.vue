@@ -1,12 +1,6 @@
 <template>
   <div class="kawa-logo-container" :style="sizeStyle">
-    <img
-      v-if="!loadError"
-      :src="logoSrc"
-      :alt="alt"
-      class="kawa-logo"
-      @error="handleError"
-    />
+    <img v-if="!loadError" :src="logoSrc" :alt="alt" class="kawa-logo" @error="handleError" />
     <span v-else class="kawa-logo-fallback" :style="fallbackStyle">{{ fallbackText }}</span>
   </div>
 </template>

@@ -487,15 +487,27 @@
 
                   <v-divider class="my-4" />
 
-                  <v-btn
-                    color="error"
-                    variant="outlined"
-                    :loading="disconnectingDiscord"
-                    @click="confirmDisconnectDiscord"
-                  >
-                    <v-icon start>mdi-link-off</v-icon>
-                    Disconnect Discord
-                  </v-btn>
+                  <div class="d-flex ga-2 flex-wrap">
+                    <v-btn
+                      color="primary"
+                      variant="outlined"
+                      :loading="syncingRoles"
+                      @click="syncDiscordRoles"
+                    >
+                      <v-icon start>mdi-sync</v-icon>
+                      Sync Roles
+                    </v-btn>
+
+                    <v-btn
+                      color="error"
+                      variant="outlined"
+                      :loading="disconnectingDiscord"
+                      @click="confirmDisconnectDiscord"
+                    >
+                      <v-icon start>mdi-link-off</v-icon>
+                      Disconnect Discord
+                    </v-btn>
+                  </div>
                 </template>
               </v-card-text>
             </v-card>
@@ -753,6 +765,7 @@ const loadingDiscord = ref(false)
 const connectingDiscord = ref(false)
 const disconnectingDiscord = ref(false)
 const disconnectDiscordDialog = ref(false)
+const syncingRoles = ref(false)
 
 // Delete account state
 const deleteAccountDialog = ref(false)
@@ -1105,6 +1118,28 @@ const disconnectDiscord = async () => {
     showSnackbar(errorMessage, 'error')
   } finally {
     disconnectingDiscord.value = false
+  }
+}
+
+const syncDiscordRoles = async () => {
+  try {
+    syncingRoles.value = true
+    const result = await api.discord.syncRoles()
+    if (result.rolesAdded.length > 0) {
+      showSnackbar(`Added ${result.rolesAdded.length} role(s): ${result.rolesAdded.join(', ')}`)
+      // Refresh the profile to get updated roles
+      const profile = await api.account.getProfile()
+      account.value.roles = profile.roles
+      userStore.setUser(profile)
+    } else {
+      showSnackbar('Roles are already up to date')
+    }
+  } catch (error) {
+    console.error('Failed to sync Discord roles', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to sync Discord roles'
+    showSnackbar(errorMessage, 'error')
+  } finally {
+    syncingRoles.value = false
   }
 }
 

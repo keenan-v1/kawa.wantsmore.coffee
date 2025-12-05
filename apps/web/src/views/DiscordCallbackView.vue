@@ -82,7 +82,12 @@ const handleCallback = async () => {
     // The AccountView will handle the actual connection
     router.replace({
       path: '/account',
-      query: { code, state, ...(error && { error }), ...(errorDescription && { error_description: errorDescription }) },
+      query: {
+        code,
+        state,
+        ...(error && { error }),
+        ...(errorDescription && { error_description: errorDescription }),
+      },
     })
     return
   }

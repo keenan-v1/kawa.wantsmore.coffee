@@ -119,10 +119,7 @@ describe('DiscordAuthController', () => {
       expect(result).toHaveProperty('state')
       expect(result.url).toContain('discord.com')
       expect(result.state).toBeTruthy()
-      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined
-      )
+      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(expect.any(String), undefined)
     })
 
     it('should pass prompt=none to service', async () => {
@@ -134,10 +131,7 @@ describe('DiscordAuthController', () => {
 
       expect(result).toHaveProperty('url')
       expect(result.url).toContain('prompt=none')
-      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(
-        expect.any(String),
-        'none'
-      )
+      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(expect.any(String), 'none')
     })
 
     it('should pass prompt=consent to service', async () => {
@@ -149,10 +143,7 @@ describe('DiscordAuthController', () => {
 
       expect(result).toHaveProperty('url')
       expect(result.url).toContain('prompt=consent')
-      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(
-        expect.any(String),
-        'consent'
-      )
+      expect(discordService.getAuthorizationUrl).toHaveBeenCalledWith(expect.any(String), 'consent')
     })
   })
 

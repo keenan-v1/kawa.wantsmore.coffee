@@ -35,7 +35,7 @@ describe('discordService', () => {
     'discord.clientSecret': 'test-client-secret',
     'discord.botToken': 'test-bot-token',
     'discord.guildId': 'test-guild-id',
-    'discord.redirectUri': 'http://localhost:5173/discord/callback',  // Must match Discord app config
+    'discord.redirectUri': 'http://localhost:5173/discord/callback', // Must match Discord app config
   }
 
   describe('getAuthorizationUrl', () => {

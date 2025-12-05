@@ -245,7 +245,93 @@ export class DiscordController extends Controller {
   }
 
   /**
+   * Sync Discord roles for current user
+   * Checks Discord guild membership and assigns any matching app roles
+   */
+  @Post('sync-roles')
+  public async syncRoles(
+    @Request() request: { user: JwtPayload }
+  ): Promise<{ synced: boolean; rolesAdded: string[] }> {
+    const userId = request.user.userId
+
+    const [profile] = await db
+      .select()
+      .from(userDiscordProfiles)
+      .where(eq(userDiscordProfiles.userId, userId))
+
+    if (!profile) {
+      throw BadRequest('Discord is not connected to this account')
+    }
+
+    const settings = await discordService.getDiscordSettings()
+    if (!settings.guildId) {
+      throw BadRequest('Discord guild is not configured')
+    }
+
+    // Refresh token if expired
+    let accessToken = profile.accessToken
+    if (profile.tokenExpiresAt && profile.tokenExpiresAt < new Date()) {
+      if (!profile.refreshToken) {
+        throw BadRequest('Discord token expired. Please reconnect your Discord account.')
+      }
+      const refreshed = await discordService.refreshAccessToken(profile.refreshToken)
+      accessToken = refreshed.accessToken
+
+      // Update stored tokens
+      await db
+        .update(userDiscordProfiles)
+        .set({
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken,
+          tokenExpiresAt: refreshed.expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(userDiscordProfiles.userId, userId))
+    }
+
+    // Get user's Discord guild membership
+    const member = await discordService.getUserGuildMember(accessToken, settings.guildId)
+    if (!member) {
+      throw BadRequest('You are not a member of the Discord server')
+    }
+
+    // Get current user roles
+    const currentRoles = await db
+      .select({ roleId: userRoles.roleId })
+      .from(userRoles)
+      .where(eq(userRoles.userId, userId))
+    const currentRoleIds = new Set(currentRoles.map(r => r.roleId))
+
+    // Get role mappings
+    const mappings = await db.select().from(discordRoleMappings)
+
+    // Find all matching roles to add
+    const rolesToAdd = new Set<string>()
+    for (const mapping of mappings) {
+      if (member.roles.includes(mapping.discordRoleId) && !currentRoleIds.has(mapping.appRoleId)) {
+        rolesToAdd.add(mapping.appRoleId)
+      }
+    }
+
+    // Add new roles
+    if (rolesToAdd.size > 0) {
+      await db.insert(userRoles).values(
+        Array.from(rolesToAdd).map(roleId => ({
+          userId,
+          roleId,
+        }))
+      )
+    }
+
+    return {
+      synced: true,
+      rolesAdded: Array.from(rolesToAdd),
+    }
+  }
+
+  /**
    * Check if user qualifies for auto-approval based on Discord roles
+   * Assigns ALL matching roles, replacing the 'unverified' role
    */
   private async checkAutoApproval(userId: number, accessToken: string): Promise<void> {
     const settings = await discordService.getDiscordSettings()
@@ -274,27 +360,29 @@ export class DiscordController extends Controller {
       return
     }
 
-    // Get role mappings ordered by priority
-    const mappings = await db
-      .select()
-      .from(discordRoleMappings)
-      .orderBy(desc(discordRoleMappings.priority))
+    // Get role mappings
+    const mappings = await db.select().from(discordRoleMappings)
 
-    // Find the highest priority matching mapping
+    // Find ALL matching roles to assign
+    const rolesToAssign = new Set<string>()
     for (const mapping of mappings) {
       if (member.roles.includes(mapping.discordRoleId)) {
-        // Found a match - update user's role
-        // Remove 'unverified' role
-        await db.delete(userRoles).where(eq(userRoles.userId, userId))
-
-        // Add the mapped app role
-        await db.insert(userRoles).values({
-          userId,
-          roleId: mapping.appRoleId,
-        })
-
-        break
+        rolesToAssign.add(mapping.appRoleId)
       }
+    }
+
+    // If we found matching roles, replace 'unverified' with them
+    if (rolesToAssign.size > 0) {
+      // Remove 'unverified' role
+      await db.delete(userRoles).where(eq(userRoles.userId, userId))
+
+      // Add all matched roles
+      await db.insert(userRoles).values(
+        Array.from(rolesToAssign).map(roleId => ({
+          userId,
+          roleId,
+        }))
+      )
     }
   }
 }

@@ -198,10 +198,7 @@ export class AccountController extends Controller {
     const userId = request.user.userId
 
     // Verify user exists
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.id, userId))
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId))
 
     if (!user) {
       this.setStatus(404)
