@@ -2,10 +2,9 @@
 // CLI script to sync FIO inventory for all users with auto-sync enabled
 // Usage: pnpm fio:sync:users
 
-import { db, users, userSettings } from '../db/index.js'
+import { db, users, userSettings, client } from '../db/index.js'
 import { eq, and, isNotNull } from 'drizzle-orm'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
-import postgres from 'postgres'
 
 interface UserToSync {
   userId: number
@@ -109,7 +108,7 @@ async function main() {
     process.exit(1)
   } finally {
     // Close postgres connection
-    await postgres(process.env.DATABASE_URL!).end()
+    await client.end()
   }
 }
 
