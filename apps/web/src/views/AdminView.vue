@@ -416,11 +416,6 @@
 
       <!-- DISCORD TAB -->
       <v-tabs-window-item value="discord">
-        <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-          This integration uses <strong>two separate Discord applications</strong>: an OAuth app
-          for user authentication and a Bot app for server integration features.
-        </v-alert>
-
         <v-row>
           <v-col cols="12" lg="6">
             <!-- OAuth Application Settings -->
@@ -497,8 +492,8 @@
               </v-card-title>
               <v-card-text>
                 <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-                  Used for server integration features like role syncing and auto-approval. Create a
-                  separate Bot application and invite it to your server.
+                  Used for server integration features like role syncing and auto-approval. Add a Bot
+                  to your application and invite it to your server.
                 </v-alert>
 
                 <v-text-field
@@ -1120,7 +1115,7 @@ const deleteMappingDialog = ref(false)
 const deletingMapping = ref<DiscordRoleMapping | null>(null)
 const deletingMappingLoading = ref(false)
 
-// Discord computed properties - separate OAuth and Bot settings
+// Discord computed properties - OAuth and Bot settings
 const hasOAuthSettingsChanges = computed(() => {
   return (
     discordForm.value.clientId !== (discordSettings.value?.clientId || '') ||

@@ -5,14 +5,12 @@
         <v-card>
           <v-card-title class="text-h4">Terms of Service</v-card-title>
           <v-card-text class="text-body-1">
-            <p class="text-caption text-medium-emphasis mb-4">
-              Last updated: {{ lastUpdated }}
-            </p>
+            <p class="text-caption text-medium-emphasis mb-4">Last updated: {{ lastUpdated }}</p>
 
             <h3 class="text-h6 mb-2">1. Acceptance of Terms</h3>
             <p class="mb-4">
-              By accessing or using Kawakawa CX, you agree to be bound by these Terms of Service.
-              If you do not agree to these terms, do not use this service.
+              By accessing or using Kawakawa CX, you agree to be bound by these Terms of Service. If
+              you do not agree to these terms, do not use this service.
             </p>
 
             <h3 class="text-h6 mb-2">2. Description of Service</h3>
@@ -38,20 +36,21 @@
 
             <h3 class="text-h6 mb-2">5. User Conduct</h3>
             <p class="mb-4">
-              You agree to use this service only for its intended purpose and in compliance with
-              all applicable laws and the terms of service of Prosperous Universe.
+              You agree to use this service only for its intended purpose and in compliance with all
+              applicable laws and the terms of service of Prosperous Universe.
             </p>
 
             <h3 class="text-h6 mb-2">6. Changes to Terms</h3>
             <p class="mb-4">
-              We reserve the right to modify these terms at any time. Continued use of the service
-              after changes constitutes acceptance of the new terms.
+              We reserve the right to modify these terms at any time. You will be notified of any
+              changes, and your continued use of the service constitutes acceptance of the updated
+              terms.
             </p>
 
             <h3 class="text-h6 mb-2">7. Contact</h3>
             <p>
-              For questions about these terms, please contact Kawakawa corporation leadership
-              through Discord.
+              For questions about these terms, please contact
+              <a href="mailto:support@kawakawa.cx">support@kawakawa.cx</a>.
             </p>
           </v-card-text>
           <v-card-actions>
@@ -64,5 +63,5 @@
 </template>
 
 <script setup lang="ts">
-const lastUpdated = 'December 2024'
+const lastUpdated = 'December 2025'
 </script>

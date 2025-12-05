@@ -5,9 +5,7 @@
         <v-card>
           <v-card-title class="text-h4">Privacy Policy</v-card-title>
           <v-card-text class="text-body-1">
-            <p class="text-caption text-medium-emphasis mb-4">
-              Last updated: {{ lastUpdated }}
-            </p>
+            <p class="text-caption text-medium-emphasis mb-4">Last updated: {{ lastUpdated }}</p>
 
             <h3 class="text-h6 mb-2">1. Data We Collect</h3>
             <p class="mb-4">
@@ -40,14 +38,14 @@
             <h3 class="text-h6 mb-2">4. Data Storage</h3>
             <p class="mb-4">
               Your data is stored on secure servers. We retain your data only as long as your
-              account is active. You may request deletion of your account and associated data at
-              any time.
+              account is active. You may request deletion of your account and associated data at any
+              time.
             </p>
 
             <h3 class="text-h6 mb-2">5. Cookies</h3>
             <p class="mb-4">
-              We use only essential cookies and local storage for authentication purposes. We do
-              not use tracking cookies or analytics that collect personal information.
+              We use only essential cookies and local storage for authentication purposes. We do not
+              use tracking cookies or analytics that collect personal information.
             </p>
 
             <h3 class="text-h6 mb-2">6. Your Rights</h3>
@@ -61,8 +59,8 @@
 
             <h3 class="text-h6 mb-2">7. Contact</h3>
             <p>
-              For privacy concerns or data requests, please contact Kawakawa corporation leadership
-              through Discord.
+              For privacy concerns or data requests, please contact
+              <a href="mailto:support@kawakawa.cx">support@kawakawa.cx</a>.
             </p>
           </v-card-text>
           <v-card-actions>
@@ -75,5 +73,5 @@
 </template>
 
 <script setup lang="ts">
-const lastUpdated = 'December 2024'
+const lastUpdated = 'December 2025'
 </script>

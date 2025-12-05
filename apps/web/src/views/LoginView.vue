@@ -144,7 +144,10 @@ const handleDiscordLogin = async () => {
     discordLoading.value = true
     errorMessage.value = ''
 
-    const { url, state } = await api.discordAuth.getAuthUrl()
+    // Try with prompt=none first to skip consent for returning users
+    // If they haven't authorized before, Discord will return consent_required error
+    // which the callback handler will detect and retry with consent
+    const { url, state } = await api.discordAuth.getAuthUrl('none')
 
     // Store state for validation when callback returns
     sessionStorage.setItem('discord_auth_state', state)

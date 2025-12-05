@@ -23,6 +23,11 @@
         <DiscordIcon :size="20" class="mr-2" />
         Discord
       </v-tab>
+      <v-spacer />
+      <v-tab value="danger" color="error">
+        <v-icon start color="error">mdi-alert-circle</v-icon>
+        <span class="text-error">Danger Zone</span>
+      </v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -116,6 +121,9 @@
             <v-spacer />
             <v-btn
               color="primary"
+              variant="flat"
+              size="large"
+              prepend-icon="mdi-content-save"
               :loading="savingProfile"
               :disabled="savingProfile || loading"
               @click="saveProfile"
@@ -162,6 +170,9 @@
             <v-spacer />
             <v-btn
               color="primary"
+              variant="flat"
+              size="large"
+              prepend-icon="mdi-lock-reset"
               :loading="changingPassword"
               :disabled="changingPassword || loading"
               @click="changePassword"
@@ -238,6 +249,9 @@
                 <v-spacer />
                 <v-btn
                   color="primary"
+                  variant="flat"
+                  size="large"
+                  prepend-icon="mdi-content-save"
                   :loading="savingProfile"
                   :disabled="savingProfile || loading"
                   @click="saveFioSettings"
@@ -520,6 +534,61 @@
           </v-col>
         </v-row>
       </v-tabs-window-item>
+
+      <!-- Danger Zone Tab -->
+      <v-tabs-window-item value="danger">
+        <v-card variant="outlined" color="error">
+          <v-card-title class="text-error">
+            <v-icon start color="error">mdi-alert-circle</v-icon>
+            Danger Zone
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="warning" variant="tonal" class="mb-6">
+              <strong>Warning:</strong> Actions in this section are permanent and cannot be undone.
+              Please proceed with caution.
+            </v-alert>
+
+            <v-card variant="outlined" class="mb-4">
+              <v-card-title class="text-subtitle-1">
+                <v-icon start>mdi-account-remove</v-icon>
+                Delete Account
+              </v-card-title>
+              <v-card-text>
+                <p class="mb-4">
+                  Once you delete your account, there is no going back. This will permanently
+                  delete:
+                </p>
+                <v-list density="compact" class="mb-4">
+                  <v-list-item prepend-icon="mdi-account">
+                    <v-list-item-title>Your account and profile information</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-connection">
+                    <v-list-item-title>Any external connections, such as Discord</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-cart">
+                    <v-list-item-title>All your sell and buy orders</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-package-variant">
+                    <v-list-item-title>Your FIO inventory data</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-database">
+                    <v-list-item-title>All other associated data</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+                <v-btn
+                  color="error"
+                  variant="flat"
+                  size="large"
+                  prepend-icon="mdi-delete-forever"
+                  @click="deleteAccountDialog = true"
+                >
+                  Delete My Account
+                </v-btn>
+              </v-card-text>
+            </v-card>
+          </v-card-text>
+        </v-card>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Clear Confirmation Dialog -->
@@ -564,6 +633,37 @@
             @click="disconnectDiscord"
           >
             Disconnect
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Account Confirmation Dialog -->
+    <v-dialog v-model="deleteAccountDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6 text-error">
+          <v-icon start color="error">mdi-alert-circle</v-icon>
+          Delete Account?
+        </v-card-title>
+        <v-card-text>
+          <v-alert type="error" variant="tonal" class="mb-4">
+            This action is <strong>permanent</strong> and cannot be undone.
+          </v-alert>
+          <p>Are you sure you want to delete your account?</p>
+          <p class="text-body-2 text-medium-emphasis mt-2">This will permanently delete:</p>
+          <ul class="text-body-2 text-medium-emphasis ml-4">
+            <li>Your account and profile</li>
+            <li>All sell and buy orders</li>
+            <li>FIO inventory data</li>
+            <li>Discord connection</li>
+            <li>All other associated data</li>
+          </ul>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteAccountDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" :loading="deletingAccount" @click="deleteAccount">
+            Delete My Account
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -653,6 +753,10 @@ const loadingDiscord = ref(false)
 const connectingDiscord = ref(false)
 const disconnectingDiscord = ref(false)
 const disconnectDiscordDialog = ref(false)
+
+// Delete account state
+const deleteAccountDialog = ref(false)
+const deletingAccount = ref(false)
 
 // Computed Discord avatar URL
 const discordAvatarUrl = computed(() => {
@@ -1001,6 +1105,23 @@ const disconnectDiscord = async () => {
     showSnackbar(errorMessage, 'error')
   } finally {
     disconnectingDiscord.value = false
+  }
+}
+
+// Delete account
+const deleteAccount = async () => {
+  try {
+    deletingAccount.value = true
+    await api.account.deleteAccount()
+    // Account deleted - redirect to login with message
+    router.push({ path: '/login', query: { message: 'account_deleted' } })
+  } catch (error) {
+    console.error('Failed to delete account', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete account'
+    showSnackbar(errorMessage, 'error')
+    deleteAccountDialog.value = false
+  } finally {
+    deletingAccount.value = false
   }
 }
 

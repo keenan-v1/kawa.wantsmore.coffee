@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Route, Security, Tags, Request } from 'tsoa'
+import { Body, Controller, Delete, Get, Put, Route, Security, Tags, Request } from 'tsoa'
 import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '@kawakawa/types'
 import { db, users, userSettings, userRoles, roles } from '../db/index.js'
 import { eq } from 'drizzle-orm'
@@ -183,6 +183,41 @@ export class AccountController extends Controller {
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
+
+    return { success: true }
+  }
+
+  /**
+   * Delete the current user's account and all associated data
+   * This is a permanent action that cannot be undone
+   */
+  @Delete()
+  public async deleteAccount(
+    @Request() request: { user: JwtPayload }
+  ): Promise<{ success: boolean }> {
+    const userId = request.user.userId
+
+    // Verify user exists
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    if (!user) {
+      this.setStatus(404)
+      throw NotFound('User not found')
+    }
+
+    // Delete the user - cascade will handle all related data:
+    // - userSettings
+    // - userRoles
+    // - passwordResetTokens
+    // - fioUserStorage (and fioInventory through it)
+    // - sellOrders
+    // - buyOrders
+    // - userDiscordProfiles
+    // - settings.changedByUserId will be set to null
+    await db.delete(users).where(eq(users.id, userId))
 
     return { success: true }
   }

@@ -126,9 +126,17 @@ const handleCallback = async () => {
         break
 
       case 'consent_required':
-        // User hasn't authorized before, need full consent flow
-        errorMessage.value = 'Discord authorization is required. Please try again.'
-        loading.value = false
+        // User hasn't authorized before (prompt=none was used but they haven't consented)
+        // Automatically retry with consent screen
+        try {
+          const { url, state: newState } = await api.discordAuth.getAuthUrl('consent')
+          sessionStorage.setItem('discord_auth_state', newState)
+          window.location.href = url
+        } catch (retryError) {
+          console.error('Failed to retry with consent:', retryError)
+          errorMessage.value = 'Discord authorization is required. Please try again.'
+          loading.value = false
+        }
         break
 
       case 'error':

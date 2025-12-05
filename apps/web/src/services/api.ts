@@ -402,6 +402,27 @@ const realApi = {
     }
   },
 
+  deleteAccount: async (): Promise<void> => {
+    const response = await fetch('/api/account', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 404) {
+        throw new Error('Account not found')
+      }
+      throw new Error(`Failed to delete account: ${response.statusText}`)
+    }
+
+    // Clear local storage after successful deletion
+    localStorage.removeItem('jwt')
+    localStorage.removeItem('user')
+  },
+
   listUsers: async (
     page: number = 1,
     pageSize: number = 20,
@@ -1669,6 +1690,7 @@ export const api = {
     getProfile: () => realApi.getProfile(),
     updateProfile: (updates: UpdateProfileRequest) => realApi.updateProfile(updates),
     changePassword: (request: ChangePasswordRequest) => realApi.changePassword(request),
+    deleteAccount: () => realApi.deleteAccount(),
   },
   admin: {
     listUsers: (page?: number, pageSize?: number, search?: string) =>
