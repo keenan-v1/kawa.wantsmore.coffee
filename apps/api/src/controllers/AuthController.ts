@@ -51,6 +51,11 @@ interface ValidateTokenResponse {
   expiresAt?: Date
 }
 
+interface UsernameAvailabilityResponse {
+  available: boolean
+  message?: string
+}
+
 @Route('auth')
 @Tags('Authentication')
 export class AuthController extends Controller {
@@ -334,6 +339,67 @@ export class AuthController extends Controller {
       valid: true,
       username: user?.username,
       expiresAt: resetToken.expiresAt,
+    }
+  }
+
+  /**
+   * Check if a username is available for registration
+   * @param username - The username to check
+   * @returns Availability status and optional message
+   */
+  @Get('check-username')
+  @SuccessResponse('200', 'Username availability checked')
+  public async checkUsernameAvailability(
+    @Query() username: string
+  ): Promise<UsernameAvailabilityResponse> {
+    if (!username || username.trim().length === 0) {
+      return {
+        available: false,
+        message: 'Username is required',
+      }
+    }
+
+    const trimmedUsername = username.trim()
+
+    // Basic validation
+    if (trimmedUsername.length < 3) {
+      return {
+        available: false,
+        message: 'Username must be at least 3 characters',
+      }
+    }
+
+    if (trimmedUsername.length > 50) {
+      return {
+        available: false,
+        message: 'Username must be 50 characters or less',
+      }
+    }
+
+    // Check for valid characters (alphanumeric, underscores, hyphens)
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedUsername)) {
+      return {
+        available: false,
+        message: 'Username can only contain letters, numbers, underscores, and hyphens',
+      }
+    }
+
+    // Check if username exists
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, trimmedUsername))
+      .limit(1)
+
+    if (existing) {
+      return {
+        available: false,
+        message: 'Username is already taken',
+      }
+    }
+
+    return {
+      available: true,
     }
   }
 }

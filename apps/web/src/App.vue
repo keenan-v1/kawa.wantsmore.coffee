@@ -1,7 +1,10 @@
 <template>
   <v-app>
     <v-app-bar v-if="isAuthenticated" color="primary" density="compact">
-      <v-app-bar-title>KawaKawa CX</v-app-bar-title>
+      <template #prepend>
+        <KawaLogo :size="32" class="ml-3" />
+      </template>
+      <v-app-bar-title class="ml-2">Kawakawa CX</v-app-bar-title>
       <v-spacer />
       <!-- Only show navigation for verified users -->
       <template v-if="isVerified">
@@ -74,6 +77,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
+import KawaLogo from './components/KawaLogo.vue'
 import { commodityService } from './services/commodityService'
 import { locationService } from './services/locationService'
 import { roleService } from './services/roleService'

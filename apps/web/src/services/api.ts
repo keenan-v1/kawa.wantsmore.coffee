@@ -8,6 +8,20 @@ import type {
   Role,
   SellOrderLimitMode,
   OrderType,
+  DiscordSettings,
+  UpdateDiscordSettingsRequest,
+  DiscordRoleMapping,
+  DiscordRoleMappingRequest,
+  DiscordRole,
+  DiscordTestConnectionResponse,
+  DiscordConnectionStatus,
+  DiscordCallbackRequest,
+  UserDiscordProfile,
+  SettingHistoryEntry,
+  DiscordAuthUrlResponse,
+  DiscordAuthResult,
+  DiscordRegisterRequest,
+  DiscordRegisterResponse,
 } from '@kawakawa/types'
 
 interface LoginRequest {
@@ -39,6 +53,13 @@ interface FioSyncInfo {
   lastSyncedAt: string | null
 }
 
+interface DiscordInfo {
+  connected: boolean
+  discordUsername: string | null
+  discordId: string | null
+  connectedAt: string | null
+}
+
 interface AdminUser {
   id: number
   username: string
@@ -47,6 +68,7 @@ interface AdminUser {
   isActive: boolean
   roles: Role[]
   fioSync: FioSyncInfo
+  discord: DiscordInfo
   createdAt: string
 }
 
@@ -112,6 +134,11 @@ interface ValidateTokenResponse {
   valid: boolean
   username?: string
   expiresAt?: string
+}
+
+interface UsernameAvailabilityResponse {
+  available: boolean
+  message?: string
 }
 
 interface FioSyncResponse {
@@ -519,6 +546,69 @@ const realApi = {
     return response.json()
   },
 
+  deleteUser: async (userId: number): Promise<{ success: boolean; username: string }> => {
+    const response = await fetch(`/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('User not found')
+      }
+      if (response.status === 400) {
+        const data = await response.json()
+        throw new Error(data.message || 'Cannot delete this user')
+      }
+      throw new Error(`Failed to delete user: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  disconnectUserDiscord: async (
+    userId: number
+  ): Promise<{ success: boolean; username: string }> => {
+    const response = await fetch(`/api/admin/users/${userId}/discord`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('User not found')
+      }
+      if (response.status === 400) {
+        throw new Error('User does not have Discord connected')
+      }
+      throw new Error(`Failed to disconnect Discord: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   // Pending approvals
   getPendingApprovalsCount: async (): Promise<{ count: number }> => {
     const response = await fetch('/api/admin/pending-approvals/count', {
@@ -628,6 +718,21 @@ const realApi = {
 
     if (!response.ok) {
       return { valid: false }
+    }
+
+    return response.json()
+  },
+
+  checkUsernameAvailability: async (username: string): Promise<UsernameAvailabilityResponse> => {
+    const response = await fetch(
+      `/api/auth/check-username?username=${encodeURIComponent(username)}`,
+      {
+        method: 'GET',
+      }
+    )
+
+    if (!response.ok) {
+      return { available: false, message: 'Failed to check username availability' }
     }
 
     return response.json()
@@ -1149,6 +1254,402 @@ const realApi = {
       throw new Error(`Failed to delete buy order: ${response.statusText}`)
     }
   },
+
+  // Admin Discord methods
+  getDiscordSettings: async (): Promise<DiscordSettings> => {
+    const response = await fetch('/api/admin/discord/settings', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get Discord settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateDiscordSettings: async (
+    settings: UpdateDiscordSettingsRequest
+  ): Promise<DiscordSettings> => {
+    const response = await fetch('/api/admin/discord/settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(settings),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to update Discord settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  testDiscordConnection: async (): Promise<DiscordTestConnectionResponse> => {
+    const response = await fetch('/api/admin/discord/settings/test-connection', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || 'Failed to test Discord connection')
+    }
+
+    return response.json()
+  },
+
+  getDiscordGuildRoles: async (): Promise<DiscordRole[]> => {
+    const response = await fetch('/api/admin/discord/guild/roles', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        throw new Error('Discord guild not configured')
+      }
+      throw new Error(`Failed to get Discord guild roles: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getDiscordRoleMappings: async (): Promise<DiscordRoleMapping[]> => {
+    const response = await fetch('/api/admin/discord/role-mappings', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get Discord role mappings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createDiscordRoleMapping: async (
+    mapping: DiscordRoleMappingRequest
+  ): Promise<DiscordRoleMapping> => {
+    const response = await fetch('/api/admin/discord/role-mappings', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(mapping),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 409) {
+        throw new Error('Mapping for this Discord role already exists')
+      }
+      throw new Error(`Failed to create Discord role mapping: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateDiscordRoleMapping: async (
+    id: number,
+    mapping: DiscordRoleMappingRequest
+  ): Promise<DiscordRoleMapping> => {
+    const response = await fetch(`/api/admin/discord/role-mappings/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(mapping),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('Role mapping not found')
+      }
+      throw new Error(`Failed to update Discord role mapping: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteDiscordRoleMapping: async (id: number): Promise<void> => {
+    const response = await fetch(`/api/admin/discord/role-mappings/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('Role mapping not found')
+      }
+      throw new Error(`Failed to delete Discord role mapping: ${response.statusText}`)
+    }
+  },
+
+  getSettingsHistory: async (key: string): Promise<SettingHistoryEntry[]> => {
+    const response = await fetch(`/api/admin/discord/settings/history/${encodeURIComponent(key)}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get settings history: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // User Discord methods
+  getDiscordAuthUrl: async (): Promise<{ url: string; state: string }> => {
+    const response = await fetch('/api/discord/auth-url', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get Discord auth URL: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  handleDiscordCallback: async (
+    request: DiscordCallbackRequest
+  ): Promise<{ success: boolean; profile: UserDiscordProfile }> => {
+    const response = await fetch('/api/discord/callback', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid callback request')
+      }
+      throw new Error(`Failed to link Discord account: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  disconnectDiscord: async (): Promise<void> => {
+    const response = await fetch('/api/discord/connection', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        throw new Error('Discord is not connected to this account')
+      }
+      throw new Error(`Failed to disconnect Discord: ${response.statusText}`)
+    }
+  },
+
+  getDiscordStatus: async (): Promise<DiscordConnectionStatus> => {
+    const response = await fetch('/api/discord/status', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get Discord status: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Discord auth (unauthenticated - for login/register)
+  getDiscordLoginAuthUrl: async (prompt?: 'none' | 'consent'): Promise<DiscordAuthUrlResponse> => {
+    const params = prompt ? `?prompt=${prompt}` : ''
+    const response = await fetch(`/api/auth/discord/auth-url${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to get Discord auth URL: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  handleDiscordAuthCallback: async (
+    code?: string,
+    state?: string,
+    error?: string,
+    errorDescription?: string
+  ): Promise<DiscordAuthResult> => {
+    const params = new URLSearchParams()
+    if (code) params.set('code', code)
+    if (state) params.set('state', state)
+    if (error) params.set('error', error)
+    if (errorDescription) params.set('error_description', errorDescription)
+
+    const response = await fetch(`/api/auth/discord/callback?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to handle Discord callback: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  completeDiscordRegistration: async (
+    request: DiscordRegisterRequest
+  ): Promise<DiscordRegisterResponse> => {
+    const response = await fetch('/api/auth/discord/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Registration failed')
+      }
+      throw new Error(`Failed to complete Discord registration: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -1162,6 +1663,7 @@ export const api = {
     },
     resetPassword: (request: ResetPasswordRequest) => realApi.resetPassword(request),
     validateResetToken: (token: string) => realApi.validateResetToken(token),
+    checkUsernameAvailability: (username: string) => realApi.checkUsernameAvailability(username),
   },
   account: {
     getProfile: () => realApi.getProfile(),
@@ -1179,6 +1681,8 @@ export const api = {
     deleteRole: (roleId: string) => realApi.deleteRole(roleId),
     generatePasswordResetLink: (userId: number) => realApi.generatePasswordResetLink(userId),
     syncUserFio: (userId: number) => realApi.syncUserFio(userId),
+    deleteUser: (userId: number) => realApi.deleteUser(userId),
+    disconnectUserDiscord: (userId: number) => realApi.disconnectUserDiscord(userId),
     listPermissions: () => realApi.listPermissions(),
     listRolePermissions: () => realApi.listRolePermissions(),
     setRolePermission: (request: SetRolePermissionRequest) => realApi.setRolePermission(request),
@@ -1216,6 +1720,37 @@ export const api = {
   },
   roles: {
     list: () => realApi.getRoles(),
+  },
+  adminDiscord: {
+    getSettings: () => realApi.getDiscordSettings(),
+    updateSettings: (settings: UpdateDiscordSettingsRequest) =>
+      realApi.updateDiscordSettings(settings),
+    testConnection: () => realApi.testDiscordConnection(),
+    getGuildRoles: () => realApi.getDiscordGuildRoles(),
+    getRoleMappings: () => realApi.getDiscordRoleMappings(),
+    createRoleMapping: (mapping: DiscordRoleMappingRequest) =>
+      realApi.createDiscordRoleMapping(mapping),
+    updateRoleMapping: (id: number, mapping: DiscordRoleMappingRequest) =>
+      realApi.updateDiscordRoleMapping(id, mapping),
+    deleteRoleMapping: (id: number) => realApi.deleteDiscordRoleMapping(id),
+    getSettingsHistory: (key: string) => realApi.getSettingsHistory(key),
+  },
+  discord: {
+    getAuthUrl: () => realApi.getDiscordAuthUrl(),
+    handleCallback: (request: DiscordCallbackRequest) => realApi.handleDiscordCallback(request),
+    disconnect: () => realApi.disconnectDiscord(),
+    getStatus: () => realApi.getDiscordStatus(),
+  },
+  discordAuth: {
+    getAuthUrl: (prompt?: 'none' | 'consent') => realApi.getDiscordLoginAuthUrl(prompt),
+    handleCallback: (
+      code?: string,
+      state?: string,
+      error?: string,
+      errorDescription?: string
+    ) => realApi.handleDiscordAuthCallback(code, state, error, errorDescription),
+    completeRegistration: (request: DiscordRegisterRequest) =>
+      realApi.completeDiscordRegistration(request),
   },
 }
 

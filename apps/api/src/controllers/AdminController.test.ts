@@ -57,6 +57,13 @@ vi.mock('../db/index.js', () => ({
     permissionId: 'permissionId',
     allowed: 'allowed',
   },
+  userDiscordProfiles: {
+    id: 'id',
+    userId: 'userId',
+    discordId: 'discordId',
+    discordUsername: 'discordUsername',
+    connectedAt: 'connectedAt',
+  },
 }))
 
 vi.mock('../utils/permissionService.js', () => ({
@@ -165,6 +172,7 @@ describe('AdminController', () => {
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
       const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
+      const mockDiscordProfile: unknown[] = [] // No Discord connected
 
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 1 }]) }
       const usersMock = {
@@ -179,7 +187,8 @@ describe('AdminController', () => {
           .fn()
           .mockResolvedValueOnce(mockRoles)
           .mockResolvedValueOnce(mockSettings)
-          .mockResolvedValueOnce(mockLastSync),
+          .mockResolvedValueOnce(mockLastSync)
+          .mockResolvedValueOnce(mockDiscordProfile),
       }
 
       vi.mocked(db.select).mockReturnValue({
@@ -213,8 +222,9 @@ describe('AdminController', () => {
       ]
       const mockSettings = [{ fioUsername: 'fiouser' }]
       const mockLastSync = [{ lastSyncedAt: new Date() }]
+      const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // getUser makes 4 queries: user, roles, settings, lastSync
+      // getUser makes 5 queries: user, roles, settings, lastSync, discord
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -223,7 +233,8 @@ describe('AdminController', () => {
           .mockResolvedValueOnce([mockUser]) // user query
           .mockResolvedValueOnce(mockRoles) // roles query
           .mockResolvedValueOnce(mockSettings) // settings query
-          .mockResolvedValueOnce(mockLastSync), // lastSync query
+          .mockResolvedValueOnce(mockLastSync) // lastSync query
+          .mockResolvedValueOnce(mockDiscordProfile), // discord query
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
@@ -261,8 +272,9 @@ describe('AdminController', () => {
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
       const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
+      const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // updateUser: existence check, then getUser (user, roles, settings, lastSync)
+      // updateUser: existence check, then getUser (user, roles, settings, lastSync, discord)
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -272,7 +284,8 @@ describe('AdminController', () => {
           .mockResolvedValueOnce([mockUser]) // getUser - user
           .mockResolvedValueOnce(mockRoles) // getUser - roles
           .mockResolvedValueOnce(mockSettings) // getUser - settings
-          .mockResolvedValueOnce(mockLastSync), // getUser - lastSync
+          .mockResolvedValueOnce(mockLastSync) // getUser - lastSync
+          .mockResolvedValueOnce(mockDiscordProfile), // getUser - discord
       }
       vi.mocked(db.select).mockReturnValue(selectMock as any)
 
@@ -307,6 +320,7 @@ describe('AdminController', () => {
       ]
       const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
+      const mockDiscordProfile: unknown[] = [] // No Discord connected
       const validRoles = [
         { id: 'applicant' },
         { id: 'member' },
@@ -323,7 +337,7 @@ describe('AdminController', () => {
       const validRolesMock = {
         from: vi.fn().mockResolvedValue(validRoles),
       }
-      // getUser queries (user, roles, settings, lastSync)
+      // getUser queries (user, roles, settings, lastSync, discord)
       const getUserMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -332,7 +346,8 @@ describe('AdminController', () => {
           .mockResolvedValueOnce([mockUser])
           .mockResolvedValueOnce(mockRoles)
           .mockResolvedValueOnce(mockSettings)
-          .mockResolvedValueOnce(mockLastSync),
+          .mockResolvedValueOnce(mockLastSync)
+          .mockResolvedValueOnce(mockDiscordProfile),
       }
 
       vi.mocked(db.select)

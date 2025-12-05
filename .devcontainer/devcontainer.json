@@ -1,5 +1,5 @@
 {
-  "name": "KawaKawa CX",
+  "name": "Kawakawa CX",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspace",

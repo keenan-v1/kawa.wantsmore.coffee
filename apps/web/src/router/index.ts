@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
+import DiscordCallbackView from '../views/DiscordCallbackView.vue'
+import TermsView from '../views/TermsView.vue'
+import PrivacyView from '../views/PrivacyView.vue'
 import UnverifiedView from '../views/UnverifiedView.vue'
 import MarketView from '../views/MarketView.vue'
 import InventoryView from '../views/InventoryView.vue'
@@ -30,6 +33,21 @@ const router = createRouter({
       path: '/reset-password',
       name: 'reset-password',
       component: ResetPasswordView,
+    },
+    {
+      path: '/discord/callback',
+      name: 'discord-callback',
+      component: DiscordCallbackView,
+    },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: TermsView,
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: PrivacyView,
     },
     {
       path: '/pending',

@@ -1,4 +1,4 @@
-// Shared types for KawaKawa CX
+// Shared types for Kawakawa CX
 
 export type Currency = 'ICA' | 'CIS' | 'AIC' | 'NCC'
 
@@ -110,4 +110,147 @@ export interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
+}
+
+// ==================== DISCORD INTEGRATION ====================
+
+// Discord OAuth2 settings (admin configuration)
+export interface DiscordSettings {
+  clientId: string
+  hasClientSecret: boolean // Never expose actual secret
+  hasBotToken: boolean // Never expose actual token
+  redirectUri: string | null // OAuth redirect URI
+  guildId: string | null
+  guildName: string | null
+  guildIcon: string | null // Icon hash for CDN URL construction
+  autoApprovalEnabled: boolean
+}
+
+// Request to update Discord settings
+export interface UpdateDiscordSettingsRequest {
+  clientId?: string
+  clientSecret?: string // Only sent when updating, never returned
+  botToken?: string // Only sent when updating, never returned
+  redirectUri?: string // OAuth redirect URI
+  guildId?: string
+  autoApprovalEnabled?: boolean
+}
+
+// Discord role mapping for auto-approval
+export interface DiscordRoleMapping {
+  id: number
+  discordRoleId: string
+  discordRoleName: string
+  appRoleId: string
+  appRoleName: string
+  priority: number // Higher priority = checked first
+}
+
+// Request to create/update a role mapping
+export interface DiscordRoleMappingRequest {
+  discordRoleId: string
+  discordRoleName: string
+  appRoleId: string
+  priority?: number
+}
+
+// Discord role from Discord API
+export interface DiscordRole {
+  id: string
+  name: string
+  color: number // Integer color value
+  position: number // Role hierarchy position
+  managed: boolean // Is this role managed by an integration?
+}
+
+// User's Discord profile (stored connection)
+export interface UserDiscordProfile {
+  discordId: string
+  discordUsername: string
+  discordAvatar: string | null // Avatar hash for CDN URL construction
+  connectedAt: string // ISO date string
+}
+
+// Discord connection status for current user
+export interface DiscordConnectionStatus {
+  connected: boolean
+  profile: UserDiscordProfile | null
+  isMemberOfGuild: boolean | null // null if no guild configured
+  guildRoles: string[] | null // Discord role IDs user has in the guild
+}
+
+// Discord OAuth callback request
+export interface DiscordCallbackRequest {
+  code: string
+  state: string
+}
+
+// Discord test connection response
+export interface DiscordTestConnectionResponse {
+  success: boolean
+  guild?: {
+    id: string
+    name: string
+    icon: string | null
+    memberCount?: number
+  }
+  error?: string
+}
+
+// Settings history entry (for audit trail)
+export interface SettingHistoryEntry {
+  id: number
+  key: string
+  value: string
+  changedByUsername: string | null // null = system default
+  effectiveAt: string // ISO date string
+  createdAt: string // ISO date string
+}
+
+// ==================== DISCORD AUTHENTICATION ====================
+
+// Discord OAuth auth URL response (for unauthenticated login/register flow)
+export interface DiscordAuthUrlResponse {
+  url: string
+  state: string
+}
+
+// Discord auth callback result - indicates what happened
+export type DiscordAuthResult =
+  | { type: 'login'; token: string; user: DiscordAuthUser }
+  | { type: 'register_required'; discordProfile: DiscordProfileForRegistration; state: string }
+  | { type: 'account_exists_no_discord'; username: string }
+  | { type: 'consent_required'; message: string }
+  | { type: 'error'; message: string }
+
+// User data returned after successful Discord login
+export interface DiscordAuthUser {
+  id: number
+  username: string
+  displayName: string
+  email?: string
+  roles: Role[]
+  permissions: string[]
+}
+
+// Discord profile info for registration (before account is created)
+export interface DiscordProfileForRegistration {
+  discordId: string
+  discordUsername: string
+  discordAvatar: string | null
+}
+
+// Request to complete Discord registration
+export interface DiscordRegisterRequest {
+  state: string // State token from auth URL
+  username?: string // Optional custom username (defaults to Discord username)
+  displayName: string
+  email?: string
+}
+
+// Response after Discord registration
+export interface DiscordRegisterResponse {
+  token: string
+  user: DiscordAuthUser
+  needsProfileCompletion: boolean
 }

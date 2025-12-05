@@ -1,5 +1,5 @@
 // Database schema using Drizzle ORM
-// Based on KawaKawa CX types and mock data
+// Based on Kawakawa CX types and mock data
 
 import {
   pgTable,
@@ -34,6 +34,69 @@ export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', [
   'reserve',
 ])
 export const orderTypeEnum = pgEnum('order_type', ['internal', 'partner']) // Shared enum for sell/buy orders
+
+// ==================== SETTINGS (Generic key-value with history) ====================
+export const settings = pgTable(
+  'settings',
+  {
+    id: serial('id').primaryKey(),
+    key: varchar('key', { length: 100 }).notNull(), // Setting key (e.g., 'discord.clientId')
+    value: text('value').notNull(), // Setting value (JSON-encoded for complex values)
+    changedByUserId: integer('changed_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }), // null = system default
+    effectiveAt: timestamp('effective_at').defaultNow().notNull(), // When this setting became effective
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  table => ({
+    keyEffectiveIdx: uniqueIndex('settings_key_effective_idx').on(table.key, table.effectiveAt),
+  })
+)
+
+// ==================== DISCORD ROLE MAPPINGS ====================
+export const discordRoleMappings = pgTable(
+  'discord_role_mappings',
+  {
+    id: serial('id').primaryKey(),
+    discordRoleId: varchar('discord_role_id', { length: 100 }).notNull(), // Discord role snowflake ID
+    discordRoleName: varchar('discord_role_name', { length: 100 }).notNull(), // Cached Discord role name
+    appRoleId: varchar('app_role_id', { length: 50 })
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    priority: integer('priority').notNull().default(0), // Higher priority = checked first for auto-approval
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueDiscordRole: uniqueIndex('discord_role_mappings_discord_role_idx').on(
+      table.discordRoleId
+    ),
+  })
+)
+
+// ==================== USER DISCORD PROFILES ====================
+export const userDiscordProfiles = pgTable(
+  'user_discord_profiles',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    discordId: varchar('discord_id', { length: 100 }).notNull().unique(), // Discord user snowflake ID
+    discordUsername: varchar('discord_username', { length: 100 }).notNull(), // Discord username (cached)
+    discordAvatar: varchar('discord_avatar', { length: 255 }), // Avatar hash for display
+    accessToken: text('access_token'), // OAuth access token (encrypted)
+    refreshToken: text('refresh_token'), // OAuth refresh token (encrypted)
+    tokenExpiresAt: timestamp('token_expires_at'), // When access token expires
+    connectedAt: timestamp('connected_at').defaultNow().notNull(), // When user connected Discord
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueDiscordId: uniqueIndex('user_discord_profiles_discord_id_idx').on(table.discordId),
+  })
+)
 
 // ==================== ROLES ====================
 export const roles = pgTable('roles', {
@@ -257,6 +320,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
   buyOrders: many(buyOrders),
+  discordProfile: one(userDiscordProfiles, {
+    fields: [users.id],
+    references: [userDiscordProfiles.userId],
+  }),
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -276,6 +343,7 @@ export const passwordResetTokensRelations = relations(passwordResetTokens, ({ on
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
   rolePermissions: many(rolePermissions),
+  discordRoleMappings: many(discordRoleMappings),
 }))
 
 export const permissionsRelations = relations(permissions, ({ many }) => ({
@@ -364,5 +432,28 @@ export const buyOrdersRelations = relations(buyOrders, ({ one }) => ({
   location: one(fioLocations, {
     fields: [buyOrders.locationId],
     references: [fioLocations.naturalId],
+  }),
+}))
+
+// ==================== DISCORD & SETTINGS RELATIONS ====================
+
+export const settingsRelations = relations(settings, ({ one }) => ({
+  changedByUser: one(users, {
+    fields: [settings.changedByUserId],
+    references: [users.id],
+  }),
+}))
+
+export const discordRoleMappingsRelations = relations(discordRoleMappings, ({ one }) => ({
+  appRole: one(roles, {
+    fields: [discordRoleMappings.appRoleId],
+    references: [roles.id],
+  }),
+}))
+
+export const userDiscordProfilesRelations = relations(userDiscordProfiles, ({ one }) => ({
+  user: one(users, {
+    fields: [userDiscordProfiles.userId],
+    references: [users.id],
   }),
 }))

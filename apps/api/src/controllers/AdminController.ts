@@ -23,6 +23,7 @@ import {
   permissions,
   rolePermissions,
   fioUserStorage,
+  userDiscordProfiles,
 } from '../db/index.js'
 import { eq, ilike, or, sql, desc, max, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
@@ -37,6 +38,13 @@ interface FioSyncInfo {
   lastSyncedAt: Date | null
 }
 
+interface DiscordInfo {
+  connected: boolean
+  discordUsername: string | null
+  discordId: string | null
+  connectedAt: Date | null
+}
+
 interface AdminUser {
   id: number
   username: string
@@ -45,6 +53,7 @@ interface AdminUser {
   isActive: boolean
   roles: Role[]
   fioSync: FioSyncInfo
+  discord: DiscordInfo
   createdAt: Date
 }
 
@@ -154,7 +163,7 @@ export class AdminController extends Controller {
       .limit(pageSize)
       .offset(offset)
 
-    // Get roles and FIO sync info for each user
+    // Get roles, FIO sync info, and Discord info for each user
     const usersWithDetails: AdminUser[] = await Promise.all(
       userList.map(async user => {
         // Get user roles
@@ -179,6 +188,16 @@ export class AdminController extends Controller {
           .from(fioUserStorage)
           .where(eq(fioUserStorage.userId, user.id))
 
+        // Get Discord info
+        const [discordProfile] = await db
+          .select({
+            discordId: userDiscordProfiles.discordId,
+            discordUsername: userDiscordProfiles.discordUsername,
+            connectedAt: userDiscordProfiles.connectedAt,
+          })
+          .from(userDiscordProfiles)
+          .where(eq(userDiscordProfiles.userId, user.id))
+
         return {
           ...user,
           roles: userRolesData.map(r => ({
@@ -189,6 +208,12 @@ export class AdminController extends Controller {
           fioSync: {
             fioUsername: settings?.fioUsername || null,
             lastSyncedAt: lastSync?.lastSyncedAt || null,
+          },
+          discord: {
+            connected: !!discordProfile,
+            discordUsername: discordProfile?.discordUsername || null,
+            discordId: discordProfile?.discordId || null,
+            connectedAt: discordProfile?.connectedAt || null,
           },
         }
       })
@@ -237,7 +262,7 @@ export class AdminController extends Controller {
       .where(eq(userRoles.roleId, 'unverified'))
       .orderBy(desc(users.createdAt))
 
-    // Get roles and FIO sync info for each user
+    // Get roles, FIO sync info, and Discord info for each user
     const usersWithDetails: AdminUser[] = await Promise.all(
       unverifiedUsers.map(async user => {
         const userRolesData = await db
@@ -260,6 +285,16 @@ export class AdminController extends Controller {
           .from(fioUserStorage)
           .where(eq(fioUserStorage.userId, user.id))
 
+        // Get Discord info
+        const [discordProfile] = await db
+          .select({
+            discordId: userDiscordProfiles.discordId,
+            discordUsername: userDiscordProfiles.discordUsername,
+            connectedAt: userDiscordProfiles.connectedAt,
+          })
+          .from(userDiscordProfiles)
+          .where(eq(userDiscordProfiles.userId, user.id))
+
         return {
           ...user,
           roles: userRolesData.map(r => ({
@@ -270,6 +305,12 @@ export class AdminController extends Controller {
           fioSync: {
             fioUsername: settings?.fioUsername || null,
             lastSyncedAt: lastSync?.lastSyncedAt || null,
+          },
+          discord: {
+            connected: !!discordProfile,
+            discordUsername: discordProfile?.discordUsername || null,
+            discordId: discordProfile?.discordId || null,
+            connectedAt: discordProfile?.connectedAt || null,
           },
         }
       })
@@ -379,6 +420,16 @@ export class AdminController extends Controller {
       .from(fioUserStorage)
       .where(eq(fioUserStorage.userId, userId))
 
+    // Get Discord info
+    const [discordProfile] = await db
+      .select({
+        discordId: userDiscordProfiles.discordId,
+        discordUsername: userDiscordProfiles.discordUsername,
+        connectedAt: userDiscordProfiles.connectedAt,
+      })
+      .from(userDiscordProfiles)
+      .where(eq(userDiscordProfiles.userId, userId))
+
     return {
       ...user,
       roles: userRolesData.map(r => ({
@@ -389,6 +440,12 @@ export class AdminController extends Controller {
       fioSync: {
         fioUsername: settings?.fioUsername || null,
         lastSyncedAt: lastSync?.lastSyncedAt || null,
+      },
+      discord: {
+        connected: !!discordProfile,
+        discordUsername: discordProfile?.discordUsername || null,
+        discordId: discordProfile?.discordId || null,
+        connectedAt: discordProfile?.connectedAt || null,
       },
     }
   }
@@ -596,6 +653,95 @@ export class AdminController extends Controller {
       success: result.success,
       inserted: result.inserted,
       errors: result.errors,
+      username: user.username,
+    }
+  }
+
+  /**
+   * Delete a user and all their data (admin action)
+   */
+  @Delete('users/{userId}')
+  public async deleteUser(
+    @Request() request: { user: JwtPayload },
+    @Path() userId: number
+  ): Promise<{ success: boolean; username: string }> {
+    // Prevent admins from deleting their own account
+    if (userId === request.user.userId) {
+      this.setStatus(400)
+      throw BadRequest('Cannot delete your own account')
+    }
+
+    // Verify user exists
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    if (!user) {
+      this.setStatus(404)
+      throw NotFound('User not found')
+    }
+
+    // Delete the user - cascade will handle all related data:
+    // - userSettings
+    // - userRoles
+    // - passwordResetTokens
+    // - fioUserStorage (and fioInventory through it)
+    // - sellOrders
+    // - buyOrders
+    // - userDiscordProfiles
+    // - settings.changedByUserId will be set to null
+    await db.delete(users).where(eq(users.id, userId))
+
+    // Invalidate any cached roles for this user
+    invalidateCachedRoles(userId)
+
+    return {
+      success: true,
+      username: user.username,
+    }
+  }
+
+  /**
+   * Disconnect a user's Discord account (admin action)
+   */
+  @Delete('users/{userId}/discord')
+  public async disconnectUserDiscord(
+    @Path() userId: number
+  ): Promise<{ success: boolean; username: string }> {
+    // Verify user exists
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    if (!user) {
+      this.setStatus(404)
+      throw NotFound('User not found')
+    }
+
+    // Check if user has Discord connected
+    const [discordProfile] = await db
+      .select({ id: userDiscordProfiles.id })
+      .from(userDiscordProfiles)
+      .where(eq(userDiscordProfiles.userId, userId))
+
+    if (!discordProfile) {
+      this.setStatus(400)
+      throw BadRequest('User does not have Discord connected')
+    }
+
+    // Delete the Discord profile
+    await db.delete(userDiscordProfiles).where(eq(userDiscordProfiles.userId, userId))
+
+    return {
+      success: true,
       username: user.username,
     }
   }

@@ -20,6 +20,7 @@
       <v-tab value="users">User Management</v-tab>
       <v-tab value="permissions">Permissions</v-tab>
       <v-tab value="roles">Roles</v-tab>
+      <v-tab value="discord">Discord</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -155,6 +156,36 @@
               </div>
             </template>
 
+            <template #item.discord="{ item }">
+              <div v-if="item.discord.connected" class="d-flex align-center">
+                <v-icon color="success" size="small" class="mr-1">mdi-check-circle</v-icon>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <span v-bind="props" class="text-body-2 text-truncate" style="max-width: 80px">
+                      {{ item.discord.discordUsername }}
+                    </span>
+                  </template>
+                  <div>
+                    <div>{{ item.discord.discordUsername }}</div>
+                    <div class="text-caption">ID: {{ item.discord.discordId }}</div>
+                  </div>
+                </v-tooltip>
+                <v-btn
+                  icon
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  class="ml-1"
+                  :loading="disconnectingDiscord.has(item.id)"
+                  @click="disconnectUserDiscord(item)"
+                >
+                  <v-icon size="small">mdi-link-off</v-icon>
+                  <v-tooltip activator="parent" location="top">Disconnect Discord</v-tooltip>
+                </v-btn>
+              </div>
+              <span v-else class="text-caption text-medium-emphasis">—</span>
+            </template>
+
             <template #item.fioSync="{ item }">
               <div v-if="item.fioSync.fioUsername">
                 <div class="text-body-2">{{ item.fioSync.fioUsername }}</div>
@@ -200,6 +231,20 @@
                   </template>
                   Edit user
                 </v-tooltip>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      color="error"
+                      @click="openDeleteUserDialog(item)"
+                    >
+                      <v-icon>mdi-delete</v-icon>
+                    </v-btn>
+                  </template>
+                  Delete user
+                </v-tooltip>
               </div>
               <!-- Mobile: show menu -->
               <v-menu>
@@ -220,6 +265,12 @@
                       <v-icon>mdi-pencil</v-icon>
                     </template>
                     <v-list-item-title>Edit user</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item class="text-error" @click="openDeleteUserDialog(item)">
+                    <template #prepend>
+                      <v-icon color="error">mdi-delete</v-icon>
+                    </template>
+                    <v-list-item-title>Delete user</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-menu>
@@ -361,6 +412,255 @@
             </v-table>
           </v-card-text>
         </v-card>
+      </v-tabs-window-item>
+
+      <!-- DISCORD TAB -->
+      <v-tabs-window-item value="discord">
+        <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+          This integration uses <strong>two separate Discord applications</strong>: an OAuth app
+          for user authentication and a Bot app for server integration features.
+        </v-alert>
+
+        <v-row>
+          <v-col cols="12" lg="6">
+            <!-- OAuth Application Settings -->
+            <v-card class="mb-4">
+              <v-card-title>
+                <v-icon class="mr-2">mdi-login</v-icon>
+                OAuth Application
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Used for user login and registration. Create an OAuth2 application in the
+                  <a
+                    href="https://discord.com/developers/applications"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Discord Developer Portal</a
+                  >
+                  with <code>identify</code> and <code>guilds.members.read</code> scopes.
+                </v-alert>
+
+                <v-text-field
+                  v-model="discordForm.clientId"
+                  label="Client ID"
+                  placeholder="Enter OAuth application client ID"
+                  hint="Application ID from your OAuth app"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-text-field
+                  v-model="discordForm.clientSecret"
+                  :type="showClientSecret ? 'text' : 'password'"
+                  label="Client Secret"
+                  :placeholder="
+                    discordSettings?.hasClientSecret ? '••••••••••••••••' : 'Enter client secret'
+                  "
+                  :hint="
+                    discordSettings?.hasClientSecret
+                      ? 'Client secret is configured (enter new value to change)'
+                      : 'OAuth2 client secret from your OAuth app'
+                  "
+                  persistent-hint
+                  class="mb-4"
+                  :append-inner-icon="showClientSecret ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="showClientSecret = !showClientSecret"
+                />
+
+                <v-text-field
+                  v-model="discordForm.redirectUri"
+                  label="Redirect URI"
+                  placeholder="https://your-domain.com/discord/callback"
+                  hint="Must match exactly in Discord Developer Portal (e.g., https://kawakawa.cx/discord/callback)"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingDiscordSettings"
+                  :disabled="!hasOAuthSettingsChanges"
+                  @click="saveOAuthSettings"
+                >
+                  Save OAuth Settings
+                </v-btn>
+              </v-card-text>
+            </v-card>
+
+            <!-- Bot Application Settings -->
+            <v-card>
+              <v-card-title>
+                <v-icon class="mr-2">mdi-robot</v-icon>
+                Bot Application
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Used for server integration features like role syncing and auto-approval. Create a
+                  separate Bot application and invite it to your server.
+                </v-alert>
+
+                <v-text-field
+                  v-model="discordForm.botToken"
+                  :type="showBotToken ? 'text' : 'password'"
+                  label="Bot Token"
+                  :placeholder="
+                    discordSettings?.hasBotToken ? '••••••••••••••••' : 'Enter bot token'
+                  "
+                  :hint="
+                    discordSettings?.hasBotToken
+                      ? 'Bot token is configured (enter new value to change)'
+                      : 'Token from your Bot application'
+                  "
+                  persistent-hint
+                  class="mb-4"
+                  :append-inner-icon="showBotToken ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="showBotToken = !showBotToken"
+                />
+
+                <v-text-field
+                  v-model="discordForm.guildId"
+                  label="Guild ID (Server ID)"
+                  placeholder="Enter Discord server ID"
+                  hint="Right-click on your server and 'Copy Server ID' (enable Developer Mode first)"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <div class="d-flex align-center ga-2 mb-4">
+                  <v-btn
+                    color="secondary"
+                    variant="outlined"
+                    :loading="testingConnection"
+                    :disabled="!discordSettings?.hasBotToken || !discordForm.guildId"
+                    prepend-icon="mdi-connection"
+                    @click="testDiscordConnection"
+                  >
+                    Test Connection
+                  </v-btn>
+                  <v-chip
+                    v-if="discordSettings?.guildName"
+                    color="success"
+                    prepend-icon="mdi-check-circle"
+                  >
+                    {{ discordSettings.guildName }}
+                  </v-chip>
+                </div>
+
+                <v-switch
+                  v-model="discordForm.autoApprovalEnabled"
+                  label="Enable Auto-Approval"
+                  color="success"
+                  hint="Automatically approve users based on Discord role mappings"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingDiscordSettings"
+                  :disabled="!hasBotSettingsChanges"
+                  @click="saveBotSettings"
+                >
+                  Save Bot Settings
+                </v-btn>
+              </v-card-text>
+            </v-card>
+          </v-col>
+
+          <v-col cols="12" lg="6">
+            <!-- Role Mappings -->
+            <v-card>
+              <v-card-title>
+                <v-row align="center" no-gutters>
+                  <v-col>
+                    <v-icon class="mr-2">mdi-account-convert</v-icon>
+                    Role Mappings
+                  </v-col>
+                  <v-col cols="auto">
+                    <v-btn
+                      color="primary"
+                      size="small"
+                      prepend-icon="mdi-plus"
+                      :disabled="!discordSettings?.guildId"
+                      @click="openCreateMappingDialog"
+                    >
+                      Add Mapping
+                    </v-btn>
+                  </v-col>
+                </v-row>
+              </v-card-title>
+              <v-card-text>
+                <v-alert
+                  v-if="!discordSettings?.guildId"
+                  type="warning"
+                  variant="tonal"
+                  class="mb-4"
+                  density="compact"
+                >
+                  Configure and test your Discord server connection first to enable role mappings.
+                </v-alert>
+
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Map Discord roles to application roles for auto-approval. Higher priority mappings
+                  are checked first.
+                </v-alert>
+
+                <div v-if="loadingRoleMappings" class="text-center py-4">
+                  <v-progress-circular indeterminate />
+                </div>
+
+                <v-table v-else-if="discordRoleMappings.length > 0" density="compact">
+                  <thead>
+                    <tr>
+                      <th>Discord Role</th>
+                      <th>App Role</th>
+                      <th>Priority</th>
+                      <th class="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="mapping in discordRoleMappings" :key="mapping.id">
+                      <td>
+                        <v-chip size="small" color="indigo">{{ mapping.discordRoleName }}</v-chip>
+                      </td>
+                      <td>
+                        <v-chip size="small" :color="getAppRoleColor(mapping.appRoleId)">
+                          {{ mapping.appRoleName }}
+                        </v-chip>
+                      </td>
+                      <td>{{ mapping.priority }}</td>
+                      <td class="text-right">
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="text"
+                          @click="openEditMappingDialog(mapping)"
+                        >
+                          <v-icon>mdi-pencil</v-icon>
+                        </v-btn>
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="text"
+                          color="error"
+                          @click="confirmDeleteMapping(mapping)"
+                        >
+                          <v-icon>mdi-delete</v-icon>
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+
+                <v-alert v-else type="info" variant="tonal" density="compact">
+                  No role mappings configured yet. Add mappings to enable auto-approval.
+                </v-alert>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
       </v-tabs-window-item>
     </v-tabs-window>
 
@@ -534,17 +834,142 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Delete User Dialog -->
+    <v-dialog v-model="deleteUserDialog" max-width="500">
+      <v-card>
+        <v-card-title class="text-error">Delete User</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This action is <strong>permanent</strong> and cannot be undone.
+          </v-alert>
+          <p>
+            Are you sure you want to delete <strong>{{ deletingUser?.displayName }}</strong> (@{{
+              deletingUser?.username
+            }})?
+          </p>
+          <p class="text-body-2 text-medium-emphasis mt-2">
+            This will permanently delete:
+          </p>
+          <ul class="text-body-2 text-medium-emphasis ml-4">
+            <li>User account and profile</li>
+            <li>All sell and buy orders</li>
+            <li>FIO inventory data</li>
+            <li>Discord connection</li>
+            <li>All other associated data</li>
+          </ul>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteUserDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingUserLoading" @click="deleteUser">
+            Delete Permanently
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Create/Edit Role Mapping Dialog -->
+    <v-dialog v-model="mappingDialog" max-width="500">
+      <v-card>
+        <v-card-title>{{
+          editingMapping ? 'Edit Role Mapping' : 'Create Role Mapping'
+        }}</v-card-title>
+        <v-card-text>
+          <v-select
+            v-model="mappingForm.discordRoleId"
+            :items="discordGuildRoles"
+            item-title="name"
+            item-value="id"
+            label="Discord Role"
+            :loading="loadingDiscordRoles"
+            :disabled="loadingDiscordRoles"
+            :rules="[v => !!v || 'Discord role is required']"
+            class="mb-4"
+          >
+            <template #item="{ item, props }">
+              <v-list-item v-bind="props">
+                <template #prepend>
+                  <div
+                    class="mr-2"
+                    style="width: 12px; height: 12px; border-radius: 50%"
+                    :style="{ backgroundColor: getDiscordRoleColor(item.raw.color) }"
+                  />
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+
+          <v-select
+            v-model="mappingForm.appRoleId"
+            :items="approvalRoleOptions"
+            item-title="name"
+            item-value="id"
+            label="Application Role"
+            :rules="[v => !!v || 'App role is required']"
+            class="mb-4"
+          >
+            <template #selection="{ item }">
+              <v-chip :color="item.raw.color" size="small">{{ item.title }}</v-chip>
+            </template>
+          </v-select>
+
+          <v-text-field
+            v-model.number="mappingForm.priority"
+            type="number"
+            label="Priority"
+            hint="Higher priority mappings are checked first (default: 0)"
+            persistent-hint
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="mappingDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingMapping" @click="saveMapping">
+            {{ editingMapping ? 'Update' : 'Create' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Role Mapping Confirmation Dialog -->
+    <v-dialog v-model="deleteMappingDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Role Mapping</v-card-title>
+        <v-card-text>
+          Are you sure you want to delete the mapping from
+          <strong>{{ deletingMapping?.discordRoleName }}</strong> to
+          <strong>{{ deletingMapping?.appRoleName }}</strong
+          >?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteMappingDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingMappingLoading" @click="deleteMapping">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import type { Role } from '../types'
+import type { DiscordSettings, DiscordRoleMapping, DiscordRole } from '@kawakawa/types'
 import { api } from '../services/api'
 
 interface FioSyncInfo {
   fioUsername: string | null
   lastSyncedAt: string | null
+}
+
+interface DiscordInfo {
+  connected: boolean
+  discordUsername: string | null
+  discordId: string | null
+  connectedAt: string | null
 }
 
 interface AdminUser {
@@ -555,6 +980,7 @@ interface AdminUser {
   isActive: boolean
   roles: Role[]
   fioSync: FioSyncInfo
+  discord: DiscordInfo
   createdAt: string
 }
 
@@ -587,6 +1013,7 @@ const userHeaders = [
   { title: 'Display Name', key: 'displayName', sortable: false },
   { title: 'Status', key: 'isActive', sortable: false },
   { title: 'Roles', key: 'roles', sortable: false },
+  { title: 'Discord', key: 'discord', sortable: false, width: 120 },
   { title: 'FIO Sync', key: 'fioSync', sortable: false },
   { title: 'Created', key: 'createdAt', sortable: false },
   { title: 'Actions', key: 'actions', sortable: false, width: 100 },
@@ -599,6 +1026,7 @@ const pageSize = ref(20)
 const search = ref('')
 const loading = ref(false)
 const syncingUsers = ref<Set<number>>(new Set())
+const disconnectingDiscord = ref<Set<number>>(new Set())
 const availableRoles = ref<Role[]>([])
 
 const editDialog = ref(false)
@@ -629,6 +1057,11 @@ const rejectDialog = ref(false)
 const rejectingUser = ref<AdminUser | null>(null)
 const rejectingLoading = ref(false)
 
+// Delete user state
+const deleteUserDialog = ref(false)
+const deletingUser = ref<AdminUser | null>(null)
+const deletingUserLoading = ref(false)
+
 // Computed: Roles available for approval (exclude unverified)
 const approvalRoleOptions = computed(() => {
   return availableRoles.value.filter(r => r.id !== 'unverified')
@@ -653,6 +1086,56 @@ const deleteRoleDialog = ref(false)
 const deletingRole = ref<Role | null>(null)
 const deletingRoleLoading = ref(false)
 const roleFormRef = ref()
+
+// Discord settings state
+const discordSettings = ref<DiscordSettings | null>(null)
+const discordForm = ref({
+  clientId: '',
+  clientSecret: '',
+  botToken: '',
+  redirectUri: '',
+  guildId: '',
+  autoApprovalEnabled: false,
+})
+const showClientSecret = ref(false)
+const showBotToken = ref(false)
+const savingDiscordSettings = ref(false)
+const testingConnection = ref(false)
+const loadingRoleMappings = ref(false)
+const discordRoleMappings = ref<DiscordRoleMapping[]>([])
+const discordGuildRoles = ref<DiscordRole[]>([])
+const loadingDiscordRoles = ref(false)
+
+// Role mapping dialog state
+const mappingDialog = ref(false)
+const editingMapping = ref<DiscordRoleMapping | null>(null)
+const mappingForm = ref({
+  discordRoleId: '',
+  discordRoleName: '',
+  appRoleId: '',
+  priority: 0,
+})
+const savingMapping = ref(false)
+const deleteMappingDialog = ref(false)
+const deletingMapping = ref<DiscordRoleMapping | null>(null)
+const deletingMappingLoading = ref(false)
+
+// Discord computed properties - separate OAuth and Bot settings
+const hasOAuthSettingsChanges = computed(() => {
+  return (
+    discordForm.value.clientId !== (discordSettings.value?.clientId || '') ||
+    discordForm.value.clientSecret !== '' ||
+    discordForm.value.redirectUri !== (discordSettings.value?.redirectUri || '')
+  )
+})
+
+const hasBotSettingsChanges = computed(() => {
+  return (
+    discordForm.value.botToken !== '' ||
+    discordForm.value.guildId !== (discordSettings.value?.guildId || '') ||
+    discordForm.value.autoApprovalEnabled !== (discordSettings.value?.autoApprovalEnabled || false)
+  )
+})
 
 const vuetifyColors = [
   { title: 'Grey', value: 'grey' },
@@ -761,6 +1244,25 @@ const syncUserFio = async (user: AdminUser) => {
     showSnackbar(message, 'error')
   } finally {
     syncingUsers.value.delete(user.id)
+  }
+}
+
+const disconnectUserDiscord = async (user: AdminUser) => {
+  if (!confirm(`Disconnect Discord for ${user.username}?`)) {
+    return
+  }
+  try {
+    disconnectingDiscord.value.add(user.id)
+    const result = await api.admin.disconnectUserDiscord(user.id)
+    showSnackbar(`Discord disconnected for ${result.username}`)
+    // Refresh the user list to update Discord status
+    await loadUsers()
+  } catch (error) {
+    console.error('Failed to disconnect Discord', error)
+    const message = error instanceof Error ? error.message : 'Failed to disconnect Discord'
+    showSnackbar(message, 'error')
+  } finally {
+    disconnectingDiscord.value.delete(user.id)
   }
 }
 
@@ -1058,6 +1560,253 @@ const rejectUser = async () => {
   }
 }
 
+// Delete user functions
+const openDeleteUserDialog = (user: AdminUser) => {
+  deletingUser.value = user
+  deleteUserDialog.value = true
+}
+
+const deleteUser = async () => {
+  if (!deletingUser.value) return
+
+  try {
+    deletingUserLoading.value = true
+    await api.admin.deleteUser(deletingUser.value.id)
+    showSnackbar(`${deletingUser.value.displayName} has been permanently deleted`)
+    deleteUserDialog.value = false
+    // Reload users list
+    loadUsers()
+    // Remove from pending list if they were there
+    pendingApprovals.value = pendingApprovals.value.filter(u => u.id !== deletingUser.value?.id)
+    // Notify App.vue to update the badge count
+    window.dispatchEvent(new CustomEvent('approval-queue-updated'))
+  } catch (error) {
+    console.error('Failed to delete user', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete user'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingUserLoading.value = false
+    deletingUser.value = null
+  }
+}
+
+// Discord functions
+const loadDiscordSettings = async () => {
+  try {
+    discordSettings.value = await api.adminDiscord.getSettings()
+    // Initialize form with current settings
+    discordForm.value.clientId = discordSettings.value.clientId || ''
+    discordForm.value.redirectUri = discordSettings.value.redirectUri || ''
+    discordForm.value.guildId = discordSettings.value.guildId || ''
+    discordForm.value.autoApprovalEnabled = discordSettings.value.autoApprovalEnabled || false
+    // Don't populate secrets - they should only be entered when changing
+    discordForm.value.clientSecret = ''
+    discordForm.value.botToken = ''
+  } catch (error) {
+    console.error('Failed to load Discord settings', error)
+    showSnackbar('Failed to load Discord settings', 'error')
+  }
+}
+
+const loadRoleMappings = async () => {
+  try {
+    loadingRoleMappings.value = true
+    discordRoleMappings.value = await api.adminDiscord.getRoleMappings()
+  } catch (error) {
+    console.error('Failed to load role mappings', error)
+  } finally {
+    loadingRoleMappings.value = false
+  }
+}
+
+const loadDiscordGuildRoles = async () => {
+  if (!discordSettings.value?.guildId) return
+
+  try {
+    loadingDiscordRoles.value = true
+    discordGuildRoles.value = await api.adminDiscord.getGuildRoles()
+  } catch (error) {
+    console.error('Failed to load Discord guild roles', error)
+    showSnackbar('Failed to load Discord guild roles', 'error')
+  } finally {
+    loadingDiscordRoles.value = false
+  }
+}
+
+const saveOAuthSettings = async () => {
+  try {
+    savingDiscordSettings.value = true
+    const settings: Record<string, string | undefined> = {
+      clientId: discordForm.value.clientId,
+      redirectUri: discordForm.value.redirectUri,
+    }
+    if (discordForm.value.clientSecret) {
+      settings.clientSecret = discordForm.value.clientSecret
+    }
+    discordSettings.value = await api.adminDiscord.updateSettings(settings)
+    // Clear password field after save
+    discordForm.value.clientSecret = ''
+    showSnackbar('OAuth settings saved successfully')
+  } catch (error) {
+    console.error('Failed to save OAuth settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save OAuth settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingDiscordSettings.value = false
+  }
+}
+
+const saveBotSettings = async () => {
+  try {
+    savingDiscordSettings.value = true
+    const settings: Record<string, string | boolean | undefined> = {
+      guildId: discordForm.value.guildId,
+      autoApprovalEnabled: discordForm.value.autoApprovalEnabled,
+    }
+    if (discordForm.value.botToken) {
+      settings.botToken = discordForm.value.botToken
+    }
+    discordSettings.value = await api.adminDiscord.updateSettings(settings)
+    // Clear password field after save
+    discordForm.value.botToken = ''
+    showSnackbar('Bot settings saved successfully')
+  } catch (error) {
+    console.error('Failed to save bot settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save bot settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingDiscordSettings.value = false
+  }
+}
+
+const testDiscordConnection = async () => {
+  try {
+    testingConnection.value = true
+    // First save the guild ID if changed
+    if (discordForm.value.guildId !== (discordSettings.value?.guildId || '')) {
+      await api.adminDiscord.updateSettings({
+        guildId: discordForm.value.guildId,
+      })
+    }
+    const result = await api.adminDiscord.testConnection()
+    if (result.success && result.guild) {
+      // Reload settings to get updated guild info
+      await loadDiscordSettings()
+      await loadDiscordGuildRoles()
+      showSnackbar(`Connected to ${result.guild.name}`)
+    } else {
+      showSnackbar(result.error || 'Connection test failed', 'error')
+    }
+  } catch (error) {
+    console.error('Failed to test Discord connection', error)
+    const message = error instanceof Error ? error.message : 'Failed to test Discord connection'
+    showSnackbar(message, 'error')
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+const getAppRoleColor = (roleId: string): string => {
+  const role = availableRoles.value.find(r => r.id === roleId)
+  return role?.color || 'grey'
+}
+
+const getDiscordRoleColor = (colorValue: number): string => {
+  if (!colorValue) return '#99aab5' // Default Discord role color
+  return `#${colorValue.toString(16).padStart(6, '0')}`
+}
+
+const openCreateMappingDialog = async () => {
+  editingMapping.value = null
+  mappingForm.value = {
+    discordRoleId: '',
+    discordRoleName: '',
+    appRoleId: '',
+    priority: 0,
+  }
+  mappingDialog.value = true
+  // Load Discord roles if not already loaded
+  if (discordGuildRoles.value.length === 0) {
+    await loadDiscordGuildRoles()
+  }
+}
+
+const openEditMappingDialog = async (mapping: DiscordRoleMapping) => {
+  editingMapping.value = mapping
+  mappingForm.value = {
+    discordRoleId: mapping.discordRoleId,
+    discordRoleName: mapping.discordRoleName,
+    appRoleId: mapping.appRoleId,
+    priority: mapping.priority,
+  }
+  mappingDialog.value = true
+  // Load Discord roles if not already loaded
+  if (discordGuildRoles.value.length === 0) {
+    await loadDiscordGuildRoles()
+  }
+}
+
+const saveMapping = async () => {
+  try {
+    savingMapping.value = true
+    // Get the Discord role name from the selected role
+    const selectedDiscordRole = discordGuildRoles.value.find(
+      r => r.id === mappingForm.value.discordRoleId
+    )
+    const discordRoleName = selectedDiscordRole?.name || mappingForm.value.discordRoleId
+
+    if (editingMapping.value) {
+      await api.adminDiscord.updateRoleMapping(editingMapping.value.id, {
+        discordRoleId: mappingForm.value.discordRoleId,
+        discordRoleName,
+        appRoleId: mappingForm.value.appRoleId,
+        priority: mappingForm.value.priority,
+      })
+      showSnackbar('Role mapping updated successfully')
+    } else {
+      await api.adminDiscord.createRoleMapping({
+        discordRoleId: mappingForm.value.discordRoleId,
+        discordRoleName,
+        appRoleId: mappingForm.value.appRoleId,
+        priority: mappingForm.value.priority,
+      })
+      showSnackbar('Role mapping created successfully')
+    }
+    mappingDialog.value = false
+    await loadRoleMappings()
+  } catch (error) {
+    console.error('Failed to save role mapping', error)
+    const message = error instanceof Error ? error.message : 'Failed to save role mapping'
+    showSnackbar(message, 'error')
+  } finally {
+    savingMapping.value = false
+  }
+}
+
+const confirmDeleteMapping = (mapping: DiscordRoleMapping) => {
+  deletingMapping.value = mapping
+  deleteMappingDialog.value = true
+}
+
+const deleteMapping = async () => {
+  if (!deletingMapping.value) return
+
+  try {
+    deletingMappingLoading.value = true
+    await api.adminDiscord.deleteRoleMapping(deletingMapping.value.id)
+    showSnackbar('Role mapping deleted successfully')
+    deleteMappingDialog.value = false
+    await loadRoleMappings()
+  } catch (error) {
+    console.error('Failed to delete role mapping', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete role mapping'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingMappingLoading.value = false
+    deletingMapping.value = null
+  }
+}
+
 // Watch for tab changes to load data
 watch(activeTab, async newTab => {
   if (newTab === 'permissions') {
@@ -1069,6 +1818,14 @@ watch(activeTab, async newTab => {
     // Refresh user list to get updated role colors/names
     rolesModified.value = false
     await loadUsers()
+  } else if (newTab === 'discord') {
+    // Load Discord settings and role mappings
+    if (!discordSettings.value) {
+      await loadDiscordSettings()
+    }
+    if (discordRoleMappings.value.length === 0) {
+      await loadRoleMappings()
+    }
   }
 })
 

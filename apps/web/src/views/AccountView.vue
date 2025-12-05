@@ -19,6 +19,10 @@
         <v-icon start>mdi-cloud-sync</v-icon>
         FIO Integration
       </v-tab>
+      <v-tab value="discord">
+        <DiscordIcon :size="20" class="mr-2" />
+        Discord
+      </v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -405,6 +409,117 @@
           </v-col>
         </v-row>
       </v-tabs-window-item>
+
+      <!-- Discord Tab -->
+      <v-tabs-window-item value="discord">
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-card :loading="loadingDiscord">
+              <v-card-title class="d-flex align-center">
+                <DiscordIcon :size="24" class="mr-2 text-indigo" />
+                Discord Connection
+              </v-card-title>
+              <v-card-text>
+                <!-- Not Connected State -->
+                <template v-if="!discordStatus?.connected">
+                  <v-alert type="info" variant="tonal" class="mb-4">
+                    Connect your Discord account to enable features like auto-approval and server
+                    integration.
+                  </v-alert>
+
+                  <v-btn color="indigo" :loading="connectingDiscord" @click="connectDiscord">
+                    <template #prepend>
+                      <DiscordIcon :size="20" />
+                    </template>
+                    Connect Discord
+                  </v-btn>
+                </template>
+
+                <!-- Connected State -->
+                <template v-else>
+                  <div class="d-flex align-center mb-4">
+                    <v-avatar size="64" class="mr-4">
+                      <v-img
+                        v-if="discordAvatarUrl"
+                        :src="discordAvatarUrl"
+                        :alt="discordStatus.profile?.discordUsername"
+                      />
+                      <DiscordIcon v-else :size="48" />
+                    </v-avatar>
+                    <div>
+                      <div class="text-h6">{{ discordStatus.profile?.discordUsername }}</div>
+                      <div class="text-caption text-medium-emphasis">
+                        Connected {{ formatRelativeTime(discordStatus.profile?.connectedAt) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Guild Membership Status -->
+                  <v-alert
+                    v-if="discordStatus.isMemberOfGuild !== null"
+                    :type="discordStatus.isMemberOfGuild ? 'success' : 'warning'"
+                    variant="tonal"
+                    class="mb-4"
+                    density="compact"
+                  >
+                    <template v-if="discordStatus.isMemberOfGuild">
+                      You are a member of the Kawakawa Discord server
+                    </template>
+                    <template v-else>
+                      You are not a member of the Kawakawa Discord server. Join the server to enable
+                      auto-approval features.
+                    </template>
+                  </v-alert>
+
+                  <v-divider class="my-4" />
+
+                  <v-btn
+                    color="error"
+                    variant="outlined"
+                    :loading="disconnectingDiscord"
+                    @click="confirmDisconnectDiscord"
+                  >
+                    <v-icon start>mdi-link-off</v-icon>
+                    Disconnect Discord
+                  </v-btn>
+                </template>
+              </v-card-text>
+            </v-card>
+          </v-col>
+
+          <v-col cols="12" md="6">
+            <v-card>
+              <v-card-title>
+                <v-icon start>mdi-information</v-icon>
+                About Discord Integration
+              </v-card-title>
+              <v-card-text>
+                <v-list density="compact">
+                  <v-list-item prepend-icon="mdi-account-check">
+                    <v-list-item-title>Auto-Approval</v-list-item-title>
+                    <v-list-item-subtitle>
+                      Members of the Kawakawa Discord server with certain roles may be automatically
+                      approved
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-shield-account">
+                    <v-list-item-title>Role Sync</v-list-item-title>
+                    <v-list-item-subtitle>
+                      Your Discord roles can determine your access level in the app
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-bell">
+                    <v-list-item-title>Notifications (Coming Soon)</v-list-item-title>
+                    <v-list-item-subtitle>
+                      Receive Discord notifications for orders and updates
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Clear Confirmation Dialog -->
@@ -427,16 +542,47 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Disconnect Discord Confirmation Dialog -->
+    <v-dialog v-model="disconnectDiscordDialog" max-width="400">
+      <v-card>
+        <v-card-title class="text-h6">
+          <v-icon start color="warning">mdi-link-off</v-icon>
+          Disconnect Discord?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to disconnect your Discord account? You will need to reconnect to
+          use Discord features like auto-approval.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="disconnectDiscordDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            :loading="disconnectingDiscord"
+            @click="disconnectDiscord"
+          >
+            Disconnect
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import DiscordIcon from '../components/DiscordIcon.vue'
 import { CURRENCIES } from '../types'
 import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
+import type { DiscordConnectionStatus } from '@kawakawa/types'
 import { api } from '../services/api'
 
+const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const currencies = CURRENCIES
 const locationDisplayModes: { title: string; value: LocationDisplayMode }[] = [
@@ -500,6 +646,20 @@ const loadingFio = ref(false)
 const syncing = ref(false)
 const clearing = ref(false)
 const clearDialog = ref(false)
+
+// Discord state
+const discordStatus = ref<DiscordConnectionStatus | null>(null)
+const loadingDiscord = ref(false)
+const connectingDiscord = ref(false)
+const disconnectingDiscord = ref(false)
+const disconnectDiscordDialog = ref(false)
+
+// Computed Discord avatar URL
+const discordAvatarUrl = computed(() => {
+  const profile = discordStatus.value?.profile
+  if (!profile?.discordAvatar) return null
+  return `https://cdn.discordapp.com/avatars/${profile.discordId}/${profile.discordAvatar}.png?size=128`
+})
 
 const passwordForm = ref({
   current: '',
@@ -741,4 +901,125 @@ const changePassword = async () => {
     changingPassword.value = false
   }
 }
+
+// Discord functions
+const formatRelativeTime = (dateStr: string | undefined): string => {
+  if (!dateStr) return 'Never'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffHours < 1) return 'just now'
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+  return date.toLocaleDateString()
+}
+
+const loadDiscordStatus = async () => {
+  try {
+    loadingDiscord.value = true
+    discordStatus.value = await api.discord.getStatus()
+  } catch (error) {
+    console.error('Failed to load Discord status', error)
+  } finally {
+    loadingDiscord.value = false
+  }
+}
+
+const connectDiscord = async () => {
+  try {
+    connectingDiscord.value = true
+    const { url, state } = await api.discord.getAuthUrl()
+    // Store state in sessionStorage for validation when callback returns
+    sessionStorage.setItem('discord_oauth_state', state)
+    // Redirect to Discord OAuth
+    window.location.href = url
+  } catch (error) {
+    console.error('Failed to initiate Discord connection', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to connect Discord'
+    showSnackbar(errorMessage, 'error')
+    connectingDiscord.value = false
+  }
+}
+
+const handleDiscordCallback = async () => {
+  const code = route.query.code as string | undefined
+  const state = route.query.state as string | undefined
+  const storedState = sessionStorage.getItem('discord_oauth_state')
+
+  if (!code || !state) return
+
+  // Clear the stored state
+  sessionStorage.removeItem('discord_oauth_state')
+
+  // Validate state
+  if (state !== storedState) {
+    showSnackbar('Discord authentication failed: Invalid state', 'error')
+    // Clear query params
+    router.replace({ query: {} })
+    return
+  }
+
+  try {
+    connectingDiscord.value = true
+    await api.discord.handleCallback({ code, state })
+    showSnackbar('Discord account connected successfully!')
+    // Refresh Discord status
+    await loadDiscordStatus()
+  } catch (error) {
+    console.error('Failed to complete Discord connection', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to connect Discord'
+    showSnackbar(errorMessage, 'error')
+  } finally {
+    connectingDiscord.value = false
+    // Clear query params
+    router.replace({ query: {} })
+  }
+}
+
+const confirmDisconnectDiscord = () => {
+  disconnectDiscordDialog.value = true
+}
+
+const disconnectDiscord = async () => {
+  try {
+    disconnectingDiscord.value = true
+    await api.discord.disconnect()
+    discordStatus.value = {
+      connected: false,
+      profile: null,
+      isMemberOfGuild: null,
+      guildRoles: null,
+    }
+    disconnectDiscordDialog.value = false
+    showSnackbar('Discord account disconnected')
+  } catch (error) {
+    console.error('Failed to disconnect Discord', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to disconnect Discord'
+    showSnackbar(errorMessage, 'error')
+  } finally {
+    disconnectingDiscord.value = false
+  }
+}
+
+// Watch for Discord tab to load status
+watch(activeTab, async newTab => {
+  if (newTab === 'discord' && !discordStatus.value) {
+    await loadDiscordStatus()
+  }
+})
+
+// Handle Discord OAuth callback on mount
+watch(
+  () => route.query,
+  async query => {
+    if (query.code && query.state) {
+      activeTab.value = 'discord'
+      await handleDiscordCallback()
+    }
+  },
+  { immediate: true }
+)
 </script>
