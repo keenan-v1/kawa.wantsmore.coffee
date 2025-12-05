@@ -269,6 +269,9 @@ export class DiscordController extends Controller {
     }
 
     // Refresh token if expired
+    if (!profile.accessToken) {
+      throw BadRequest('Discord access token not available. Please reconnect your Discord account.')
+    }
     let accessToken = profile.accessToken
     if (profile.tokenExpiresAt && profile.tokenExpiresAt < new Date()) {
       if (!profile.refreshToken) {
