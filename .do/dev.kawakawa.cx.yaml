@@ -3,10 +3,10 @@ alerts:
   - rule: DOMAIN_FAILED
 databases:
   - cluster_name: db-dev-kawakawa-cx
-    db_name: dev-db
-    db_user: dev-db
+    db_name: kawa-db
+    db_user: kawa-db
     engine: PG
-    name: dev-db
+    name: kawa-db
     production: true
     version: '17'
 domains:
@@ -35,7 +35,7 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${dev-db.DATABASE_URL}
+        value: ${kawa-db.DATABASE_URL}
     github:
       branch: dev
       deploy_on_push: true
@@ -53,7 +53,7 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${dev-db.DATABASE_URL}
+        value: ${kawa-db.DATABASE_URL}
     github:
       branch: dev
       deploy_on_push: false
@@ -71,7 +71,7 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${dev-db.DATABASE_URL}
+        value: ${kawa-db.DATABASE_URL}
     github:
       branch: dev
       deploy_on_push: false
@@ -82,7 +82,7 @@ jobs:
     name: fio-sync
     run_command: cd apps/api && pnpm fio:sync && pnpm fio:sync:users
     schedule:
-      cron: '0 */3 * * *'
+      cron: '42 * * * *'
     source_dir: /
 name: dev-kawakawa-cx
 region: nyc
@@ -94,7 +94,7 @@ services:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${dev-db.DATABASE_URL}
+        value: ${kawa-db.DATABASE_URL}
       - key: PORT
         scope: RUN_TIME
         value: '3000'
