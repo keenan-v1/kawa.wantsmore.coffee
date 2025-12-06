@@ -1,6 +1,6 @@
 // Settings Service - Generic key-value settings with history tracking and caching
 import { db, settings } from '../db/index.js'
-import { desc, eq, lte, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import type { SettingHistoryEntry } from '@kawakawa/types'
 
 // In-memory cache for current settings

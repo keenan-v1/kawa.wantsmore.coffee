@@ -5,11 +5,10 @@ import type {
   UserDiscordProfile,
 } from '@kawakawa/types'
 import { db, userDiscordProfiles, discordRoleMappings, userRoles } from '../db/index.js'
-import { eq, desc, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
-import { discordService, DISCORD_SETTINGS_KEYS } from '../services/discordService.js'
-import { settingsService } from '../services/settingsService.js'
+import { discordService } from '../services/discordService.js'
 import crypto from 'crypto'
 
 // In-memory store for OAuth state tokens (in production, use Redis or similar)

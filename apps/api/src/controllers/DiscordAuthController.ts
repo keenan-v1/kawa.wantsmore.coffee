@@ -16,11 +16,14 @@ import {
   discordRoleMappings,
 } from '../db/index.js'
 import { eq, desc } from 'drizzle-orm'
-import { BadRequest, Unauthorized } from '../utils/errors.js'
+import { BadRequest } from '../utils/errors.js'
 import { discordService } from '../services/discordService.js'
 import { generateToken } from '../utils/jwt.js'
 import { getPermissions } from '../utils/permissionService.js'
+import { createLogger } from '../utils/logger.js'
 import crypto from 'crypto'
+
+const log = createLogger({ controller: 'DiscordAuth' })
 
 // Store for pending Discord auth flows (state -> Discord profile data)
 // In production, use Redis or similar
@@ -181,7 +184,7 @@ export class DiscordAuthController extends Controller {
         state: registrationState,
       }
     } catch (error) {
-      console.error('Discord auth callback error:', error)
+      log.error({ err: error }, 'Discord auth callback error')
       return {
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to authenticate with Discord',
@@ -369,7 +372,7 @@ export class DiscordAuthController extends Controller {
 
       return highestPriorityRole
     } catch (error) {
-      console.error('Auto-approval check failed:', error)
+      log.error({ err: error }, 'Auto-approval check failed')
       return null
     }
   }

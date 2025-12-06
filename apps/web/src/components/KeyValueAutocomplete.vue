@@ -1,6 +1,7 @@
 <template>
   <v-autocomplete
     v-model="internalValue"
+    v-bind="$attrs"
     :items="sortedFilteredItems"
     item-title="display"
     item-value="key"
@@ -10,7 +11,6 @@
     :required="required"
     :no-filter="true"
     @update:search="onSearchUpdate"
-    v-bind="$attrs"
   />
 </template>
 

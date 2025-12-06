@@ -78,7 +78,7 @@ export async function expressAuthentication(
       }
 
       return Promise.resolve(payload)
-    } catch (error) {
+    } catch {
       return Promise.reject(new Error('Invalid or expired token'))
     }
   }

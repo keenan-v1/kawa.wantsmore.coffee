@@ -2,6 +2,9 @@
 import { db, fioLocations } from '../../db/index.js'
 import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
+import { createLogger } from '../../utils/logger.js'
+
+const log = createLogger({ service: 'fio-sync', entity: 'locations' })
 
 interface FioPlanetFull {
   PlanetId: string // UUID (not stored, we use NaturalId as key)
@@ -31,7 +34,7 @@ export async function syncLocations(): Promise<SyncResult> {
 
   try {
     // Fetch systems first to map system IDs to names/codes
-    console.log('🌟 Fetching systems from FIO API...')
+    log.info('Fetching systems from FIO API')
     const systems = await fioClient.fetchJson<FioSystemJson[]>('/systemstars')
 
     // Create system lookup map
@@ -40,13 +43,13 @@ export async function syncLocations(): Promise<SyncResult> {
       systemMap.set(system.SystemId, system)
     })
 
-    console.log(`📊 Found ${systems.length} systems`)
+    log.info({ count: systems.length }, 'Found systems')
 
     // Fetch full planet data
-    console.log('🪐 Fetching planets from FIO API...')
+    log.info('Fetching planets from FIO API')
     const planets = await fioClient.fetchJson<FioPlanetFull[]>('/planet/allplanets/full')
 
-    console.log(`📊 Found ${planets.length} planets`)
+    log.info({ count: planets.length }, 'Found planets')
 
     // Process planets in batches
     const batchSize = 100
@@ -88,23 +91,23 @@ export async function syncLocations(): Promise<SyncResult> {
         } catch (error) {
           const errorMsg = `Failed to sync ${planet.PlanetNaturalId}: ${error instanceof Error ? error.message : 'Unknown error'}`
           result.errors.push(errorMsg)
-          console.error(errorMsg)
+          log.error({ planetId: planet.PlanetNaturalId, err: error }, 'Failed to sync planet')
         }
       }
     }
 
     result.success = result.errors.length === 0
-    console.log(`✅ Synced ${result.inserted} locations`)
+    log.info({ inserted: result.inserted }, 'Synced locations')
 
     if (result.errors.length > 0) {
-      console.log(`⚠️  ${result.errors.length} errors occurred`)
+      log.warn({ errorCount: result.errors.length }, 'Errors occurred during sync')
     }
 
     return result
   } catch (error) {
     const errorMsg = `Failed to sync locations: ${error instanceof Error ? error.message : 'Unknown error'}`
     result.errors.push(errorMsg)
-    console.error(errorMsg)
+    log.error({ err: error }, 'Failed to sync locations')
     return result
   }
 }

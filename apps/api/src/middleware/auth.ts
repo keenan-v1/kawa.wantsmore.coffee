@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { verifyToken, type JwtPayload } from '../utils/jwt.js'
+import { logger } from '../utils/logger.js'
 
 // Extend Express Request to include user information
 export interface AuthenticatedRequest extends Request {
@@ -28,8 +29,9 @@ export const authenticate = (
 
     req.user = payload
     next()
-  } catch (error) {
+  } catch (_error) {
     res.status(401).json({ error: 'Invalid or expired token' })
+    logger.error({ error: _error }, 'Authentication error')
   }
 }
 
@@ -61,7 +63,7 @@ export const authorize = (...roles: string[]) => {
  */
 export const optionalAuth = (
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   try {
@@ -72,7 +74,7 @@ export const optionalAuth = (
       req.user = verifyToken(token)
     }
   } catch (error) {
-    // Silently fail - this is optional authentication
+    logger.error({ error }, 'Optional authentication error')
   }
 
   next()

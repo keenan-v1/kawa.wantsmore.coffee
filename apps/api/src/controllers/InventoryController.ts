@@ -48,7 +48,7 @@ export class InventoryController extends Controller {
   }
 
   @Get('{id}')
-  public async getInventoryItem(@Path() id: number): Promise<InventoryItem | null> {
+  public async getInventoryItem(@Path() _id: number): Promise<InventoryItem | null> {
     // TODO: Implement database query
     return null
   }
@@ -66,8 +66,8 @@ export class InventoryController extends Controller {
 
   @Put('{id}')
   public async updateInventoryItem(
-    @Path() id: number,
-    @Body() body: UpdateInventoryRequest
+    @Path() _id: number,
+    @Body() _body: UpdateInventoryRequest
   ): Promise<InventoryItem | null> {
     // TODO: Implement database update
     return null
@@ -75,7 +75,7 @@ export class InventoryController extends Controller {
 
   @Delete('{id}')
   @SuccessResponse('204', 'Deleted')
-  public async deleteInventoryItem(@Path() id: number): Promise<void> {
+  public async deleteInventoryItem(@Path() _id: number): Promise<void> {
     this.setStatus(204)
     // TODO: Implement database delete
   }

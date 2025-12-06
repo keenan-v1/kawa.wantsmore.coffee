@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DiscordAuthController } from './DiscordAuthController.js'
-import { db } from '../db/index.js'
 import { discordService } from '../services/discordService.js'
 import * as permissionService from '../utils/permissionService.js'
 import * as jwtUtils from '../utils/jwt.js'
@@ -87,8 +86,8 @@ describe('DiscordAuthController', () => {
     vi.mocked(jwtUtils.generateToken).mockReturnValue('mock-jwt-token')
   })
 
-  // Helper to create mock select chain
-  const createMockSelectChain = (results: any[]) => {
+  // Helper to create mock select chain (for future use)
+  const _createMockSelectChain = (results: any[]) => {
     let callIndex = 0
     const mockChain: any = {
       from: vi.fn().mockReturnThis(),

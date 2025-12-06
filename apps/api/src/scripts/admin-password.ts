@@ -7,6 +7,9 @@ import { db, users } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { createLogger } from '../utils/logger.js'
+
+const log = createLogger({ script: 'admin-password' })
 
 function generatePassword(length: number = 16): string {
   const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
@@ -21,13 +24,13 @@ function generatePassword(length: number = 16): string {
 }
 
 async function resetPassword(username: string, newPassword?: string) {
-  console.log(`🔑 Resetting password for user '${username}'...\n`)
+  log.info({ username }, 'Resetting user password')
 
   // Find the user
   const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1)
 
   if (!user) {
-    console.error(`❌ Error: User '${username}' not found`)
+    log.error({ username }, 'User not found')
     process.exit(1)
   }
 
@@ -44,19 +47,20 @@ async function resetPassword(username: string, newPassword?: string) {
     })
     .where(eq(users.id, user.id))
 
-  console.log(`✅ Password updated for user '${username}'\n`)
+  log.info({ userId: user.id, username }, 'Password updated')
 
-  // Output the credentials
-  console.log('═'.repeat(60))
-  console.log('🔐 NEW CREDENTIALS')
-  console.log('═'.repeat(60))
-  console.log(`Username: ${username}`)
-  console.log(`Password: ${password}`)
-  console.log('═'.repeat(60))
+  // Output the credentials to stdout (intentionally not logged for security)
+  process.stdout.write('\n')
+  process.stdout.write('='.repeat(60) + '\n')
+  process.stdout.write('NEW CREDENTIALS\n')
+  process.stdout.write('='.repeat(60) + '\n')
+  process.stdout.write(`Username: ${username}\n`)
+  process.stdout.write(`Password: ${password}\n`)
+  process.stdout.write('='.repeat(60) + '\n')
 
   if (!newPassword) {
-    console.log('\n⚠️  IMPORTANT: Save this password securely!')
-    console.log('   This password will NOT be shown again.\n')
+    process.stdout.write('\nIMPORTANT: Save this password securely!\n')
+    process.stdout.write('This password will NOT be shown again.\n\n')
   }
 
   process.exit(0)
@@ -66,15 +70,15 @@ async function resetPassword(username: string, newPassword?: string) {
 const args = process.argv.slice(2)
 
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
-  console.log('Usage: pnpm admin:password <username> [newPassword]')
-  console.log('')
-  console.log(
-    "Reset a user's password. If no password is provided, a secure one will be generated."
+  process.stdout.write('Usage: pnpm admin:password <username> [newPassword]\n')
+  process.stdout.write('\n')
+  process.stdout.write(
+    "Reset a user's password. If no password is provided, a secure one will be generated.\n"
   )
-  console.log('')
-  console.log('Examples:')
-  console.log('  pnpm admin:password johndoe              # Generate a new password')
-  console.log('  pnpm admin:password johndoe "MyNewPass"  # Set a specific password')
+  process.stdout.write('\n')
+  process.stdout.write('Examples:\n')
+  process.stdout.write('  pnpm admin:password johndoe              # Generate a new password\n')
+  process.stdout.write('  pnpm admin:password johndoe "MyNewPass"  # Set a specific password\n')
   process.exit(0)
 }
 
@@ -82,6 +86,6 @@ const username = args[0]
 const newPassword = args[1]
 
 resetPassword(username, newPassword).catch(error => {
-  console.error('❌ Failed to reset password:', error)
+  log.error({ err: error }, 'Failed to reset password')
   process.exit(1)
 })
