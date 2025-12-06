@@ -2,6 +2,9 @@
 // Commodities and locations will come from FIO API integration
 import { db, roles, permissions, rolePermissions } from './index.js'
 import postgres from 'postgres'
+import { createLogger } from '../utils/logger.js'
+
+const log = createLogger({ script: 'seed' })
 
 // Initial roles for the application with colors
 const ROLES_DATA = [
@@ -79,21 +82,21 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
 }
 
 async function seed() {
-  console.log('🌱 Seeding database...')
+  log.info('Seeding database')
 
   try {
     // Seed roles
-    console.log('📝 Seeding roles...')
+    log.info('Seeding roles')
     await db.insert(roles).values(ROLES_DATA).onConflictDoNothing()
-    console.log(`✅ Seeded ${ROLES_DATA.length} roles`)
+    log.info({ count: ROLES_DATA.length }, 'Seeded roles')
 
     // Seed permissions
-    console.log('📝 Seeding permissions...')
+    log.info('Seeding permissions')
     await db.insert(permissions).values(PERMISSIONS_DATA).onConflictDoNothing()
-    console.log(`✅ Seeded ${PERMISSIONS_DATA.length} permissions`)
+    log.info({ count: PERMISSIONS_DATA.length }, 'Seeded permissions')
 
     // Seed role permissions
-    console.log('📝 Seeding role permissions...')
+    log.info('Seeding role permissions')
     const rolePermissionsData: {
       roleId: string
       permissionId: string
@@ -107,11 +110,11 @@ async function seed() {
     if (rolePermissionsData.length > 0) {
       await db.insert(rolePermissions).values(rolePermissionsData).onConflictDoNothing()
     }
-    console.log(`✅ Seeded ${rolePermissionsData.length} role permissions`)
+    log.info({ count: rolePermissionsData.length }, 'Seeded role permissions')
 
-    console.log('✨ Database seeding complete!')
+    log.info('Database seeding complete')
   } catch (error) {
-    console.error('❌ Error seeding database:', error)
+    log.error({ err: error }, 'Error seeding database')
     throw error
   } finally {
     // Close the connection

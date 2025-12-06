@@ -3,7 +3,6 @@ import { expressAuthentication } from './authentication.js'
 import * as jwtUtils from '../utils/jwt.js'
 import * as roleCache from '../utils/roleCache.js'
 import * as requestContext from '../utils/requestContext.js'
-import { db } from '../db/index.js'
 import type { Request } from 'express'
 
 vi.mock('../utils/jwt.js', () => ({

@@ -5,6 +5,9 @@ import { syncCommodities } from '../services/fio/sync-commodities.js'
 import { syncLocations } from '../services/fio/sync-locations.js'
 import { syncStations } from '../services/fio/sync-stations.js'
 import { client } from '../db/index.js'
+import { createLogger } from '../utils/logger.js'
+
+const log = createLogger({ script: 'sync-fio' })
 
 const SYNC_TYPES = ['commodities', 'locations', 'stations', 'all'] as const
 type SyncType = (typeof SYNC_TYPES)[number]
@@ -14,63 +17,58 @@ async function main() {
   const syncType: SyncType = (args[0] as SyncType) || 'all'
 
   if (!SYNC_TYPES.includes(syncType)) {
-    console.error(`Invalid sync type: ${syncType}`)
-    console.error(`Valid types: ${SYNC_TYPES.join(', ')}`)
+    log.error({ syncType, validTypes: SYNC_TYPES }, 'Invalid sync type')
     process.exit(1)
   }
 
-  console.log('🚀 Starting FIO data sync...')
-  console.log(`📋 Sync type: ${syncType}\n`)
+  log.info({ syncType }, 'Starting FIO data sync')
 
   try {
     if (syncType === 'commodities' || syncType === 'all') {
-      console.log('=== Syncing Commodities ===')
+      log.info('Syncing commodities')
       const commoditiesResult = await syncCommodities()
 
       if (commoditiesResult.success) {
-        console.log(`✅ Commodities sync completed successfully`)
-        console.log(`   Inserted/Updated: ${commoditiesResult.inserted}`)
+        log.info({ inserted: commoditiesResult.inserted }, 'Commodities sync completed')
       } else {
-        console.error(`❌ Commodities sync failed`)
-        console.error(`   Errors: ${commoditiesResult.errors.length}`)
-        commoditiesResult.errors.forEach(err => console.error(`   - ${err}`))
+        log.error(
+          { errorCount: commoditiesResult.errors.length, errors: commoditiesResult.errors },
+          'Commodities sync failed'
+        )
       }
-      console.log('')
     }
 
     if (syncType === 'locations' || syncType === 'all') {
-      console.log('=== Syncing Locations (Planets) ===')
+      log.info('Syncing locations (planets)')
       const locationsResult = await syncLocations()
 
       if (locationsResult.success) {
-        console.log(`✅ Locations sync completed successfully`)
-        console.log(`   Inserted/Updated: ${locationsResult.inserted}`)
+        log.info({ inserted: locationsResult.inserted }, 'Locations sync completed')
       } else {
-        console.error(`❌ Locations sync failed`)
-        console.error(`   Errors: ${locationsResult.errors.length}`)
-        locationsResult.errors.forEach(err => console.error(`   - ${err}`))
+        log.error(
+          { errorCount: locationsResult.errors.length, errors: locationsResult.errors },
+          'Locations sync failed'
+        )
       }
-      console.log('')
     }
 
     if (syncType === 'stations' || syncType === 'all') {
-      console.log('=== Syncing Stations (Commodity Exchanges) ===')
+      log.info('Syncing stations (commodity exchanges)')
       const stationsResult = await syncStations()
 
       if (stationsResult.success) {
-        console.log(`✅ Stations sync completed successfully`)
-        console.log(`   Inserted/Updated: ${stationsResult.inserted}`)
+        log.info({ inserted: stationsResult.inserted }, 'Stations sync completed')
       } else {
-        console.error(`❌ Stations sync failed`)
-        console.error(`   Errors: ${stationsResult.errors.length}`)
-        stationsResult.errors.forEach(err => console.error(`   - ${err}`))
+        log.error(
+          { errorCount: stationsResult.errors.length, errors: stationsResult.errors },
+          'Stations sync failed'
+        )
       }
-      console.log('')
     }
 
-    console.log('✨ FIO sync complete!')
+    log.info('FIO sync complete')
   } catch (error) {
-    console.error('💥 Fatal error during sync:', error)
+    log.error({ err: error }, 'Fatal error during sync')
     process.exit(1)
   } finally {
     // Close postgres connection

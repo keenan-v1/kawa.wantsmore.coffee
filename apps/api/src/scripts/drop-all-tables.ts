@@ -3,10 +3,12 @@
 // DESTRUCTIVE: This will delete ALL data
 
 import { client } from '../db/index.js'
+import { createLogger } from '../utils/logger.js'
+
+const log = createLogger({ script: 'drop-all-tables' })
 
 async function dropAllTables() {
-  console.log('⚠️  WARNING: This will DROP ALL TABLES and DELETE ALL DATA!\n')
-  console.log('Dropping all tables...\n')
+  log.warn('Dropping all tables - this will delete ALL data')
 
   try {
     await client.unsafe(`
@@ -16,10 +18,10 @@ async function dropAllTables() {
       GRANT ALL ON SCHEMA public TO public;
     `)
 
-    console.log('✅ All tables dropped successfully!\n')
-    console.log('You can now run: pnpm db:push')
+    log.info('All tables dropped successfully')
+    process.stdout.write('You can now run: pnpm db:push\n')
   } catch (error) {
-    console.error('❌ Failed to drop tables:', error)
+    log.error({ err: error }, 'Failed to drop tables')
     process.exit(1)
   } finally {
     await client.end()

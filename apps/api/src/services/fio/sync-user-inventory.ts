@@ -5,6 +5,9 @@ import { db, fioInventory, fioUserStorage, fioLocations, fioCommodities } from '
 import { FioClient } from './client.js'
 import type { FioGroupHubResponse, FioGroupHubStorage } from './types.js'
 import type { SyncResult } from './sync-types.js'
+import { createLogger } from '../../utils/logger.js'
+
+const log = createLogger({ service: 'fio-sync', entity: 'user-inventory' })
 
 export interface UserInventorySyncResult extends SyncResult {
   storageLocations: number
@@ -56,7 +59,7 @@ export async function syncUserInventory(
     const client = new FioClient()
 
     // Fetch inventory from GroupHub endpoint
-    console.log(`📦 Fetching GroupHub data for ${fioUsername} from FIO API...`)
+    log.info({ userId }, 'Fetching GroupHub data from FIO API')
     const groupHubData = await client.getGroupHub<FioGroupHubResponse>(fioApiKey, [fioUsername])
 
     // Build lookup maps for validation
@@ -112,7 +115,7 @@ export async function syncUserInventory(
       ) {
         if (!skippedExcluded.has(locationId)) {
           skippedExcluded.add(locationId)
-          console.log(`⏭️  Skipping excluded location: ${locationId} (${locationName})`)
+          log.debug({ locationId, locationName }, 'Skipping excluded location')
         }
         const validItems = storage.Items.filter(i => i.MaterialTicker && i.Units > 0)
         result.skippedExcludedLocations += validItems.length
@@ -123,7 +126,7 @@ export async function syncUserInventory(
       if (!locationIds.has(locationId)) {
         if (!unknownLocations.has(locationId)) {
           unknownLocations.add(locationId)
-          console.log(`⚠️  Unknown location: ${locationId} (${locationName})`)
+          log.warn({ locationId, locationName }, 'Unknown location')
         }
         // Count skipped items
         const validItems = storage.Items.filter(i => i.MaterialTicker && i.Units > 0)
@@ -156,7 +159,7 @@ export async function syncUserInventory(
       } catch (error) {
         const errorMsg = `Failed to insert storage at ${locationId}: ${error instanceof Error ? error.message : 'Unknown error'}`
         result.errors.push(errorMsg)
-        console.error(errorMsg)
+        log.error({ locationId, err: error }, 'Failed to insert storage')
         return
       }
 
@@ -171,7 +174,7 @@ export async function syncUserInventory(
         if (!commodityTickers.has(item.MaterialTicker)) {
           if (!unknownCommodities.has(item.MaterialTicker)) {
             unknownCommodities.add(item.MaterialTicker)
-            console.log(`⚠️  Unknown commodity: ${item.MaterialTicker}`)
+            log.warn({ ticker: item.MaterialTicker }, 'Unknown commodity')
           }
           result.skippedUnknownCommodities++
           continue
@@ -187,7 +190,10 @@ export async function syncUserInventory(
         } catch (error) {
           const errorMsg = `Failed to insert ${item.MaterialTicker} at ${locationId}: ${error instanceof Error ? error.message : 'Unknown error'}`
           result.errors.push(errorMsg)
-          console.error(errorMsg)
+          log.error(
+            { ticker: item.MaterialTicker, locationId, err: error },
+            'Failed to insert inventory item'
+          )
         }
       }
     }
@@ -198,7 +204,7 @@ export async function syncUserInventory(
     )
 
     if (playerModel?.Locations) {
-      console.log(`🪐 Processing ${playerModel.Locations.length} planet locations...`)
+      log.info({ count: playerModel.Locations.length }, 'Processing planet locations')
 
       for (const location of playerModel.Locations) {
         // Process base storage (STORE)
@@ -219,7 +225,7 @@ export async function syncUserInventory(
 
     // Process CX station warehouses
     if (groupHubData.CXWarehouses) {
-      console.log(`🏛️  Processing ${groupHubData.CXWarehouses.length} CX warehouse locations...`)
+      log.info({ count: groupHubData.CXWarehouses.length }, 'Processing CX warehouse locations')
 
       for (const cxWarehouse of groupHubData.CXWarehouses) {
         // Find this user's warehouse at this station
@@ -252,34 +258,41 @@ export async function syncUserInventory(
     }
 
     result.success = result.errors.length === 0
-    console.log(
-      `✅ Synced ${result.storageLocations} storage locations with ${result.inserted} inventory entries for ${fioUsername}`
+    log.info(
+      { userId, storageLocations: result.storageLocations, inventoryEntries: result.inserted },
+      'Synced user inventory'
     )
 
     if (result.skippedExcludedLocations > 0) {
-      console.log(
-        `⏭️  Skipped ${result.skippedExcludedLocations} items at ${skippedExcluded.size} excluded locations`
+      log.info(
+        { skippedItems: result.skippedExcludedLocations, excludedLocations: skippedExcluded.size },
+        'Skipped excluded locations'
       )
     }
     if (result.skippedUnknownLocations > 0) {
-      console.log(
-        `⚠️  Skipped ${result.skippedUnknownLocations} items at ${unknownLocations.size} unknown locations`
+      log.warn(
+        { skippedItems: result.skippedUnknownLocations, unknownLocations: unknownLocations.size },
+        'Skipped unknown locations'
       )
     }
     if (result.skippedUnknownCommodities > 0) {
-      console.log(
-        `⚠️  Skipped ${result.skippedUnknownCommodities} items with ${unknownCommodities.size} unknown commodities`
+      log.warn(
+        {
+          skippedItems: result.skippedUnknownCommodities,
+          unknownCommodities: unknownCommodities.size,
+        },
+        'Skipped unknown commodities'
       )
     }
     if (result.errors.length > 0) {
-      console.log(`⚠️  ${result.errors.length} errors occurred`)
+      log.warn({ errorCount: result.errors.length }, 'Errors occurred during sync')
     }
 
     return result
   } catch (error) {
     const errorMsg = `Failed to sync inventory for user ${userId}: ${error instanceof Error ? error.message : 'Unknown error'}`
     result.errors.push(errorMsg)
-    console.error(errorMsg)
+    log.error({ userId, err: error }, 'Failed to sync user inventory')
     return result
   }
 }

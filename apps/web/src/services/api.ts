@@ -1,5 +1,6 @@
 // API service that switches between mock and real backend
 import { mockApi, USE_MOCK_API } from './mockApi'
+import { fetchWithLogging } from './logService'
 import type {
   User,
   Currency,
@@ -309,7 +310,7 @@ const handleRefreshedToken = (response: Response): void => {
 // Real API calls (to be used when backend is ready)
 const realApi = {
   login: async (request: LoginRequest): Promise<Response> => {
-    return fetch('/api/auth/login', {
+    return fetchWithLogging('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -322,7 +323,7 @@ const realApi = {
   },
 
   register: async (request: RegisterRequest): Promise<Response> => {
-    return fetch('/api/auth/register', {
+    return fetchWithLogging('/api/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -336,7 +337,7 @@ const realApi = {
   },
 
   getProfile: async (): Promise<User> => {
-    const response = await fetch('/api/account', {
+    const response = await fetchWithLogging('/api/account', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -358,7 +359,7 @@ const realApi = {
   },
 
   updateProfile: async (updates: UpdateProfileRequest): Promise<User> => {
-    const response = await fetch('/api/account', {
+    const response = await fetchWithLogging('/api/account', {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(updates),
@@ -380,7 +381,7 @@ const realApi = {
   },
 
   changePassword: async (request: ChangePasswordRequest): Promise<void> => {
-    const response = await fetch('/api/account/password', {
+    const response = await fetchWithLogging('/api/account/password', {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -403,7 +404,7 @@ const realApi = {
   },
 
   deleteAccount: async (): Promise<void> => {
-    const response = await fetch('/api/account', {
+    const response = await fetchWithLogging('/api/account', {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -434,7 +435,7 @@ const realApi = {
     })
     if (search) params.append('search', search)
 
-    const response = await fetch(`/api/admin/users?${params}`, {
+    const response = await fetchWithLogging(`/api/admin/users?${params}`, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -458,7 +459,7 @@ const realApi = {
   },
 
   updateUser: async (userId: number, updates: UpdateUserRequest): Promise<AdminUser> => {
-    const response = await fetch(`/api/admin/users/${userId}`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(updates),
@@ -487,7 +488,7 @@ const realApi = {
   },
 
   listRoles: async (): Promise<Role[]> => {
-    const response = await fetch('/api/admin/roles', {
+    const response = await fetchWithLogging('/api/admin/roles', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -511,7 +512,7 @@ const realApi = {
   },
 
   generatePasswordResetLink: async (userId: number): Promise<PasswordResetLinkResponse> => {
-    const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}/reset-password`, {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -538,7 +539,7 @@ const realApi = {
   },
 
   syncUserFio: async (userId: number): Promise<FioSyncResponse> => {
-    const response = await fetch(`/api/admin/users/${userId}/sync-fio`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}/sync-fio`, {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -568,7 +569,7 @@ const realApi = {
   },
 
   deleteUser: async (userId: number): Promise<{ success: boolean; username: string }> => {
-    const response = await fetch(`/api/admin/users/${userId}`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -601,7 +602,7 @@ const realApi = {
   disconnectUserDiscord: async (
     userId: number
   ): Promise<{ success: boolean; username: string }> => {
-    const response = await fetch(`/api/admin/users/${userId}/discord`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}/discord`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -632,7 +633,7 @@ const realApi = {
 
   // Pending approvals
   getPendingApprovalsCount: async (): Promise<{ count: number }> => {
-    const response = await fetch('/api/admin/pending-approvals/count', {
+    const response = await fetchWithLogging('/api/admin/pending-approvals/count', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -656,7 +657,7 @@ const realApi = {
   },
 
   listPendingApprovals: async (): Promise<AdminUser[]> => {
-    const response = await fetch('/api/admin/pending-approvals', {
+    const response = await fetchWithLogging('/api/admin/pending-approvals', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -680,7 +681,7 @@ const realApi = {
   },
 
   approveUser: async (userId: number, roleId?: string): Promise<AdminUser> => {
-    const response = await fetch(`/api/admin/users/${userId}/approve`, {
+    const response = await fetchWithLogging(`/api/admin/users/${userId}/approve`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ roleId }),
@@ -712,7 +713,7 @@ const realApi = {
   },
 
   resetPassword: async (request: ResetPasswordRequest): Promise<void> => {
-    const response = await fetch('/api/auth/reset-password', {
+    const response = await fetchWithLogging('/api/auth/reset-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -730,7 +731,7 @@ const realApi = {
   },
 
   validateResetToken: async (token: string): Promise<ValidateTokenResponse> => {
-    const response = await fetch(
+    const response = await fetchWithLogging(
       `/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
       {
         method: 'GET',
@@ -745,7 +746,7 @@ const realApi = {
   },
 
   checkUsernameAvailability: async (username: string): Promise<UsernameAvailabilityResponse> => {
-    const response = await fetch(
+    const response = await fetchWithLogging(
       `/api/auth/check-username?username=${encodeURIComponent(username)}`,
       {
         method: 'GET',
@@ -761,7 +762,7 @@ const realApi = {
 
   // Role management
   createRole: async (request: CreateRoleRequest): Promise<Role> => {
-    const response = await fetch('/api/admin/roles', {
+    const response = await fetchWithLogging('/api/admin/roles', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -780,7 +781,7 @@ const realApi = {
   },
 
   updateRole: async (roleId: string, updates: { name?: string; color?: string }): Promise<Role> => {
-    const response = await fetch(`/api/admin/roles/${roleId}`, {
+    const response = await fetchWithLogging(`/api/admin/roles/${roleId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(updates),
@@ -799,7 +800,7 @@ const realApi = {
   },
 
   deleteRole: async (roleId: string): Promise<void> => {
-    const response = await fetch(`/api/admin/roles/${roleId}`, {
+    const response = await fetchWithLogging(`/api/admin/roles/${roleId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -820,7 +821,7 @@ const realApi = {
 
   // Permission management
   listPermissions: async (): Promise<Permission[]> => {
-    const response = await fetch('/api/admin/permissions', {
+    const response = await fetchWithLogging('/api/admin/permissions', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -835,7 +836,7 @@ const realApi = {
   },
 
   listRolePermissions: async (): Promise<RolePermissionWithDetails[]> => {
-    const response = await fetch('/api/admin/role-permissions', {
+    const response = await fetchWithLogging('/api/admin/role-permissions', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -850,7 +851,7 @@ const realApi = {
   },
 
   setRolePermission: async (request: SetRolePermissionRequest): Promise<RolePermission> => {
-    const response = await fetch('/api/admin/role-permissions', {
+    const response = await fetchWithLogging('/api/admin/role-permissions', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -870,7 +871,7 @@ const realApi = {
   },
 
   deleteRolePermission: async (id: number): Promise<void> => {
-    const response = await fetch(`/api/admin/role-permissions/${id}`, {
+    const response = await fetchWithLogging(`/api/admin/role-permissions/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -887,7 +888,7 @@ const realApi = {
 
   // FIO Inventory methods
   getFioInventory: async (): Promise<FioInventoryItem[]> => {
-    const response = await fetch('/api/fio/inventory', {
+    const response = await fetchWithLogging('/api/fio/inventory', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -908,7 +909,7 @@ const realApi = {
   },
 
   syncFioInventory: async (): Promise<FioInventorySyncResult> => {
-    const response = await fetch('/api/fio/inventory/sync', {
+    const response = await fetchWithLogging('/api/fio/inventory/sync', {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -933,7 +934,7 @@ const realApi = {
   },
 
   getFioLastSync: async (): Promise<FioLastSyncResponse> => {
-    const response = await fetch('/api/fio/inventory/last-sync', {
+    const response = await fetchWithLogging('/api/fio/inventory/last-sync', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -948,7 +949,7 @@ const realApi = {
   },
 
   getFioStats: async (): Promise<FioStatsResponse> => {
-    const response = await fetch('/api/fio/inventory/stats', {
+    const response = await fetchWithLogging('/api/fio/inventory/stats', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -969,7 +970,7 @@ const realApi = {
   },
 
   clearFioInventory: async (): Promise<FioClearResponse> => {
-    const response = await fetch('/api/fio/inventory', {
+    const response = await fetchWithLogging('/api/fio/inventory', {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -991,7 +992,7 @@ const realApi = {
 
   // Sell Orders methods
   getSellOrders: async (): Promise<SellOrderResponse[]> => {
-    const response = await fetch('/api/sell-orders', {
+    const response = await fetchWithLogging('/api/sell-orders', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1012,7 +1013,7 @@ const realApi = {
   },
 
   getSellOrder: async (id: number): Promise<SellOrderResponse> => {
-    const response = await fetch(`/api/sell-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/sell-orders/${id}`, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1030,7 +1031,7 @@ const realApi = {
   },
 
   createSellOrder: async (request: CreateSellOrderRequest): Promise<SellOrderResponse> => {
-    const response = await fetch('/api/sell-orders', {
+    const response = await fetchWithLogging('/api/sell-orders', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1057,7 +1058,7 @@ const realApi = {
     id: number,
     request: UpdateSellOrderRequest
   ): Promise<SellOrderResponse> => {
-    const response = await fetch(`/api/sell-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/sell-orders/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1084,7 +1085,7 @@ const realApi = {
   },
 
   deleteSellOrder: async (id: number): Promise<void> => {
-    const response = await fetch(`/api/sell-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/sell-orders/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -1101,7 +1102,7 @@ const realApi = {
 
   // Public roles endpoint (for sell order targeting)
   getRoles: async (): Promise<Role[]> => {
-    const response = await fetch('/api/roles', {
+    const response = await fetchWithLogging('/api/roles', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -1120,7 +1121,7 @@ const realApi = {
     if (location) params.append('location', location)
 
     const url = `/api/market/listings${params.toString() ? '?' + params.toString() : ''}`
-    const response = await fetch(url, {
+    const response = await fetchWithLogging(url, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1149,7 +1150,7 @@ const realApi = {
     if (location) params.append('location', location)
 
     const url = `/api/market/buy-requests${params.toString() ? '?' + params.toString() : ''}`
-    const response = await fetch(url, {
+    const response = await fetchWithLogging(url, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1171,7 +1172,7 @@ const realApi = {
 
   // Buy Orders methods
   getBuyOrders: async (): Promise<BuyOrderResponse[]> => {
-    const response = await fetch('/api/buy-orders', {
+    const response = await fetchWithLogging('/api/buy-orders', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1192,7 +1193,7 @@ const realApi = {
   },
 
   getBuyOrder: async (id: number): Promise<BuyOrderResponse> => {
-    const response = await fetch(`/api/buy-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/buy-orders/${id}`, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1210,7 +1211,7 @@ const realApi = {
   },
 
   createBuyOrder: async (request: CreateBuyOrderRequest): Promise<BuyOrderResponse> => {
-    const response = await fetch('/api/buy-orders', {
+    const response = await fetchWithLogging('/api/buy-orders', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1234,7 +1235,7 @@ const realApi = {
   },
 
   updateBuyOrder: async (id: number, request: UpdateBuyOrderRequest): Promise<BuyOrderResponse> => {
-    const response = await fetch(`/api/buy-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/buy-orders/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1261,7 +1262,7 @@ const realApi = {
   },
 
   deleteBuyOrder: async (id: number): Promise<void> => {
-    const response = await fetch(`/api/buy-orders/${id}`, {
+    const response = await fetchWithLogging(`/api/buy-orders/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -1278,7 +1279,7 @@ const realApi = {
 
   // Admin Discord methods
   getDiscordSettings: async (): Promise<DiscordSettings> => {
-    const response = await fetch('/api/admin/discord/settings', {
+    const response = await fetchWithLogging('/api/admin/discord/settings', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1304,7 +1305,7 @@ const realApi = {
   updateDiscordSettings: async (
     settings: UpdateDiscordSettingsRequest
   ): Promise<DiscordSettings> => {
-    const response = await fetch('/api/admin/discord/settings', {
+    const response = await fetchWithLogging('/api/admin/discord/settings', {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(settings),
@@ -1329,7 +1330,7 @@ const realApi = {
   },
 
   testDiscordConnection: async (): Promise<DiscordTestConnectionResponse> => {
-    const response = await fetch('/api/admin/discord/settings/test-connection', {
+    const response = await fetchWithLogging('/api/admin/discord/settings/test-connection', {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -1354,7 +1355,7 @@ const realApi = {
   },
 
   getDiscordGuildRoles: async (): Promise<DiscordRole[]> => {
-    const response = await fetch('/api/admin/discord/guild/roles', {
+    const response = await fetchWithLogging('/api/admin/discord/guild/roles', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1381,7 +1382,7 @@ const realApi = {
   },
 
   getDiscordRoleMappings: async (): Promise<DiscordRoleMapping[]> => {
-    const response = await fetch('/api/admin/discord/role-mappings', {
+    const response = await fetchWithLogging('/api/admin/discord/role-mappings', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1407,7 +1408,7 @@ const realApi = {
   createDiscordRoleMapping: async (
     mapping: DiscordRoleMappingRequest
   ): Promise<DiscordRoleMapping> => {
-    const response = await fetch('/api/admin/discord/role-mappings', {
+    const response = await fetchWithLogging('/api/admin/discord/role-mappings', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(mapping),
@@ -1438,7 +1439,7 @@ const realApi = {
     id: number,
     mapping: DiscordRoleMappingRequest
   ): Promise<DiscordRoleMapping> => {
-    const response = await fetch(`/api/admin/discord/role-mappings/${id}`, {
+    const response = await fetchWithLogging(`/api/admin/discord/role-mappings/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(mapping),
@@ -1466,7 +1467,7 @@ const realApi = {
   },
 
   deleteDiscordRoleMapping: async (id: number): Promise<void> => {
-    const response = await fetch(`/api/admin/discord/role-mappings/${id}`, {
+    const response = await fetchWithLogging(`/api/admin/discord/role-mappings/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -1491,10 +1492,13 @@ const realApi = {
   },
 
   getSettingsHistory: async (key: string): Promise<SettingHistoryEntry[]> => {
-    const response = await fetch(`/api/admin/discord/settings/history/${encodeURIComponent(key)}`, {
-      method: 'GET',
-      headers: getAuthHeaders(),
-    })
+    const response = await fetchWithLogging(
+      `/api/admin/discord/settings/history/${encodeURIComponent(key)}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
 
     handleRefreshedToken(response)
 
@@ -1516,7 +1520,7 @@ const realApi = {
 
   // User Discord methods
   getDiscordAuthUrl: async (): Promise<{ url: string; state: string }> => {
-    const response = await fetch('/api/discord/auth-url', {
+    const response = await fetchWithLogging('/api/discord/auth-url', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1539,7 +1543,7 @@ const realApi = {
   handleDiscordCallback: async (
     request: DiscordCallbackRequest
   ): Promise<{ success: boolean; profile: UserDiscordProfile }> => {
-    const response = await fetch('/api/discord/callback', {
+    const response = await fetchWithLogging('/api/discord/callback', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1565,7 +1569,7 @@ const realApi = {
   },
 
   disconnectDiscord: async (): Promise<void> => {
-    const response = await fetch('/api/discord/connection', {
+    const response = await fetchWithLogging('/api/discord/connection', {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -1587,7 +1591,7 @@ const realApi = {
   },
 
   syncDiscordRoles: async (): Promise<{ synced: boolean; rolesAdded: string[] }> => {
-    const response = await fetch('/api/discord/sync-roles', {
+    const response = await fetchWithLogging('/api/discord/sync-roles', {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -1612,7 +1616,7 @@ const realApi = {
   },
 
   getDiscordStatus: async (): Promise<DiscordConnectionStatus> => {
-    const response = await fetch('/api/discord/status', {
+    const response = await fetchWithLogging('/api/discord/status', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -1635,7 +1639,7 @@ const realApi = {
   // Discord auth (unauthenticated - for login/register)
   getDiscordLoginAuthUrl: async (prompt?: 'none' | 'consent'): Promise<DiscordAuthUrlResponse> => {
     const params = prompt ? `?prompt=${prompt}` : ''
-    const response = await fetch(`/api/auth/discord/auth-url${params}`, {
+    const response = await fetchWithLogging(`/api/auth/discord/auth-url${params}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -1661,7 +1665,7 @@ const realApi = {
     if (error) params.set('error', error)
     if (errorDescription) params.set('error_description', errorDescription)
 
-    const response = await fetch(`/api/auth/discord/callback?${params}`, {
+    const response = await fetchWithLogging(`/api/auth/discord/callback?${params}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -1678,7 +1682,7 @@ const realApi = {
   completeDiscordRegistration: async (
     request: DiscordRegisterRequest
   ): Promise<DiscordRegisterResponse> => {
-    const response = await fetch('/api/auth/discord/register', {
+    const response = await fetchWithLogging('/api/auth/discord/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

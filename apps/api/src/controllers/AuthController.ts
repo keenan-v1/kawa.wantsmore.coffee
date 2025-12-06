@@ -4,7 +4,7 @@ import type { Role } from '@kawakawa/types'
 import { db, users, userSettings, userRoles, roles, passwordResetTokens } from '../db/index.js'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import { generateToken } from '../utils/jwt.js'
-import { Unauthorized, Forbidden, BadRequest, NotFound } from '../utils/errors.js'
+import { Unauthorized, Forbidden, BadRequest } from '../utils/errors.js'
 import { getPermissions } from '../utils/permissionService.js'
 import crypto from 'crypto'
 

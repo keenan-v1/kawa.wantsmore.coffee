@@ -105,9 +105,9 @@ describe('AdminController', () => {
           createdAt: new Date(),
         },
       ]
-      const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const mockSettings = [{ fioUsername: 'fiouser' }]
-      const mockLastSync = [{ lastSyncedAt: new Date() }]
+      const _mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
+      const _mockSettings = [{ fioUsername: 'fiouser' }]
+      const _mockLastSync = [{ lastSyncedAt: new Date() }]
 
       // Setup mock chain for count query
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 2 }]) }
@@ -121,11 +121,9 @@ describe('AdminController', () => {
       // Setup mock for other queries (roles, settings, lastSync)
       // Use mockResolvedValue instead of mockResolvedValueOnce to handle Promise.all non-deterministic ordering
       // Each query type gets its own mock to avoid ordering issues
-      let queryCount = 0
       const genericMock = {
         innerJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockImplementation(() => {
-          queryCount++
           // Every 3rd query is roles (after innerJoin), then settings, then lastSync per user
           // But with Promise.all, order is non-deterministic, so return a combined mock
           // that works for any query type (controller only reads fields it needs)
@@ -361,7 +359,7 @@ describe('AdminController', () => {
       const insertMock = { values: vi.fn().mockResolvedValue(undefined) }
       vi.mocked(db.insert).mockReturnValue(insertMock as any)
 
-      const result = await controller.updateUser({ user: adminUser }, 5, {
+      await controller.updateUser({ user: adminUser }, 5, {
         roles: ['member', 'lead'],
       })
 

@@ -3,60 +3,64 @@
 // Safe to run multiple times - only seeds/syncs if database is empty
 
 import { db } from '../db/index.js'
+import { createLogger } from '../utils/logger.js'
+
+const log = createLogger({ script: 'db-init-idempotent' })
 
 async function checkIfDatabaseNeedsSeeding(): Promise<boolean> {
   try {
     // Check if commodities table has data
-    const result = (await db.execute(`
+    const result = await db.execute(`
       SELECT COUNT(*) as count FROM commodities LIMIT 1
-    `)) as any
+    `)
 
-    const count = parseInt(result.rows?.[0]?.count || '0')
+    const rows = result as unknown as { count: string }[]
+    const count = parseInt(rows?.[0]?.count || '0')
     return count === 0
-  } catch (error) {
+  } catch {
     // If query fails, table might not exist yet - needs seeding
-    console.log('Could not check commodities table, assuming database needs initialization')
+    log.info('Could not check commodities table, assuming database needs initialization')
     return true
   }
 }
 
 async function main() {
-  console.log('🔍 Checking if database needs initialization...')
+  log.info('Checking if database needs initialization')
 
   const needsSeeding = await checkIfDatabaseNeedsSeeding()
 
   if (needsSeeding) {
-    console.log('📦 Database is empty - running seed and FIO sync...')
+    log.info('Database is empty - running seed and FIO sync')
 
     // Import and run seed
-    console.log('🌱 Seeding initial data...')
+    log.info('Seeding initial data')
     await import('../db/seed.js')
-    console.log('✅ Seed completed')
+    log.info('Seed completed')
 
     // Import and run FIO sync
-    console.log('🔄 Syncing FIO data...')
+    log.info('Syncing FIO data')
     const { syncCommodities } = await import('../services/fio/sync-commodities.js')
     const { syncLocations } = await import('../services/fio/sync-locations.js')
     const { syncStations } = await import('../services/fio/sync-stations.js')
 
-    console.log('=== Syncing Commodities ===')
+    log.info('Syncing commodities')
     await syncCommodities()
 
-    console.log('\n=== Syncing Locations ===')
+    log.info('Syncing locations')
     await syncLocations()
 
-    console.log('\n=== Syncing Stations ===')
+    log.info('Syncing stations')
     await syncStations()
 
-    console.log('\n✅ Database initialization complete!')
+    log.info('Database initialization complete')
   } else {
-    console.log('⏭️  Database already has data - skipping initialization')
+    log.info('Database already has data - skipping initialization')
   }
 
   process.exit(0)
 }
 
 main().catch(error => {
-  console.error('❌ Database initialization failed:', error)
+  log.error({ err: error }, 'Database initialization failed')
   process.exit(1)
 })

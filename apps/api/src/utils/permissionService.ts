@@ -2,7 +2,7 @@
 // Uses caching to reduce database load
 
 import { db, rolePermissions } from '../db/index.js'
-import { eq, and, inArray } from 'drizzle-orm'
+import { inArray } from 'drizzle-orm'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 

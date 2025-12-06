@@ -58,53 +58,64 @@ Full-stack internal commodity exchange for Kawakawa, Inc., a fictional corporati
 
 ## Development
 
-### Frontend (apps/web)
+All commands should be run from the repository root using `pnpm --filter` syntax.
+
+### Makefile (recommended)
 
 ```bash
-pnpm dev     # Start dev server on port 5173
-pnpm build   # Production build
+make dev           # Start all dev servers (API + Web)
+make dev-api       # Start API dev server only
+make dev-web       # Start Web dev server only
+make build         # Build all packages
+make test          # Run all tests
+make lint          # Check for lint errors
+make lint-fix      # Fix auto-fixable lint errors
+make format        # Format all files with Prettier
+make format-check  # Check formatting without modifying
+make db-init       # Initialize database (production - migrate + seed)
+make db-init-dev   # Initialize database (dev - push + seed + FIO sync)
+make db-reset      # Reset database (WARNING: deletes all data)
+make db-studio     # Open Drizzle Studio (visual DB browser)
+make fio-sync      # Sync FIO data (commodities, locations, stations)
+make clean         # Clean build artifacts and node_modules
+make kill-dev      # Kill all running dev servers
 ```
 
-### Backend (apps/api)
+### Direct pnpm commands
 
 ```bash
-pnpm dev     # Start dev server with hot reload
-pnpm build   # Production build
-pnpm start   # Start production server
+# Frontend (apps/web)
+pnpm --filter @kawakawa/web dev       # Start dev server on port 5173
+pnpm --filter @kawakawa/web build     # Production build
+
+# Backend (apps/api)
+pnpm --filter @kawakawa/api dev       # Start dev server with hot reload
+pnpm --filter @kawakawa/api build     # Production build
+pnpm --filter @kawakawa/api start     # Start production server
 
 # Database commands
-pnpm db:push      # Push schema to database (dev)
-pnpm db:migrate   # Run migrations (production)
-pnpm db:seed      # Seed initial data
-pnpm db:init      # Idempotent initialization (checks if seeding needed)
-pnpm db:studio    # Open Drizzle Studio (visual DB browser)
+pnpm --filter @kawakawa/api db:push      # Push schema to database (dev)
+pnpm --filter @kawakawa/api db:migrate   # Run migrations (production)
+pnpm --filter @kawakawa/api db:seed      # Seed initial data
+pnpm --filter @kawakawa/api db:init      # Idempotent initialization
+pnpm --filter @kawakawa/api db:studio    # Open Drizzle Studio
 
 # TSOA (API route generation)
-pnpm generate          # Regenerate routes and spec after changing controllers
+pnpm --filter @kawakawa/api tsoa:generate    # Regenerate routes and spec
 
 # FIO sync commands
-pnpm fio:sync                # Sync all FIO data
-pnpm fio:sync:commodities    # Sync commodities only
-pnpm fio:sync:locations      # Sync locations/planets only
-pnpm fio:sync:stations       # Sync stations only
+pnpm --filter @kawakawa/api fio:sync              # Sync all FIO data
+pnpm --filter @kawakawa/api fio:sync:commodities  # Sync commodities only
+pnpm --filter @kawakawa/api fio:sync:locations    # Sync locations/planets only
+pnpm --filter @kawakawa/api fio:sync:stations     # Sync stations only
 
 # Testing
-pnpm test              # Run all tests
-pnpm test:watch        # Run tests in watch mode
-pnpm test:ui           # Run tests with interactive UI
-pnpm test:coverage     # Run tests with coverage report
-```
+pnpm --filter @kawakawa/api test              # Run all tests
+pnpm --filter @kawakawa/api test:watch        # Run tests in watch mode
+pnpm --filter @kawakawa/api test:ui           # Run tests with interactive UI
+pnpm --filter @kawakawa/api test:coverage     # Run tests with coverage report
 
-### Makefile (root)
-
-```bash
-make dev           # Start all dev servers
-make fio-sync      # Sync FIO data
-```
-
-### Linting & Formatting (root)
-
-```bash
+# Linting & Formatting (root)
 pnpm lint          # Check for lint errors
 pnpm lint:fix      # Fix auto-fixable lint errors
 pnpm format        # Format all files with Prettier
@@ -128,10 +139,12 @@ pnpm format:check  # Check formatting without modifying
    - Database queries: Mock and verify calls
    - Integration points: Mock external APIs
 
-3. **Run tests before committing**
+3. **Run format, lint, and tests before committing**
 
    ```bash
-   pnpm test  # Must pass before committing
+   make lint
+   make format
+   make test  # Must pass before committing
    ```
 
 4. **Test file naming**: `[filename].test.ts` alongside source files
@@ -155,10 +168,16 @@ apps/
 │   └── vitest.config.ts     # Test configuration
 ├── web/              # Frontend (Vue 3)
 │   └── src/
+│       ├── components/          # Reusable Vue components
+│       │   ├── KeyValueAutocomplete.vue  # Searchable dropdown with key-priority matching
+│       │   └── OrderDialog.vue           # Buy/sell order creation dialog
+│       ├── views/               # Page components
+│       ├── services/            # API and business logic services
+│       ├── stores/              # Pinia stores (user state)
 │       ├── plugins/vuetify.ts   # Vuetify configuration (dark theme)
 │       ├── App.vue              # Root component
 │       └── main.ts              # App entry point
-└── client/           # Shared client library
+└── client/           # Shared API client library
 
 packages/
 └── types/            # Shared TypeScript types

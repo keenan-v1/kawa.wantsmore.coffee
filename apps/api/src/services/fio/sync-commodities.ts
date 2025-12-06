@@ -2,6 +2,9 @@
 import { db, fioCommodities } from '../../db/index.js'
 import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
+import { createLogger } from '../../utils/logger.js'
+
+const log = createLogger({ service: 'fio-sync', entity: 'commodities' })
 
 interface FioMaterialJson {
   MaterialId: string
@@ -28,10 +31,10 @@ export async function syncCommodities(): Promise<SyncResult> {
   }
 
   try {
-    console.log('📦 Fetching materials from FIO API...')
+    log.info('Fetching materials from FIO API')
     const materials = await fioClient.fetchJson<FioMaterialJson[]>('/material/allmaterials')
 
-    console.log(`📊 Found ${materials.length} materials`)
+    log.info({ count: materials.length }, 'Found materials')
 
     // Process materials
     for (const material of materials) {
@@ -65,22 +68,22 @@ export async function syncCommodities(): Promise<SyncResult> {
       } catch (error) {
         const errorMsg = `Failed to sync ${material.Ticker}: ${error instanceof Error ? error.message : 'Unknown error'}`
         result.errors.push(errorMsg)
-        console.error(errorMsg)
+        log.error({ ticker: material.Ticker, err: error }, 'Failed to sync commodity')
       }
     }
 
     result.success = result.errors.length === 0
-    console.log(`✅ Synced ${result.inserted} commodities`)
+    log.info({ inserted: result.inserted }, 'Synced commodities')
 
     if (result.errors.length > 0) {
-      console.log(`⚠️  ${result.errors.length} errors occurred`)
+      log.warn({ errorCount: result.errors.length }, 'Errors occurred during sync')
     }
 
     return result
   } catch (error) {
     const errorMsg = `Failed to sync commodities: ${error instanceof Error ? error.message : 'Unknown error'}`
     result.errors.push(errorMsg)
-    console.error(errorMsg)
+    log.error({ err: error }, 'Failed to sync commodities')
     return result
   }
 }
