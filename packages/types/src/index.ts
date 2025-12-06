@@ -254,3 +254,102 @@ export interface DiscordRegisterResponse {
   user: DiscordAuthUser
   needsProfileCompletion: boolean
 }
+
+// ==================== NOTIFICATIONS ====================
+
+export type NotificationType =
+  | 'reservation_placed'
+  | 'reservation_confirmed'
+  | 'reservation_rejected'
+  | 'reservation_fulfilled'
+  | 'reservation_cancelled'
+  | 'reservation_expired'
+  | 'user_needs_approval'
+  | 'user_auto_approved'
+  | 'user_approved'
+  | 'user_rejected'
+
+export const NOTIFICATION_TYPES: NotificationType[] = [
+  'reservation_placed',
+  'reservation_confirmed',
+  'reservation_rejected',
+  'reservation_fulfilled',
+  'reservation_cancelled',
+  'reservation_expired',
+  'user_needs_approval',
+  'user_auto_approved',
+  'user_approved',
+  'user_rejected',
+]
+
+export interface Notification {
+  id: number
+  type: NotificationType
+  title: string
+  message: string | null
+  data: Record<string, unknown> | null // { orderId, reservationId, counterpartyId, roles, etc. }
+  isRead: boolean
+  createdAt: string // ISO date string
+}
+
+export interface NotificationUnreadCount {
+  count: number
+}
+
+// ==================== ORDER RESERVATIONS ====================
+
+export type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'fulfilled'
+  | 'expired'
+  | 'cancelled'
+
+export const RESERVATION_STATUSES: ReservationStatus[] = [
+  'pending',
+  'confirmed',
+  'rejected',
+  'fulfilled',
+  'expired',
+  'cancelled',
+]
+
+export interface OrderReservation {
+  id: number
+  buyOrderId: number
+  sellOrderId: number
+  quantity: number
+  status: ReservationStatus
+  notes: string | null
+  expiresAt: string | null // ISO date string
+  createdAt: string // ISO date string
+  updatedAt: string // ISO date string
+}
+
+// Reservation with related order and user info
+export interface ReservationWithDetails extends OrderReservation {
+  buyerName: string
+  sellerName: string
+  commodityTicker: string
+  locationId: string
+  buyOrderPrice: number
+  sellOrderPrice: number
+  currency: Currency
+  isBuyer: boolean // true if current user is the buyer
+  isSeller: boolean // true if current user is the seller
+}
+
+// Request to create a reservation
+export interface CreateReservationRequest {
+  buyOrderId: number
+  sellOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string // ISO date string
+}
+
+// Request to update reservation status
+export interface UpdateReservationStatusRequest {
+  notes?: string
+}

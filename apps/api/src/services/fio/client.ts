@@ -359,6 +359,26 @@ export class FioClient {
       )
     }
   }
+
+  /**
+   * Get the jump count (number of system jumps) between two locations
+   * Locations can be: SystemId, PlanetId, PlanetNaturalId, or PlanetName
+   * @returns Jump count or null if route not found
+   */
+  async getJumpCount(from: string, to: string): Promise<number | null> {
+    try {
+      const response = await this.fetchJson<number>(
+        `/systemstars/jumpcount/${encodeURIComponent(from)}/${encodeURIComponent(to)}`
+      )
+      return response
+    } catch (error) {
+      // Return null if route not found (404) or other errors
+      if (error instanceof FioApiError && error.statusCode === 404) {
+        return null
+      }
+      throw error
+    }
+  }
 }
 
 // Export singleton instance for public endpoints (commodities, locations, etc.)

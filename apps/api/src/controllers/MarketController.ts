@@ -4,6 +4,7 @@ import { db, sellOrders, buyOrders, fioInventory, fioUserStorage, users } from '
 import { eq, inArray } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
+import { fioClient } from '../services/fio/client.js'
 
 // Market listing with seller info and calculated availability
 interface MarketListing {
@@ -16,6 +17,7 @@ interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
 }
 
 // Buy request from market (buy orders from all users)
@@ -29,6 +31,7 @@ interface MarketBuyRequest {
   currency: Currency
   orderType: OrderType
   isOwn: boolean
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
 }
 
 /**
@@ -58,12 +61,14 @@ export class MarketController extends Controller {
   /**
    * Get all available sell orders on the market (from other users)
    * Filters by order type based on user permissions
+   * @param destination Location ID to calculate jump counts from (optional)
    */
   @Get('listings')
   public async getMarketListings(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
-    @Query() location?: string
+    @Query() location?: string,
+    @Query() destination?: string
   ): Promise<MarketListing[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -122,7 +127,9 @@ export class MarketController extends Controller {
     }
 
     // Process orders and filter by permissions and availability
-    const listings: MarketListing[] = []
+    const filteredOrders: Array<
+      (typeof orders)[0] & { fioQuantity: number; availableQuantity: number; isOwn: boolean }
+    > = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -150,22 +157,44 @@ export class MarketController extends Controller {
 
       // Only include if there's available quantity (always show user's own orders even if 0)
       if (availableQuantity > 0 || isOwn) {
-        listings.push({
-          id: order.id,
-          sellerName: order.sellerName,
-          commodityTicker: order.commodityTicker,
-          locationId: order.locationId,
-          price: parseFloat(order.price),
-          currency: order.currency,
-          orderType: order.orderType,
-          availableQuantity,
-          isOwn,
-        })
+        filteredOrders.push({ ...order, fioQuantity, availableQuantity, isOwn })
       }
     }
 
-    // Sort by commodity, then location, then price
+    // Calculate jump counts if destination is provided
+    const jumpCountMap = new Map<string, number | null>()
+    if (destination) {
+      const uniqueLocations = [...new Set(filteredOrders.map(o => o.locationId))]
+      await Promise.all(
+        uniqueLocations.map(async locationId => {
+          const jumpCount = await fioClient.getJumpCount(destination, locationId)
+          jumpCountMap.set(locationId, jumpCount)
+        })
+      )
+    }
+
+    // Build final listings
+    const listings: MarketListing[] = filteredOrders.map(order => ({
+      id: order.id,
+      sellerName: order.sellerName,
+      commodityTicker: order.commodityTicker,
+      locationId: order.locationId,
+      price: parseFloat(order.price),
+      currency: order.currency,
+      orderType: order.orderType,
+      availableQuantity: order.availableQuantity,
+      isOwn: order.isOwn,
+      jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
+    }))
+
+    // Sort by commodity, then location, then price (or by jumpCount if destination provided)
     listings.sort((a, b) => {
+      // If destination is provided, sort by jump count first
+      if (destination) {
+        const aJumps = a.jumpCount ?? Infinity
+        const bJumps = b.jumpCount ?? Infinity
+        if (aJumps !== bJumps) return aJumps - bJumps
+      }
       if (a.commodityTicker !== b.commodityTicker) {
         return a.commodityTicker.localeCompare(b.commodityTicker)
       }
@@ -181,12 +210,14 @@ export class MarketController extends Controller {
   /**
    * Get all buy requests on the market (from all users)
    * Filters by order type based on user permissions
+   * @param destination Location ID to calculate jump counts from (optional)
    */
   @Get('buy-requests')
   public async getMarketBuyRequests(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
-    @Query() location?: string
+    @Query() location?: string,
+    @Query() destination?: string
   ): Promise<MarketBuyRequest[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -216,7 +247,7 @@ export class MarketController extends Controller {
       .innerJoin(users, eq(buyOrders.userId, users.id))
 
     // Process orders and filter by permissions
-    const requests: MarketBuyRequest[] = []
+    const filteredOrders: Array<(typeof orders)[0] & { isOwn: boolean }> = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -233,21 +264,44 @@ export class MarketController extends Controller {
       // Filter by location if specified
       if (location && order.locationId !== location) continue
 
-      requests.push({
-        id: order.id,
-        buyerName: order.buyerName,
-        commodityTicker: order.commodityTicker,
-        locationId: order.locationId,
-        quantity: order.quantity,
-        price: parseFloat(order.price),
-        currency: order.currency,
-        orderType: order.orderType,
-        isOwn,
-      })
+      filteredOrders.push({ ...order, isOwn })
     }
 
+    // Calculate jump counts if destination is provided
+    const jumpCountMap = new Map<string, number | null>()
+    if (destination) {
+      const uniqueLocations = [...new Set(filteredOrders.map(o => o.locationId))]
+      await Promise.all(
+        uniqueLocations.map(async locationId => {
+          const jumpCount = await fioClient.getJumpCount(destination, locationId)
+          jumpCountMap.set(locationId, jumpCount)
+        })
+      )
+    }
+
+    // Build final requests
+    const requests: MarketBuyRequest[] = filteredOrders.map(order => ({
+      id: order.id,
+      buyerName: order.buyerName,
+      commodityTicker: order.commodityTicker,
+      locationId: order.locationId,
+      quantity: order.quantity,
+      price: parseFloat(order.price),
+      currency: order.currency,
+      orderType: order.orderType,
+      isOwn: order.isOwn,
+      jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
+    }))
+
     // Sort by commodity, then location, then price (highest first for buy orders)
+    // If destination provided, sort by jump count first
     requests.sort((a, b) => {
+      // If destination is provided, sort by jump count first
+      if (destination) {
+        const aJumps = a.jumpCount ?? Infinity
+        const bJumps = b.jumpCount ?? Infinity
+        if (aJumps !== bJumps) return aJumps - bJumps
+      }
       if (a.commodityTicker !== b.commodityTicker) {
         return a.commodityTicker.localeCompare(b.commodityTicker)
       }

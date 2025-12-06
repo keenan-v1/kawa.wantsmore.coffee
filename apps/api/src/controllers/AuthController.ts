@@ -1,12 +1,21 @@
 import { Body, Controller, Get, Post, Query, Route, Tags, SuccessResponse, Response } from 'tsoa'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import type { Role } from '@kawakawa/types'
-import { db, users, userSettings, userRoles, roles, passwordResetTokens } from '../db/index.js'
+import {
+  db,
+  users,
+  userSettings,
+  userRoles,
+  roles,
+  passwordResetTokens,
+  rolePermissions,
+} from '../db/index.js'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import { generateToken } from '../utils/jwt.js'
 import { Unauthorized, Forbidden, BadRequest } from '../utils/errors.js'
 import { getPermissions } from '../utils/permissionService.js'
 import crypto from 'crypto'
+import { notificationService } from '../services/notificationService.js'
 
 interface LoginRequest {
   username: string
@@ -190,6 +199,37 @@ export class AuthController extends Controller {
       username: newUser.username,
       roles: ['unverified'],
     })
+
+    // Notify admins (users with admin.manage_users permission) about new registration
+    // Find roles that have admin.manage_users permission
+    const adminRoleIds = await db
+      .select({ roleId: rolePermissions.roleId })
+      .from(rolePermissions)
+      .where(
+        and(
+          eq(rolePermissions.permissionId, 'admin.manage_users'),
+          eq(rolePermissions.allowed, true)
+        )
+      )
+
+    if (adminRoleIds.length > 0) {
+      // Find users with those roles
+      const roleIdList = adminRoleIds.map(r => r.roleId)
+      const adminUserIds = await db
+        .selectDistinct({ userId: userRoles.userId })
+        .from(userRoles)
+        .where(inArray(userRoles.roleId, roleIdList))
+
+      if (adminUserIds.length > 0) {
+        await notificationService.createForMany(
+          adminUserIds.map(u => u.userId),
+          'user_needs_approval',
+          'New User Registration',
+          `${newUser.displayName} (${newUser.username}) has registered and is awaiting approval.`,
+          { userId: newUser.id, username: newUser.username, displayName: newUser.displayName }
+        )
+      }
+    }
 
     this.setStatus(201)
     return {

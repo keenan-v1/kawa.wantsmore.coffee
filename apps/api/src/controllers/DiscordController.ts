@@ -4,12 +4,13 @@ import type {
   DiscordCallbackRequest,
   UserDiscordProfile,
 } from '@kawakawa/types'
-import { db, userDiscordProfiles, discordRoleMappings, userRoles } from '../db/index.js'
-import { eq } from 'drizzle-orm'
+import { db, userDiscordProfiles, discordRoleMappings, userRoles, roles } from '../db/index.js'
+import { eq, inArray } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
 import { discordService } from '../services/discordService.js'
 import crypto from 'crypto'
+import { notificationService } from '../services/notificationService.js'
 
 // In-memory store for OAuth state tokens (in production, use Redis or similar)
 const stateTokens = new Map<string, { userId: number; expiresAt: Date }>()
@@ -378,12 +379,31 @@ export class DiscordController extends Controller {
       // Remove 'unverified' role
       await db.delete(userRoles).where(eq(userRoles.userId, userId))
 
+      const roleIdsToAssign = Array.from(rolesToAssign)
+
       // Add all matched roles
       await db.insert(userRoles).values(
-        Array.from(rolesToAssign).map(roleId => ({
+        roleIdsToAssign.map(roleId => ({
           userId,
           roleId,
         }))
+      )
+
+      // Get role names for notification
+      const roleInfos = await db
+        .select({ id: roles.id, name: roles.name })
+        .from(roles)
+        .where(inArray(roles.id, roleIdsToAssign))
+
+      const roleNames = roleInfos.map(r => r.name)
+
+      // Send notification to the auto-approved user
+      await notificationService.create(
+        userId,
+        'user_auto_approved',
+        'Account Auto-Approved',
+        `Your account has been automatically approved based on your Discord roles! You have been assigned: ${roleNames.join(', ')}.`,
+        { roleIds: roleIdsToAssign, roleNames }
       )
     }
   }

@@ -8,6 +8,13 @@
       "when": 1764912947961,
       "tag": "0000_soft_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765052427484,
+      "tag": "0001_dry_guardian",
+      "breakpoints": true
     }
   ]
 }
