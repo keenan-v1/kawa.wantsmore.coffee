@@ -219,4 +219,69 @@ export function installErrorHandlers(): void {
   })
 }
 
+/**
+ * Fetch wrapper that automatically logs API errors
+ * Use this instead of raw fetch() for API calls
+ */
+export async function fetchWithLogging(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const method = init?.method || 'GET'
+
+  try {
+    const response = await fetch(input, init)
+
+    // Log non-successful responses (but not 401 which is expected for auth flows)
+    if (!response.ok && response.status !== 401) {
+      // Try to get error message from response body
+      let errorBody: string | undefined
+      try {
+        const cloned = response.clone()
+        const json = await cloned.json()
+        errorBody = json.message || JSON.stringify(json)
+      } catch {
+        // Response might not be JSON
+      }
+
+      logger.error('API request failed', {
+        url: sanitizeUrl(url),
+        method,
+        status: response.status,
+        statusText: response.statusText,
+        errorBody,
+      })
+    }
+
+    return response
+  } catch (error) {
+    // Network errors (fetch itself failed)
+    logger.error('API network error', {
+      url: sanitizeUrl(url),
+      method,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
+/**
+ * Sanitize URL to remove sensitive query parameters
+ */
+function sanitizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin)
+    const sensitiveParams = ['token', 'key', 'password', 'secret', 'apiKey']
+    sensitiveParams.forEach(param => {
+      if (parsed.searchParams.has(param)) {
+        parsed.searchParams.set(param, '[REDACTED]')
+      }
+    })
+    return parsed.pathname + parsed.search
+  } catch {
+    return url
+  }
+}
+
 export default logger
