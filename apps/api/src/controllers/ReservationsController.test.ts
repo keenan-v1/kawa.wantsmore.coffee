@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ReservationsController } from './ReservationsController.js'
 import { db } from '../db/index.js'
 import { notificationService } from '../services/notificationService.js'
+import * as permissionService from '../utils/permissionService.js'
+
+vi.mock('../utils/permissionService.js', () => ({
+  hasPermission: vi.fn(),
+}))
 
 vi.mock('../db/index.js', () => ({
   db: {
@@ -62,6 +67,9 @@ describe('ReservationsController', () => {
     vi.clearAllMocks()
     controller = new ReservationsController()
 
+    // Default: allow all permissions
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true)
+
     // Create mock object first, then assign methods that return it for chaining
     mockSelect = {} as any
     mockSelect.from = vi.fn().mockReturnValue(mockSelect)
@@ -104,6 +112,7 @@ describe('ReservationsController', () => {
     locationId: 'BEN',
     price: '95.00',
     currency: 'CIS',
+    orderType: 'internal' as const,
   }
 
   const mockReservation = {
@@ -221,6 +230,62 @@ describe('ReservationsController', () => {
       await expect(
         controller.createReservation({ buyOrderId: 1, sellOrderId: 2, quantity: 0 }, mockRequest)
       ).rejects.toThrow('Quantity must be greater than 0')
+    })
+
+    it('should throw Forbidden if user lacks permission for internal orders', async () => {
+      mockSelect.where.mockResolvedValueOnce([mockBuyOrder])
+      mockSelect.where.mockResolvedValueOnce([mockSellOrder])
+      vi.mocked(permissionService.hasPermission).mockResolvedValueOnce(false)
+
+      await expect(
+        controller.createReservation({ buyOrderId: 1, sellOrderId: 2, quantity: 100 }, mockRequest)
+      ).rejects.toThrow('You do not have permission to place reservations on internal orders')
+    })
+
+    it('should throw Forbidden if user lacks permission for partner orders', async () => {
+      mockSelect.where.mockResolvedValueOnce([mockBuyOrder])
+      mockSelect.where.mockResolvedValueOnce([{ ...mockSellOrder, orderType: 'partner' }])
+      vi.mocked(permissionService.hasPermission).mockResolvedValueOnce(false)
+
+      await expect(
+        controller.createReservation({ buyOrderId: 1, sellOrderId: 2, quantity: 100 }, mockRequest)
+      ).rejects.toThrow('You do not have permission to place reservations on partner orders')
+    })
+
+    it('should check for reservations.place_internal permission for internal orders', async () => {
+      mockSelect.where.mockResolvedValueOnce([mockBuyOrder])
+      mockSelect.where.mockResolvedValueOnce([mockSellOrder])
+      mockInsert.returning.mockResolvedValueOnce([mockReservation])
+      mockSelect.where.mockResolvedValueOnce([{ displayName: 'BuyerUser' }])
+      vi.mocked(notificationService.create).mockResolvedValue({} as any)
+
+      await controller.createReservation(
+        { buyOrderId: 1, sellOrderId: 2, quantity: 100 },
+        mockRequest
+      )
+
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(
+        ['member'],
+        'reservations.place_internal'
+      )
+    })
+
+    it('should check for reservations.place_partner permission for partner orders', async () => {
+      mockSelect.where.mockResolvedValueOnce([mockBuyOrder])
+      mockSelect.where.mockResolvedValueOnce([{ ...mockSellOrder, orderType: 'partner' }])
+      mockInsert.returning.mockResolvedValueOnce([mockReservation])
+      mockSelect.where.mockResolvedValueOnce([{ displayName: 'BuyerUser' }])
+      vi.mocked(notificationService.create).mockResolvedValue({} as any)
+
+      await controller.createReservation(
+        { buyOrderId: 1, sellOrderId: 2, quantity: 100 },
+        mockRequest
+      )
+
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(
+        ['member'],
+        'reservations.place_partner'
+      )
     })
   })
 

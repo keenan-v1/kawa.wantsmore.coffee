@@ -11,6 +11,7 @@ import InventoryView from '../views/InventoryView.vue'
 import MyOrdersView from '../views/MyOrdersView.vue'
 import AccountView from '../views/AccountView.vue'
 import AdminView from '../views/AdminView.vue'
+import NotificationsView from '../views/NotificationsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -80,10 +81,30 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresVerified: true },
     },
     {
+      path: '/notifications',
+      name: 'notifications',
+      component: NotificationsView,
+      meta: { requiresAuth: true, requiresVerified: true },
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: AdminView,
       meta: { requiresAuth: true, requiresVerified: true, requiresAdmin: true },
+    },
+    {
+      path: '/orders/sell/:id',
+      name: 'sell-order-detail',
+      component: () => import('../views/OrderDetailView.vue'),
+      meta: { requiresAuth: true, requiresVerified: true },
+      props: route => ({ orderType: 'sell', orderId: Number(route.params.id) }),
+    },
+    {
+      path: '/orders/buy/:id',
+      name: 'buy-order-detail',
+      component: () => import('../views/OrderDetailView.vue'),
+      meta: { requiresAuth: true, requiresVerified: true },
+      props: route => ({ orderType: 'buy', orderId: Number(route.params.id) }),
     },
     {
       path: '/:pathMatch(.*)*',

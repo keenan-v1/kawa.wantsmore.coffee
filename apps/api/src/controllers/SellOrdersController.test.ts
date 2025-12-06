@@ -39,6 +39,12 @@ vi.mock('../db/index.js', () => ({
   fioLocations: {
     naturalId: 'naturalId',
   },
+  orderReservations: {
+    sellOrderId: 'sellOrderId',
+    buyOrderId: 'buyOrderId',
+    quantity: 'quantity',
+    status: 'status',
+  },
 }))
 
 vi.mock('../utils/permissionService.js', () => ({
@@ -62,6 +68,7 @@ describe('SellOrdersController', () => {
       leftJoin: vi.fn().mockReturnThis(),
       innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockResolvedValue([]), // Default to empty reservations
     }
     mockInsert = {
       values: vi.fn().mockReturnThis(),
@@ -133,6 +140,9 @@ describe('SellOrdersController', () => {
         limitQuantity: null,
         fioQuantity: 1000,
         availableQuantity: 1000, // none mode: full quantity
+        activeReservationCount: 0,
+        reservedQuantity: 0,
+        remainingQuantity: 1000,
       })
       expect(result[1]).toEqual({
         id: 2,
@@ -145,6 +155,9 @@ describe('SellOrdersController', () => {
         limitQuantity: 200,
         fioQuantity: 500,
         availableQuantity: 200, // max_sell mode: min(500, 200)
+        activeReservationCount: 0,
+        reservedQuantity: 0,
+        remainingQuantity: 200,
       })
     })
 

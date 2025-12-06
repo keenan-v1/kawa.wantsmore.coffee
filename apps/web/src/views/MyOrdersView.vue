@@ -94,21 +94,44 @@
             </template>
 
             <template #item.availableQuantity="{ item }">
-              <div>
-                <span class="font-weight-medium">{{
-                  item.availableQuantity.toLocaleString()
-                }}</span>
-                <span
-                  v-if="item.availableQuantity !== item.fioQuantity"
-                  class="text-medium-emphasis"
-                >
-                  / {{ item.fioQuantity.toLocaleString() }}
-                </span>
-              </div>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <div v-bind="props">
+                    <span class="font-weight-medium">{{
+                      item.remainingQuantity.toLocaleString()
+                    }}</span>
+                    <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                      / {{ item.availableQuantity.toLocaleString() }}
+                    </span>
+                  </div>
+                </template>
+                <div>
+                  <div>FIO Inventory: {{ item.fioQuantity.toLocaleString() }}</div>
+                  <div>Available: {{ item.availableQuantity.toLocaleString() }}</div>
+                  <div v-if="item.reservedQuantity > 0">
+                    Reserved: {{ item.reservedQuantity.toLocaleString() }}
+                  </div>
+                  <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+                </div>
+              </v-tooltip>
               <div v-if="item.limitMode !== 'none'" class="text-caption text-medium-emphasis">
                 {{ getLimitModeLabel(item.limitMode) }}
                 <span v-if="item.limitQuantity">: {{ item.limitQuantity.toLocaleString() }}</span>
               </div>
+            </template>
+
+            <template #item.activeReservationCount="{ item }">
+              <v-chip
+                v-if="item.activeReservationCount > 0"
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="cursor-pointer"
+                @click="viewSellOrder(item)"
+              >
+                {{ item.activeReservationCount }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">-</span>
             </template>
 
             <template #item.orderType="{ item }">
@@ -123,6 +146,20 @@
 
             <template #item.actions="{ item }">
               <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="viewSellOrder(item)"
+                    >
+                      <v-icon>mdi-eye</v-icon>
+                    </v-btn>
+                  </template>
+                  View order
+                </v-tooltip>
                 <v-tooltip location="top">
                   <template #activator="{ props }">
                     <v-btn
@@ -249,7 +286,37 @@
             </template>
 
             <template #item.quantity="{ item }">
-              <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <span v-bind="props" class="font-weight-medium">
+                    {{ item.remainingQuantity.toLocaleString() }}
+                    <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                      / {{ item.quantity.toLocaleString() }}
+                    </span>
+                  </span>
+                </template>
+                <div>
+                  <div>Total: {{ item.quantity.toLocaleString() }}</div>
+                  <div v-if="item.reservedQuantity > 0">
+                    Reserved: {{ item.reservedQuantity.toLocaleString() }}
+                  </div>
+                  <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+                </div>
+              </v-tooltip>
+            </template>
+
+            <template #item.activeReservationCount="{ item }">
+              <v-chip
+                v-if="item.activeReservationCount > 0"
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="cursor-pointer"
+                @click="viewBuyOrder(item)"
+              >
+                {{ item.activeReservationCount }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">-</span>
             </template>
 
             <template #item.orderType="{ item }">
@@ -264,6 +331,20 @@
 
             <template #item.actions="{ item }">
               <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="viewBuyOrder(item)"
+                    >
+                      <v-icon>mdi-eye</v-icon>
+                    </v-btn>
+                  </template>
+                  View order
+                </v-tooltip>
                 <v-tooltip location="top">
                   <template #activator="{ props }">
                     <v-btn
@@ -510,6 +591,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   PERMISSIONS,
   type Currency,
@@ -522,6 +604,7 @@ import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
 
+const router = useRouter()
 const userStore = useUserStore()
 
 // Display helpers that respect user preferences
@@ -540,8 +623,14 @@ const sellHeaders = [
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'Price', key: 'price', sortable: true },
   { title: 'Available', key: 'availableQuantity', sortable: true, align: 'end' as const },
+  {
+    title: 'Reservations',
+    key: 'activeReservationCount',
+    sortable: true,
+    align: 'center' as const,
+  },
   { title: 'Type', key: 'orderType', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 120 },
 ]
 
 const buyHeaders = [
@@ -549,8 +638,14 @@ const buyHeaders = [
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'Price', key: 'price', sortable: true },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
+  {
+    title: 'Reservations',
+    key: 'activeReservationCount',
+    sortable: true,
+    align: 'center' as const,
+  },
   { title: 'Type', key: 'orderType', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 120 },
 ]
 
 // Sell orders state
@@ -710,6 +805,15 @@ const openBuyOrderDialog = () => {
 const openSellOrderDialog = () => {
   orderDialogTab.value = 'sell'
   orderDialog.value = true
+}
+
+// View order functions (navigate to order detail page)
+const viewSellOrder = (order: SellOrderResponse) => {
+  router.push(`/orders/sell/${order.id}`)
+}
+
+const viewBuyOrder = (order: BuyOrderResponse) => {
+  router.push(`/orders/buy/${order.id}`)
 }
 
 // Handler for OrderDialog creation

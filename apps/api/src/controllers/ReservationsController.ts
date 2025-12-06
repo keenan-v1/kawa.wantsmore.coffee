@@ -25,6 +25,7 @@ import { eq, or, desc } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { notificationService } from '../services/notificationService.js'
+import { hasPermission } from '../utils/permissionService.js'
 
 interface ReservationResponse {
   id: number
@@ -235,6 +236,19 @@ export class ReservationsController extends Controller {
 
     if (!sellOrder) {
       throw NotFound('Sell order not found')
+    }
+
+    // Check permission based on order type
+    const userRoles = request.user.roles
+    const requiredPermission =
+      sellOrder.orderType === 'internal'
+        ? 'reservations.place_internal'
+        : 'reservations.place_partner'
+
+    if (!(await hasPermission(userRoles, requiredPermission))) {
+      throw Forbidden(
+        `You do not have permission to place reservations on ${sellOrder.orderType} orders`
+      )
     }
 
     // Verify orders are compatible (same commodity, location, currency)

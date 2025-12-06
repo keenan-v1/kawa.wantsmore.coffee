@@ -20,8 +20,9 @@ import {
   fioUserStorage,
   fioCommodities,
   fioLocations,
+  orderReservations,
 } from '../db/index.js'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray, or, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
@@ -41,6 +42,9 @@ interface SellOrderResponse {
   limitQuantity: number | null
   fioQuantity: number
   availableQuantity: number
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // availableQuantity - reservedQuantity
 }
 
 interface CreateSellOrderRequest {
@@ -131,9 +135,41 @@ export class SellOrdersController extends Controller {
       }
     }
 
+    // Get reservation counts for all sell orders
+    const orderIds = orders.map(o => o.id)
+    const reservationMap = new Map<number, { count: number; quantity: number }>()
+
+    if (orderIds.length > 0) {
+      const reservationStats = await db
+        .select({
+          sellOrderId: orderReservations.sellOrderId,
+          count: sql<number>`count(*)::int`,
+          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            inArray(orderReservations.sellOrderId, orderIds),
+            or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+          )
+        )
+        .groupBy(orderReservations.sellOrderId)
+
+      for (const stat of reservationStats) {
+        reservationMap.set(stat.sellOrderId, { count: stat.count, quantity: stat.quantity })
+      }
+    }
+
     return orders.map(order => {
       const key = `${order.commodityTicker}:${order.locationId}`
       const fioQuantity = inventoryMap.get(key) ?? 0
+      const availableQuantity = calculateAvailableQuantity(
+        fioQuantity,
+        order.limitMode,
+        order.limitQuantity
+      )
+      const reservationData = reservationMap.get(order.id) ?? { count: 0, quantity: 0 }
+      const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
 
       return {
         id: order.id,
@@ -145,11 +181,10 @@ export class SellOrdersController extends Controller {
         limitMode: order.limitMode,
         limitQuantity: order.limitQuantity,
         fioQuantity,
-        availableQuantity: calculateAvailableQuantity(
-          fioQuantity,
-          order.limitMode,
-          order.limitQuantity
-        ),
+        availableQuantity,
+        activeReservationCount: reservationData.count,
+        reservedQuantity: reservationData.quantity,
+        remainingQuantity,
       }
     })
   }
@@ -181,6 +216,16 @@ export class SellOrdersController extends Controller {
       order.locationId
     )
 
+    const availableQuantity = calculateAvailableQuantity(
+      fioQuantity,
+      order.limitMode,
+      order.limitQuantity
+    )
+
+    // Get reservation counts
+    const reservationData = await this.getReservationCounts(order.id)
+    const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
+
     return {
       id: order.id,
       commodityTicker: order.commodityTicker,
@@ -191,11 +236,10 @@ export class SellOrdersController extends Controller {
       limitMode: order.limitMode,
       limitQuantity: order.limitQuantity,
       fioQuantity,
-      availableQuantity: calculateAvailableQuantity(
-        fioQuantity,
-        order.limitMode,
-        order.limitQuantity
-      ),
+      availableQuantity,
+      activeReservationCount: reservationData.count,
+      reservedQuantity: reservationData.quantity,
+      remainingQuantity,
     }
   }
 
@@ -220,6 +264,28 @@ export class SellOrdersController extends Controller {
       )
 
     return items.reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  /**
+   * Helper to get reservation counts for a sell order
+   */
+  private async getReservationCounts(
+    sellOrderId: number
+  ): Promise<{ count: number; quantity: number }> {
+    const result = await db
+      .select({
+        count: sql<number>`count(*)::int`,
+        quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+      })
+      .from(orderReservations)
+      .where(
+        and(
+          eq(orderReservations.sellOrderId, sellOrderId),
+          or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+        )
+      )
+
+    return result[0] ?? { count: 0, quantity: 0 }
   }
 
   /**
@@ -312,6 +378,12 @@ export class SellOrdersController extends Controller {
       body.locationId
     )
 
+    const availableQuantity = calculateAvailableQuantity(
+      fioQuantity,
+      newOrder.limitMode,
+      newOrder.limitQuantity
+    )
+
     return {
       id: newOrder.id,
       commodityTicker: newOrder.commodityTicker,
@@ -322,11 +394,10 @@ export class SellOrdersController extends Controller {
       limitMode: newOrder.limitMode,
       limitQuantity: newOrder.limitQuantity,
       fioQuantity,
-      availableQuantity: calculateAvailableQuantity(
-        fioQuantity,
-        newOrder.limitMode,
-        newOrder.limitQuantity
-      ),
+      availableQuantity,
+      activeReservationCount: 0, // New order has no reservations
+      reservedQuantity: 0,
+      remainingQuantity: availableQuantity,
     }
   }
 
@@ -389,6 +460,16 @@ export class SellOrdersController extends Controller {
       updated.locationId
     )
 
+    const availableQuantity = calculateAvailableQuantity(
+      fioQuantity,
+      updated.limitMode,
+      updated.limitQuantity
+    )
+
+    // Get reservation counts
+    const reservationData = await this.getReservationCounts(updated.id)
+    const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
+
     return {
       id: updated.id,
       commodityTicker: updated.commodityTicker,
@@ -399,11 +480,10 @@ export class SellOrdersController extends Controller {
       limitMode: updated.limitMode,
       limitQuantity: updated.limitQuantity,
       fioQuantity,
-      availableQuantity: calculateAvailableQuantity(
-        fioQuantity,
-        updated.limitMode,
-        updated.limitQuantity
-      ),
+      availableQuantity,
+      activeReservationCount: reservationData.count,
+      reservedQuantity: reservationData.quantity,
+      remainingQuantity,
     }
   }
 

@@ -13,8 +13,8 @@ import {
   SuccessResponse,
 } from 'tsoa'
 import type { Currency, OrderType } from '@kawakawa/types'
-import { db, buyOrders, fioCommodities, fioLocations } from '../db/index.js'
-import { eq, and } from 'drizzle-orm'
+import { db, buyOrders, fioCommodities, fioLocations, orderReservations } from '../db/index.js'
+import { eq, and, inArray, or, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
@@ -27,6 +27,9 @@ interface BuyOrderResponse {
   price: number
   currency: Currency
   orderType: OrderType
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // quantity - reservedQuantity
 }
 
 interface CreateBuyOrderRequest {
@@ -72,15 +75,48 @@ export class BuyOrdersController extends Controller {
 
     const orders = await db.select().from(buyOrders).where(eq(buyOrders.userId, userId))
 
-    return orders.map(order => ({
-      id: order.id,
-      commodityTicker: order.commodityTicker,
-      locationId: order.locationId,
-      quantity: order.quantity,
-      price: parseFloat(order.price),
-      currency: order.currency,
-      orderType: order.orderType,
-    }))
+    // Get reservation counts for all buy orders
+    const orderIds = orders.map(o => o.id)
+    const reservationMap = new Map<number, { count: number; quantity: number }>()
+
+    if (orderIds.length > 0) {
+      const reservationStats = await db
+        .select({
+          buyOrderId: orderReservations.buyOrderId,
+          count: sql<number>`count(*)::int`,
+          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            inArray(orderReservations.buyOrderId, orderIds),
+            or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+          )
+        )
+        .groupBy(orderReservations.buyOrderId)
+
+      for (const stat of reservationStats) {
+        reservationMap.set(stat.buyOrderId, { count: stat.count, quantity: stat.quantity })
+      }
+    }
+
+    return orders.map(order => {
+      const reservationData = reservationMap.get(order.id) ?? { count: 0, quantity: 0 }
+      const remainingQuantity = Math.max(0, order.quantity - reservationData.quantity)
+
+      return {
+        id: order.id,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        quantity: order.quantity,
+        price: parseFloat(order.price),
+        currency: order.currency,
+        orderType: order.orderType,
+        activeReservationCount: reservationData.count,
+        reservedQuantity: reservationData.quantity,
+        remainingQuantity,
+      }
+    })
   }
 
   /**
@@ -103,6 +139,10 @@ export class BuyOrdersController extends Controller {
       throw NotFound('Buy order not found')
     }
 
+    // Get reservation counts
+    const reservationData = await this.getReservationCounts(order.id)
+    const remainingQuantity = Math.max(0, order.quantity - reservationData.quantity)
+
     return {
       id: order.id,
       commodityTicker: order.commodityTicker,
@@ -111,7 +151,32 @@ export class BuyOrdersController extends Controller {
       price: parseFloat(order.price),
       currency: order.currency,
       orderType: order.orderType,
+      activeReservationCount: reservationData.count,
+      reservedQuantity: reservationData.quantity,
+      remainingQuantity,
     }
+  }
+
+  /**
+   * Helper to get reservation counts for a buy order
+   */
+  private async getReservationCounts(
+    buyOrderId: number
+  ): Promise<{ count: number; quantity: number }> {
+    const result = await db
+      .select({
+        count: sql<number>`count(*)::int`,
+        quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+      })
+      .from(orderReservations)
+      .where(
+        and(
+          eq(orderReservations.buyOrderId, buyOrderId),
+          or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+        )
+      )
+
+    return result[0] ?? { count: 0, quantity: 0 }
   }
 
   /**
@@ -210,6 +275,9 @@ export class BuyOrdersController extends Controller {
       price: parseFloat(newOrder.price),
       currency: newOrder.currency,
       orderType: newOrder.orderType,
+      activeReservationCount: 0, // New order has no reservations
+      reservedQuantity: 0,
+      remainingQuantity: newOrder.quantity,
     }
   }
 
@@ -270,6 +338,10 @@ export class BuyOrdersController extends Controller {
       .where(eq(buyOrders.id, id))
       .returning()
 
+    // Get reservation counts
+    const reservationData = await this.getReservationCounts(updated.id)
+    const remainingQuantity = Math.max(0, updated.quantity - reservationData.quantity)
+
     return {
       id: updated.id,
       commodityTicker: updated.commodityTicker,
@@ -278,6 +350,9 @@ export class BuyOrdersController extends Controller {
       price: parseFloat(updated.price),
       currency: updated.currency,
       orderType: updated.orderType,
+      activeReservationCount: reservationData.count,
+      reservedQuantity: reservationData.quantity,
+      remainingQuantity,
     }
   }
 

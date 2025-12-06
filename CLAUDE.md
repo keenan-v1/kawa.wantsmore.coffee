@@ -83,6 +83,8 @@ make kill-dev      # Kill all running dev servers
 
 ### Direct pnpm commands
 
+Do not use these commands, use the Makefile targets instead. This is just for reference.
+
 ```bash
 # Frontend (apps/web)
 pnpm --filter @kawakawa/web dev       # Start dev server on port 5173
@@ -126,7 +128,7 @@ pnpm format:check  # Check formatting without modifying
 
 **All new code must include unit tests.** We use Vitest for fast, modern testing with excellent TypeScript support.
 
-### Testing Guidelines
+### Development Guidelines
 
 1. **Write tests for all controllers and business logic**
    - Test happy paths and error cases
@@ -139,15 +141,20 @@ pnpm format:check  # Check formatting without modifying
    - Database queries: Mock and verify calls
    - Integration points: Mock external APIs
 
-3. **Run format, lint, and tests before committing**
+3. **Code Cleanliness**
+   - Always lint and fix all errors
+   - Always format
+   - Always refactor duplicate code
+   - Always split large files into more logical modules
+   - Favor componentization over duplication
+
+4. **Run format, lint, and tests before committing**
 
    ```bash
-   make lint
-   make format
-   make test  # Must pass before committing
+   make checkpoint
    ```
 
-4. **Test file naming**: `[filename].test.ts` alongside source files
+5. **Test file naming**: `[filename].test.ts` alongside source files
 
 See [apps/api/src/controllers/](apps/api/src/controllers/) for examples of well-tested controllers.
 

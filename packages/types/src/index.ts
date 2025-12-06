@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   ORDERS_POST_INTERNAL: 'orders.post_internal',
   ORDERS_VIEW_PARTNER: 'orders.view_partner',
   ORDERS_POST_PARTNER: 'orders.post_partner',
+  RESERVATIONS_PLACE_INTERNAL: 'reservations.place_internal',
+  RESERVATIONS_PLACE_PARTNER: 'reservations.place_partner',
   ADMIN_MANAGE_USERS: 'admin.manage_users',
   ADMIN_MANAGE_ROLES: 'admin.manage_roles',
 } as const
@@ -110,6 +112,26 @@ export interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // availableQuantity - reservedQuantity
+}
+
+export interface MarketBuyRequest {
+  id: number
+  buyerName: string
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType
+  isOwn: boolean
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // quantity - reservedQuantity
 }
 
 // ==================== DISCORD INTEGRATION ====================

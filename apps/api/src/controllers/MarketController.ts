@@ -1,7 +1,15 @@
 import { Controller, Get, Query, Route, Security, Tags, Request } from 'tsoa'
 import type { Currency, OrderType } from '@kawakawa/types'
-import { db, sellOrders, buyOrders, fioInventory, fioUserStorage, users } from '../db/index.js'
-import { eq, inArray } from 'drizzle-orm'
+import {
+  db,
+  sellOrders,
+  buyOrders,
+  fioInventory,
+  fioUserStorage,
+  users,
+  orderReservations,
+} from '../db/index.js'
+import { eq, inArray, or, and, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
 import { fioClient } from '../services/fio/client.js'
@@ -18,6 +26,9 @@ interface MarketListing {
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
   jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // availableQuantity - reservedQuantity
 }
 
 // Buy request from market (buy orders from all users)
@@ -32,6 +43,9 @@ interface MarketBuyRequest {
   orderType: OrderType
   isOwn: boolean
   jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // quantity - reservedQuantity
 }
 
 /**
@@ -173,19 +187,52 @@ export class MarketController extends Controller {
       )
     }
 
+    // Get reservation counts for all sell orders
+    const sellOrderIds = filteredOrders.map(o => o.id)
+    const reservationMap = new Map<number, { count: number; quantity: number }>()
+
+    if (sellOrderIds.length > 0) {
+      const reservationStats = await db
+        .select({
+          sellOrderId: orderReservations.sellOrderId,
+          count: sql<number>`count(*)::int`,
+          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            inArray(orderReservations.sellOrderId, sellOrderIds),
+            or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+          )
+        )
+        .groupBy(orderReservations.sellOrderId)
+
+      for (const stat of reservationStats) {
+        reservationMap.set(stat.sellOrderId, { count: stat.count, quantity: stat.quantity })
+      }
+    }
+
     // Build final listings
-    const listings: MarketListing[] = filteredOrders.map(order => ({
-      id: order.id,
-      sellerName: order.sellerName,
-      commodityTicker: order.commodityTicker,
-      locationId: order.locationId,
-      price: parseFloat(order.price),
-      currency: order.currency,
-      orderType: order.orderType,
-      availableQuantity: order.availableQuantity,
-      isOwn: order.isOwn,
-      jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
-    }))
+    const listings: MarketListing[] = filteredOrders.map(order => {
+      const reservationData = reservationMap.get(order.id) ?? { count: 0, quantity: 0 }
+      const remainingQuantity = Math.max(0, order.availableQuantity - reservationData.quantity)
+
+      return {
+        id: order.id,
+        sellerName: order.sellerName,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        price: parseFloat(order.price),
+        currency: order.currency,
+        orderType: order.orderType,
+        availableQuantity: order.availableQuantity,
+        isOwn: order.isOwn,
+        jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
+        activeReservationCount: reservationData.count,
+        reservedQuantity: reservationData.quantity,
+        remainingQuantity,
+      }
+    })
 
     // Sort by commodity, then location, then price (or by jumpCount if destination provided)
     listings.sort((a, b) => {
@@ -279,19 +326,52 @@ export class MarketController extends Controller {
       )
     }
 
+    // Get reservation counts for all buy orders
+    const buyOrderIds = filteredOrders.map(o => o.id)
+    const reservationMap = new Map<number, { count: number; quantity: number }>()
+
+    if (buyOrderIds.length > 0) {
+      const reservationStats = await db
+        .select({
+          buyOrderId: orderReservations.buyOrderId,
+          count: sql<number>`count(*)::int`,
+          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            inArray(orderReservations.buyOrderId, buyOrderIds),
+            or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+          )
+        )
+        .groupBy(orderReservations.buyOrderId)
+
+      for (const stat of reservationStats) {
+        reservationMap.set(stat.buyOrderId, { count: stat.count, quantity: stat.quantity })
+      }
+    }
+
     // Build final requests
-    const requests: MarketBuyRequest[] = filteredOrders.map(order => ({
-      id: order.id,
-      buyerName: order.buyerName,
-      commodityTicker: order.commodityTicker,
-      locationId: order.locationId,
-      quantity: order.quantity,
-      price: parseFloat(order.price),
-      currency: order.currency,
-      orderType: order.orderType,
-      isOwn: order.isOwn,
-      jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
-    }))
+    const requests: MarketBuyRequest[] = filteredOrders.map(order => {
+      const reservationData = reservationMap.get(order.id) ?? { count: 0, quantity: 0 }
+      const remainingQuantity = Math.max(0, order.quantity - reservationData.quantity)
+
+      return {
+        id: order.id,
+        buyerName: order.buyerName,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        quantity: order.quantity,
+        price: parseFloat(order.price),
+        currency: order.currency,
+        orderType: order.orderType,
+        isOwn: order.isOwn,
+        jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
+        activeReservationCount: reservationData.count,
+        reservedQuantity: reservationData.quantity,
+        remainingQuantity,
+      }
+    })
 
     // Sort by commodity, then location, then price (highest first for buy orders)
     // If destination provided, sort by jump count first

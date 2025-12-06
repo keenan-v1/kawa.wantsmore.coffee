@@ -96,11 +96,11 @@
                 <span v-bind="props">
                   <v-btn
                     color="primary"
-                    prepend-icon="mdi-cart-plus"
+                    prepend-icon="mdi-plus"
                     :disabled="!canCreateAnyOrders"
-                    @click="openBuyOrderDialog"
+                    @click="openOrderDialog"
                   >
-                    Add Buy Order
+                    Create Order
                   </v-btn>
                 </span>
               </template>
@@ -202,7 +202,23 @@
         </template>
 
         <template #item.quantity="{ item }">
-          <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+          <v-tooltip location="top">
+            <template #activator="{ props }">
+              <span v-bind="props" class="font-weight-medium">
+                {{ item.remainingQuantity.toLocaleString() }}
+                <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                  / {{ item.quantity.toLocaleString() }}
+                </span>
+              </span>
+            </template>
+            <div>
+              <div>Total: {{ item.quantity.toLocaleString() }}</div>
+              <div v-if="item.reservedQuantity > 0">
+                Reserved: {{ item.reservedQuantity.toLocaleString() }}
+              </div>
+              <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+            </div>
+          </v-tooltip>
         </template>
 
         <template #item.orderType="{ item }">
@@ -218,20 +234,39 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-menu v-if="item.isOwn">
+          <v-menu>
             <template #activator="{ props }">
               <v-btn v-bind="props" icon size="small" variant="text">
                 <v-icon>mdi-dots-vertical</v-icon>
               </v-btn>
             </template>
             <v-list density="compact">
-              <v-list-item @click="openEditDialog(item)">
+              <v-list-item @click="viewOrder(item)">
+                <template #prepend>
+                  <v-icon>mdi-eye</v-icon>
+                </template>
+                <v-list-item-title>View</v-list-item-title>
+              </v-list-item>
+              <v-list-item
+                v-if="!item.isOwn && canReserveOrder(item)"
+                @click="openReserveDialog(item)"
+              >
+                <template #prepend>
+                  <v-icon color="success">{{
+                    item.itemType === 'sell' ? 'mdi-cart-plus' : 'mdi-package-variant'
+                  }}</v-icon>
+                </template>
+                <v-list-item-title>{{
+                  item.itemType === 'sell' ? 'Reserve' : 'Fill'
+                }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item v-if="item.isOwn" @click="openEditDialog(item)">
                 <template #prepend>
                   <v-icon color="primary">mdi-pencil</v-icon>
                 </template>
                 <v-list-item-title>Edit</v-list-item-title>
               </v-list-item>
-              <v-list-item @click="openDeleteDialog(item)">
+              <v-list-item v-if="item.isOwn" @click="openDeleteDialog(item)">
                 <template #prepend>
                   <v-icon color="error">mdi-delete</v-icon>
                 </template>
@@ -352,6 +387,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
 import { api } from '../services/api'
 import { locationService } from '../services/locationService'
@@ -360,6 +396,7 @@ import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
+const router = useRouter()
 const userStore = useUserStore()
 
 // Unified market item type
@@ -375,6 +412,9 @@ interface MarketItem {
   currency: Currency
   orderType: OrderType
   quantity: number // availableQuantity or quantity
+  remainingQuantity: number
+  reservedQuantity: number
+  activeReservationCount: number
   isOwn: boolean
 }
 
@@ -433,6 +473,22 @@ const canCreateInternalOrders = computed(() =>
 const canCreatePartnerOrders = computed(() =>
   userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
 )
+
+// Check permissions for reservations
+const canReserveInternal = computed(() =>
+  userStore.hasPermission(PERMISSIONS.RESERVATIONS_PLACE_INTERNAL)
+)
+const canReservePartner = computed(() =>
+  userStore.hasPermission(PERMISSIONS.RESERVATIONS_PLACE_PARTNER)
+)
+
+const canReserveOrder = (item: MarketItem): boolean => {
+  if (item.isOwn) return false
+  if (item.remainingQuantity <= 0) return false
+  if (item.orderType === 'internal') return canReserveInternal.value
+  if (item.orderType === 'partner') return canReservePartner.value
+  return false
+}
 
 const orderTypes = computed(() => {
   const types: { title: string; value: OrderType }[] = []
@@ -603,6 +659,9 @@ const loadMarketItems = async () => {
       currency: listing.currency,
       orderType: listing.orderType,
       quantity: listing.availableQuantity,
+      remainingQuantity: listing.remainingQuantity,
+      reservedQuantity: listing.reservedQuantity,
+      activeReservationCount: listing.activeReservationCount,
       isOwn: listing.isOwn,
     }))
 
@@ -617,6 +676,9 @@ const loadMarketItems = async () => {
       currency: request.currency,
       orderType: request.orderType,
       quantity: request.quantity,
+      remainingQuantity: request.remainingQuantity,
+      reservedQuantity: request.reservedQuantity,
+      activeReservationCount: request.activeReservationCount,
       isOwn: request.isOwn,
     }))
 
@@ -638,9 +700,19 @@ const loadMarketItems = async () => {
   }
 }
 
-const openBuyOrderDialog = () => {
+const openOrderDialog = () => {
   orderDialogTab.value = 'buy'
   orderDialog.value = true
+}
+
+const viewOrder = (item: MarketItem) => {
+  router.push(`/orders/${item.itemType}/${item.id}`)
+}
+
+const openReserveDialog = (item: MarketItem) => {
+  // Navigate to order detail page where user can reserve
+  // In the future, this could open a ReservationDialog directly
+  router.push(`/orders/${item.itemType}/${item.id}`)
 }
 
 const onOrderCreated = async (type: 'buy' | 'sell') => {
