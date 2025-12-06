@@ -92,4 +92,13 @@ describe('PII redaction', () => {
       emailPattern.lastIndex = 0
     })
   })
+
+  it('should handle circular references without stack overflow', () => {
+    // Create an object with circular reference
+    const circular: Record<string, unknown> = { name: 'test' }
+    circular.self = circular
+
+    // This should not throw - just verify createLogger handles it
+    expect(() => createLogger(circular)).not.toThrow()
+  })
 })

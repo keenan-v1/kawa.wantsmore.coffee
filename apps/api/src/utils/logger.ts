@@ -21,7 +21,7 @@ const PII_FIELDS = [
 /**
  * Redact PII from log objects
  */
-function redactPII(obj: unknown): unknown {
+function redactPII(obj: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
   if (obj === null || obj === undefined) {
     return obj
   }
@@ -31,24 +31,30 @@ function redactPII(obj: unknown): unknown {
     return obj.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL_REDACTED]')
   }
 
+  if (typeof obj !== 'object') {
+    return obj
+  }
+
+  // Handle circular references
+  if (seen.has(obj)) {
+    return '[Circular]'
+  }
+  seen.add(obj)
+
   if (Array.isArray(obj)) {
-    return obj.map(redactPII)
+    return obj.map(item => redactPII(item, seen))
   }
 
-  if (typeof obj === 'object') {
-    const result: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      const lowerKey = key.toLowerCase()
-      if (PII_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
-        result[key] = '[REDACTED]'
-      } else {
-        result[key] = redactPII(value)
-      }
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    const lowerKey = key.toLowerCase()
+    if (PII_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
+      result[key] = '[REDACTED]'
+    } else {
+      result[key] = redactPII(value, seen)
     }
-    return result
   }
-
-  return obj
+  return result
 }
 
 /**
