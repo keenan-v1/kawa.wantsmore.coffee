@@ -27,10 +27,16 @@ const fetchCommodities = async (): Promise<Commodity[]> => {
 }
 
 export const commodityService = {
-  // Get all commodities
+  // Get all commodities (async)
   getAllCommodities: async (): Promise<Commodity[]> => {
     const commodities = await fetchCommodities()
     return [...commodities].sort((a, b) => a.ticker.localeCompare(b.ticker))
+  },
+
+  // Get all commodities from cache (synchronous, returns empty array if not loaded)
+  getAllCommoditiesSync: (): Commodity[] => {
+    if (!cachedCommodities) return []
+    return [...cachedCommodities].sort((a, b) => a.ticker.localeCompare(b.ticker))
   },
 
   // Get commodity by ticker

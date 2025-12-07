@@ -8,8 +8,9 @@ import {
   fioUserStorage,
   users,
   orderReservations,
+  priceLists,
 } from '../db/index.js'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, sql, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
 import { fioClient } from '../services/fio/client.js'
@@ -30,6 +31,9 @@ interface MarketListing {
   reservedQuantity: number // sum of quantities in active reservations
   remainingQuantity: number // availableQuantity - reservedQuantity
   fioUploadedAt: string | null // When seller's FIO inventory was last synced from game
+  referencePrice: number | null // Reference price from price lists (if requested)
+  priceDifference: number | null // Difference from reference: positive = above, negative = below
+  priceDifferencePercent: number | null // Percentage difference from reference
 }
 
 // Buy request from market (buy orders from all users)
@@ -48,6 +52,9 @@ interface MarketBuyRequest {
   reservedQuantity: number // sum of quantities in active reservations
   remainingQuantity: number // quantity - reservedQuantity
   fioUploadedAt: string | null // Not applicable for buy orders (always null)
+  referencePrice: number | null // Reference price from price lists (if requested)
+  priceDifference: number | null // Difference from reference: positive = above, negative = below
+  priceDifferencePercent: number | null // Percentage difference from reference
 }
 
 /**
@@ -78,13 +85,17 @@ export class MarketController extends Controller {
    * Get all available sell orders on the market (from other users)
    * Filters by order type based on user permissions
    * @param destination Location ID to calculate jump counts from (optional)
+   * @param includeReferencePrice Include reference prices from KAWA price list (default: false)
+   * @param referenceExchange Exchange to use for reference prices (default: KAWA)
    */
   @Get('listings')
   public async getMarketListings(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
     @Query() location?: string,
-    @Query() destination?: string
+    @Query() destination?: string,
+    @Query() includeReferencePrice?: boolean,
+    @Query() referenceExchange?: string
   ): Promise<MarketListing[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -240,6 +251,36 @@ export class MarketController extends Controller {
       }
     }
 
+    // Get reference prices if requested
+    const referencePriceMap = new Map<string, number>()
+    if (includeReferencePrice) {
+      const refExchange = (referenceExchange ?? 'KAWA').toUpperCase()
+      const uniqueKeys = [
+        ...new Set(filteredOrders.map(o => `${o.commodityTicker}:${o.locationId}:${o.currency}`)),
+      ]
+
+      // Fetch reference prices for all unique commodity/location/currency combinations
+      for (const key of uniqueKeys) {
+        const [ticker, loc, curr] = key.split(':')
+        const refPrice = await db
+          .select({ price: priceLists.price })
+          .from(priceLists)
+          .where(
+            and(
+              eq(priceLists.exchangeCode, refExchange),
+              eq(priceLists.commodityTicker, ticker),
+              eq(priceLists.locationId, loc),
+              eq(priceLists.currency, curr as Currency)
+            )
+          )
+          .limit(1)
+
+        if (refPrice.length > 0) {
+          referencePriceMap.set(key, parseFloat(refPrice[0].price))
+        }
+      }
+    }
+
     // Build final listings
     const listings: MarketListing[] = filteredOrders.map(order => {
       const reservationData = reservationMap.get(order.id) ?? {
@@ -253,12 +294,26 @@ export class MarketController extends Controller {
         order.availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
       )
 
+      const orderPrice = parseFloat(order.price)
+      const refKey = `${order.commodityTicker}:${order.locationId}:${order.currency}`
+      const referencePrice = referencePriceMap.get(refKey) ?? null
+      let priceDifference: number | null = null
+      let priceDifferencePercent: number | null = null
+
+      if (referencePrice !== null) {
+        priceDifference = Math.round((orderPrice - referencePrice) * 100) / 100
+        priceDifferencePercent =
+          referencePrice !== 0
+            ? Math.round(((orderPrice - referencePrice) / referencePrice) * 10000) / 100
+            : null
+      }
+
       return {
         id: order.id,
         sellerName: order.sellerName,
         commodityTicker: order.commodityTicker,
         locationId: order.locationId,
-        price: parseFloat(order.price),
+        price: orderPrice,
         currency: order.currency,
         orderType: order.orderType,
         availableQuantity: order.availableQuantity,
@@ -268,6 +323,9 @@ export class MarketController extends Controller {
         reservedQuantity: reservationData.quantity,
         remainingQuantity,
         fioUploadedAt: order.fioUploadedAt?.toISOString() ?? null,
+        referencePrice,
+        priceDifference,
+        priceDifferencePercent,
       }
     })
 
@@ -295,13 +353,17 @@ export class MarketController extends Controller {
    * Get all buy requests on the market (from all users)
    * Filters by order type based on user permissions
    * @param destination Location ID to calculate jump counts from (optional)
+   * @param includeReferencePrice Include reference prices from KAWA price list (default: false)
+   * @param referenceExchange Exchange to use for reference prices (default: KAWA)
    */
   @Get('buy-requests')
   public async getMarketBuyRequests(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
     @Query() location?: string,
-    @Query() destination?: string
+    @Query() destination?: string,
+    @Query() includeReferencePrice?: boolean,
+    @Query() referenceExchange?: string
   ): Promise<MarketBuyRequest[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -393,6 +455,35 @@ export class MarketController extends Controller {
       }
     }
 
+    // Get reference prices if requested
+    const buyReferencePriceMap = new Map<string, number>()
+    if (includeReferencePrice) {
+      const refExchange = (referenceExchange ?? 'KAWA').toUpperCase()
+      const uniqueKeys = [
+        ...new Set(filteredOrders.map(o => `${o.commodityTicker}:${o.locationId}:${o.currency}`)),
+      ]
+
+      for (const key of uniqueKeys) {
+        const [ticker, loc, curr] = key.split(':')
+        const refPrice = await db
+          .select({ price: priceLists.price })
+          .from(priceLists)
+          .where(
+            and(
+              eq(priceLists.exchangeCode, refExchange),
+              eq(priceLists.commodityTicker, ticker),
+              eq(priceLists.locationId, loc),
+              eq(priceLists.currency, curr as Currency)
+            )
+          )
+          .limit(1)
+
+        if (refPrice.length > 0) {
+          buyReferencePriceMap.set(key, parseFloat(refPrice[0].price))
+        }
+      }
+    }
+
     // Build final requests
     const requests: MarketBuyRequest[] = filteredOrders.map(order => {
       const reservationData = buyReservationMap.get(order.id) ?? {
@@ -406,13 +497,27 @@ export class MarketController extends Controller {
         order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
       )
 
+      const orderPrice = parseFloat(order.price)
+      const refKey = `${order.commodityTicker}:${order.locationId}:${order.currency}`
+      const referencePrice = buyReferencePriceMap.get(refKey) ?? null
+      let priceDifference: number | null = null
+      let priceDifferencePercent: number | null = null
+
+      if (referencePrice !== null) {
+        priceDifference = Math.round((orderPrice - referencePrice) * 100) / 100
+        priceDifferencePercent =
+          referencePrice !== 0
+            ? Math.round(((orderPrice - referencePrice) / referencePrice) * 10000) / 100
+            : null
+      }
+
       return {
         id: order.id,
         buyerName: order.buyerName,
         commodityTicker: order.commodityTicker,
         locationId: order.locationId,
         quantity: order.quantity,
-        price: parseFloat(order.price),
+        price: orderPrice,
         currency: order.currency,
         orderType: order.orderType,
         isOwn: order.isOwn,
@@ -421,6 +526,9 @@ export class MarketController extends Controller {
         reservedQuantity: reservationData.quantity,
         remainingQuantity,
         fioUploadedAt: null, // Not applicable for buy orders
+        referencePrice,
+        priceDifference,
+        priceDifferencePercent,
       }
     })
 

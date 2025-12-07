@@ -33,6 +33,14 @@
         </v-tooltip>
         <v-tooltip location="bottom">
           <template #activator="{ props }">
+            <v-btn v-bind="props" to="/prices" icon size="small" class="mx-1">
+              <v-icon>mdi-tag-multiple</v-icon>
+            </v-btn>
+          </template>
+          Price Lists
+        </v-tooltip>
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
             <v-btn v-bind="props" to="/account" icon size="small" class="mx-1">
               <v-icon>mdi-account-cog</v-icon>
             </v-btn>

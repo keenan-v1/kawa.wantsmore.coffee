@@ -433,4 +433,139 @@ export class PriceListController extends Controller {
   ): Promise<EffectivePrice[]> {
     return calculateEffectivePrices(exchange, locationId, currency)
   }
+
+  /**
+   * Export base prices as CSV for an exchange
+   * @param exchange The exchange code (KAWA, CI1, etc.)
+   * @param location Optional location filter
+   * @param currency Optional currency filter
+   */
+  @Get('export/{exchange}')
+  public async exportBasePrices(
+    @Path() exchange: string,
+    @Query() location?: string,
+    @Query() currency?: Currency
+  ): Promise<string> {
+    const conditions = [eq(priceLists.exchangeCode, exchange.toUpperCase())]
+    if (location) {
+      conditions.push(eq(priceLists.locationId, location.toUpperCase()))
+    }
+    if (currency) {
+      conditions.push(eq(priceLists.currency, currency))
+    }
+
+    const results = await db
+      .select({
+        exchangeCode: priceLists.exchangeCode,
+        commodityTicker: priceLists.commodityTicker,
+        commodityName: fioCommodities.name,
+        locationId: priceLists.locationId,
+        locationName: fioLocations.name,
+        price: priceLists.price,
+        currency: priceLists.currency,
+        source: priceLists.source,
+        updatedAt: priceLists.updatedAt,
+      })
+      .from(priceLists)
+      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+      .where(and(...conditions))
+      .orderBy(priceLists.commodityTicker, priceLists.locationId)
+
+    // Build CSV
+    const headers = [
+      'Ticker',
+      'Name',
+      'Location',
+      'LocationName',
+      'Price',
+      'Currency',
+      'Source',
+      'UpdatedAt',
+    ]
+    const rows = results.map(r => [
+      r.commodityTicker,
+      r.commodityName ?? '',
+      r.locationId,
+      r.locationName ?? '',
+      r.price,
+      r.currency,
+      r.source,
+      r.updatedAt?.toISOString() ?? '',
+    ])
+
+    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
+      '\n'
+    )
+
+    this.setHeader('Content-Type', 'text/csv')
+    this.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exchange.toUpperCase()}-base-prices.csv"`
+    )
+
+    return csv
+  }
+
+  /**
+   * Export effective prices (with adjustments applied) as CSV for an exchange
+   * @param exchange The exchange code (KAWA, CI1, etc.)
+   * @param locationId The location ID
+   * @param currency The currency
+   */
+  @Get('export/{exchange}/{locationId}/effective')
+  public async exportEffectivePrices(
+    @Path() exchange: string,
+    @Path() locationId: string,
+    @Query() currency: Currency
+  ): Promise<string> {
+    const results = await calculateEffectivePrices(exchange, locationId, currency)
+
+    // Build CSV
+    const headers = [
+      'Ticker',
+      'Name',
+      'Location',
+      'LocationName',
+      'BasePrice',
+      'FinalPrice',
+      'Currency',
+      'AdjustmentCount',
+      'Source',
+    ]
+    const rows = results.map(r => [
+      r.commodityTicker,
+      r.commodityName ?? '',
+      r.locationId,
+      r.locationName ?? '',
+      r.basePrice.toFixed(2),
+      r.finalPrice.toFixed(2),
+      r.currency,
+      r.adjustments.length.toString(),
+      r.source,
+    ])
+
+    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
+      '\n'
+    )
+
+    this.setHeader('Content-Type', 'text/csv')
+    this.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exchange.toUpperCase()}-${locationId.toUpperCase()}-effective-prices.csv"`
+    )
+
+    return csv
+  }
+}
+
+/**
+ * Escape a field for CSV output
+ * Wraps in quotes and escapes internal quotes if necessary
+ */
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
 }

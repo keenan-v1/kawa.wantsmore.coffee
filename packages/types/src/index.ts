@@ -53,6 +53,14 @@ export const PERMISSIONS = {
   RESERVATIONS_PLACE_PARTNER: 'reservations.place_partner',
   ADMIN_MANAGE_USERS: 'admin.manage_users',
   ADMIN_MANAGE_ROLES: 'admin.manage_roles',
+  // Price management
+  PRICES_VIEW: 'prices.view',
+  PRICES_MANAGE: 'prices.manage',
+  PRICES_IMPORT: 'prices.import',
+  PRICES_SYNC_FIO: 'prices.sync_fio',
+  ADJUSTMENTS_VIEW: 'adjustments.view',
+  ADJUSTMENTS_MANAGE: 'adjustments.manage',
+  IMPORT_CONFIGS_MANAGE: 'import_configs.manage',
 } as const
 
 // FIO inventory synced from game

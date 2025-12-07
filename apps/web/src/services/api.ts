@@ -179,6 +179,151 @@ interface FioLastSyncResponse {
   fioUploadedAt: string | null
 }
 
+// Price List types
+type PriceSource = 'manual' | 'csv_import' | 'google_sheets' | 'fio_exchange'
+
+interface PriceListResponse {
+  id: number
+  exchangeCode: string
+  commodityTicker: string
+  commodityName: string | null
+  locationId: string
+  locationName: string | null
+  price: string
+  currency: Currency
+  source: PriceSource
+  sourceReference: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreatePriceRequest {
+  exchangeCode: string
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  source?: PriceSource
+  sourceReference?: string | null
+}
+
+interface UpdatePriceRequest {
+  price?: number
+  currency?: Currency
+  source?: PriceSource
+  sourceReference?: string | null
+}
+
+// Effective Price types
+interface AppliedAdjustment {
+  id: number
+  description: string | null
+  type: 'percentage' | 'fixed'
+  value: number
+  appliedAmount: number
+}
+
+interface EffectivePrice {
+  exchangeCode: string
+  commodityTicker: string
+  commodityName: string | null
+  locationId: string
+  locationName: string | null
+  currency: Currency
+  basePrice: number
+  source: PriceSource
+  sourceReference: string | null
+  adjustments: AppliedAdjustment[]
+  finalPrice: number
+}
+
+// Price Adjustments types
+type AdjustmentType = 'percentage' | 'fixed'
+
+interface PriceAdjustmentResponse {
+  id: number
+  exchangeCode: string | null
+  commodityTicker: string | null
+  commodityName: string | null
+  locationId: string | null
+  locationName: string | null
+  currency: Currency | null
+  adjustmentType: AdjustmentType
+  adjustmentValue: string
+  priority: number
+  description: string | null
+  isActive: boolean
+  effectiveFrom: string | null
+  effectiveUntil: string | null
+  createdByUserId: number | null
+  createdByUsername: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreatePriceAdjustmentRequest {
+  exchangeCode?: string | null
+  commodityTicker?: string | null
+  locationId?: string | null
+  currency?: Currency | null
+  adjustmentType: AdjustmentType
+  adjustmentValue: number
+  priority?: number
+  description?: string | null
+  isActive?: boolean
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+interface UpdatePriceAdjustmentRequest {
+  exchangeCode?: string | null
+  commodityTicker?: string | null
+  locationId?: string | null
+  currency?: Currency | null
+  adjustmentType?: AdjustmentType
+  adjustmentValue?: number
+  priority?: number
+  description?: string | null
+  isActive?: boolean
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+// FIO Exchanges types
+interface FioExchangeResponse {
+  code: string
+  name: string
+  locationId: string | null
+  locationName: string | null
+  currency: Currency
+  createdAt: string
+}
+
+// FIO Price Sync types
+interface ExchangeSyncStatus {
+  exchangeCode: string
+  locationId: string | null
+  lastSyncedAt: string | null
+  priceCount: number
+}
+
+interface ExchangeSyncResultResponse {
+  exchangeCode: string
+  locationId: string | null
+  currency: Currency
+  pricesUpdated: number
+  pricesSkipped: number
+  syncedAt: string
+}
+
+interface SyncPricesResponse {
+  success: boolean
+  exchanges: ExchangeSyncResultResponse[]
+  totalUpdated: number
+  totalSkipped: number
+  errors: string[]
+}
+
 interface FioStatsResponse {
   totalItems: number
   totalQuantity: number
@@ -2176,6 +2321,312 @@ const realApi = {
 
     return response.json()
   },
+
+  // Price List methods
+  getPrices: async (
+    exchange?: string,
+    location?: string,
+    commodity?: string,
+    currency?: Currency
+  ): Promise<PriceListResponse[]> => {
+    const params = new URLSearchParams()
+    if (exchange) params.append('exchange', exchange)
+    if (location) params.append('location', location)
+    if (commodity) params.append('commodity', commodity)
+    if (currency) params.append('currency', currency)
+
+    const url = `/api/prices${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPricesByExchange: async (exchange: string): Promise<PriceListResponse[]> => {
+    const response = await fetchWithLogging(`/api/prices/${exchange}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPrice: async (request: CreatePriceRequest): Promise<PriceListResponse> => {
+    const response = await fetchWithLogging('/api/prices', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 409) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to create price: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePrice: async (id: number, request: UpdatePriceRequest): Promise<PriceListResponse> => {
+    const response = await fetchWithLogging(`/api/prices/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Price not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to update price: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePrice: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/prices/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Price not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to delete price: ${response.statusText}`)
+    }
+  },
+
+  getEffectivePrices: async (
+    exchange: string,
+    locationId: string,
+    currency: Currency
+  ): Promise<EffectivePrice[]> => {
+    const params = new URLSearchParams({ currency })
+    const response = await fetchWithLogging(
+      `/api/prices/effective/${exchange}/${locationId}?${params}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get effective prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Price Adjustments methods
+  getPriceAdjustments: async (
+    exchange?: string,
+    location?: string,
+    activeOnly?: boolean
+  ): Promise<PriceAdjustmentResponse[]> => {
+    const params = new URLSearchParams()
+    if (exchange) params.append('exchange', exchange)
+    if (location) params.append('location', location)
+    if (activeOnly !== undefined) params.append('activeOnly', String(activeOnly))
+
+    const url = `/api/price-adjustments${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get price adjustments: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPriceAdjustment: async (id: number): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      throw new Error(`Failed to get adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPriceAdjustment: async (
+    request: CreatePriceAdjustmentRequest
+  ): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging('/api/price-adjustments', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to create adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePriceAdjustment: async (
+    id: number,
+    request: UpdatePriceAdjustmentRequest
+  ): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to update adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePriceAdjustment: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to delete adjustment: ${response.statusText}`)
+    }
+  },
+
+  // FIO Exchanges methods
+  getFioExchanges: async (): Promise<FioExchangeResponse[]> => {
+    const response = await fetchWithLogging('/api/fio-exchanges', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get FIO exchanges: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // FIO Price Sync methods
+  getFioPriceSyncStatus: async (): Promise<ExchangeSyncStatus[]> => {
+    const response = await fetchWithLogging('/api/prices/sync/fio/status', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get sync status: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  syncFioPrices: async (
+    exchangeCode?: string,
+    priceField?: string
+  ): Promise<SyncPricesResponse> => {
+    const url = exchangeCode
+      ? `/api/prices/sync/fio/${exchangeCode}${priceField ? '?priceField=' + priceField : ''}`
+      : '/api/prices/sync/fio'
+
+    const response = await fetchWithLogging(url, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: exchangeCode ? undefined : JSON.stringify({ priceField }),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to sync prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -2307,6 +2758,34 @@ export const api = {
   locations: {
     getDistance: (from: string, to: string) => realApi.getLocationDistance(from, to),
   },
+  prices: {
+    list: (exchange?: string, location?: string, commodity?: string, currency?: Currency) =>
+      realApi.getPrices(exchange, location, commodity, currency),
+    getByExchange: (exchange: string) => realApi.getPricesByExchange(exchange),
+    create: (request: CreatePriceRequest) => realApi.createPrice(request),
+    update: (id: number, request: UpdatePriceRequest) => realApi.updatePrice(id, request),
+    delete: (id: number) => realApi.deletePrice(id),
+    getEffective: (exchange: string, locationId: string, currency: Currency) =>
+      realApi.getEffectivePrices(exchange, locationId, currency),
+  },
+  priceAdjustments: {
+    list: (exchange?: string, location?: string, activeOnly?: boolean) =>
+      realApi.getPriceAdjustments(exchange, location, activeOnly),
+    get: (id: number) => realApi.getPriceAdjustment(id),
+    create: (request: CreatePriceAdjustmentRequest) => realApi.createPriceAdjustment(request),
+    update: (id: number, request: UpdatePriceAdjustmentRequest) =>
+      realApi.updatePriceAdjustment(id, request),
+    delete: (id: number) => realApi.deletePriceAdjustment(id),
+  },
+  fioExchanges: {
+    list: () => realApi.getFioExchanges(),
+  },
+  fioPriceSync: {
+    getStatus: () => realApi.getFioPriceSyncStatus(),
+    syncAll: (priceField?: string) => realApi.syncFioPrices(undefined, priceField),
+    syncExchange: (exchangeCode: string, priceField?: string) =>
+      realApi.syncFioPrices(exchangeCode, priceField),
+  },
 }
 
 // Export types for use in components
@@ -2327,4 +2806,18 @@ export type {
   CreateSellOrderReservationRequest,
   CreateBuyOrderReservationRequest,
   UpdateReservationStatusRequest,
+  // Price types
+  PriceSource,
+  PriceListResponse,
+  CreatePriceRequest,
+  UpdatePriceRequest,
+  EffectivePrice,
+  AppliedAdjustment,
+  AdjustmentType,
+  PriceAdjustmentResponse,
+  CreatePriceAdjustmentRequest,
+  UpdatePriceAdjustmentRequest,
+  FioExchangeResponse,
+  ExchangeSyncStatus,
+  SyncPricesResponse,
 }

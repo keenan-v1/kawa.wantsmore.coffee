@@ -26,10 +26,16 @@ const fetchLocations = async (): Promise<Location[]> => {
 }
 
 export const locationService = {
-  // Get all locations
+  // Get all locations (async)
   getAllLocations: async (): Promise<Location[]> => {
     const locations = await fetchLocations()
     return [...locations].sort((a, b) => a.name.localeCompare(b.name))
+  },
+
+  // Get all locations from cache (synchronous, returns empty array if not loaded)
+  getAllLocationsSync: (): Location[] => {
+    if (!cachedLocations) return []
+    return [...cachedLocations].sort((a, b) => a.name.localeCompare(b.name))
   },
 
   // Get location by ID
