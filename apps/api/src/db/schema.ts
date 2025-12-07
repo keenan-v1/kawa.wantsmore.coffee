@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   index,
   jsonb,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -483,9 +484,7 @@ export const priceImportConfigs = pgTable(
     url: text('url').notNull(), // Full Google Sheets URL or CSV URL
     sheetGid: integer('sheet_gid'), // Specific sheet tab for Google Sheets (null = first sheet)
     fieldMapping: jsonb('field_mapping').notNull(), // CsvFieldMapping as JSON
-    locationDefault: varchar('location_default', { length: 20 }).references(
-      () => fioLocations.naturalId
-    ), // Default location_id
+    locationDefault: varchar('location_default', { length: 20 }), // Default location_id
     currencyDefault: currencyEnum('currency_default'), // Default currency
     autoSync: boolean('auto_sync').notNull().default(false), // Enable scheduled sync
     syncIntervalHours: integer('sync_interval_hours').notNull().default(24), // Hours between syncs
@@ -502,6 +501,12 @@ export const priceImportConfigs = pgTable(
     userIdx: index('price_import_configs_user_idx').on(table.createdByUserId),
     // Index for finding auto-sync configs
     autoSyncIdx: index('price_import_configs_auto_sync_idx').on(table.autoSync),
+    // FK for location default with short name to avoid PostgreSQL truncation
+    locationDefaultFk: foreignKey({
+      name: 'pic_location_default_fk',
+      columns: [table.locationDefault],
+      foreignColumns: [fioLocations.naturalId],
+    }),
   })
 )
 
