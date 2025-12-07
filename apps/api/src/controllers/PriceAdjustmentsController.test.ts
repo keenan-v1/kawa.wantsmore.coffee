@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PriceAdjustmentsController } from './PriceAdjustmentsController.js'
 import { db } from '../db/index.js'
-import type { AuthenticatedRequest } from '../middleware/authentication.js'
+import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 vi.mock('../db/index.js', () => ({
   db: {

@@ -3,7 +3,7 @@
 import { db, roles, permissions, rolePermissions, fioExchanges } from './index.js'
 import postgres from 'postgres'
 import { createLogger } from '../utils/logger.js'
-import type { Currency } from './schema.js'
+import type { Currency } from '@kawakawa/types'
 
 const log = createLogger({ script: 'seed' })
 

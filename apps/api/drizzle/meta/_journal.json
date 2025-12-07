@@ -22,6 +22,20 @@
       "when": 1765073421722,
       "tag": "0002_wet_sheva_callister",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1765124919952,
+      "tag": "0003_smiling_prima",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1765125277151,
+      "tag": "0004_right_quasimodo",
+      "breakpoints": true
     }
   ]
 }

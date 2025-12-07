@@ -67,6 +67,8 @@ export const priceSourceEnum = pgEnum('price_source', [
 
 export const adjustmentTypeEnum = pgEnum('adjustment_type', ['percentage', 'fixed'])
 
+export const importConfigTypeEnum = pgEnum('import_config_type', ['google_sheets', 'csv_url'])
+
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(
   'settings',
@@ -469,6 +471,40 @@ export const priceAdjustments = pgTable(
   })
 )
 
+// ==================== PRICE IMPORT CONFIGS (Saved import configurations) ====================
+// Stores configurations for importing prices from external sources (Google Sheets, CSV URLs)
+export const priceImportConfigs = pgTable(
+  'price_import_configs',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 100 }).notNull(), // Configuration name
+    type: importConfigTypeEnum('type').notNull(), // 'google_sheets' or 'csv_url'
+    exchangeCode: varchar('exchange_code', { length: 20 }).notNull(), // Target exchange for imported prices
+    url: text('url').notNull(), // Full Google Sheets URL or CSV URL
+    sheetGid: integer('sheet_gid'), // Specific sheet tab for Google Sheets (null = first sheet)
+    fieldMapping: jsonb('field_mapping').notNull(), // CsvFieldMapping as JSON
+    locationDefault: varchar('location_default', { length: 20 }).references(
+      () => fioLocations.naturalId
+    ), // Default location_id
+    currencyDefault: currencyEnum('currency_default'), // Default currency
+    autoSync: boolean('auto_sync').notNull().default(false), // Enable scheduled sync
+    syncIntervalHours: integer('sync_interval_hours').notNull().default(24), // Hours between syncs
+    lastSyncedAt: timestamp('last_synced_at'), // When last sync occurred
+    lastSyncResult: jsonb('last_sync_result'), // CsvImportResult as JSON
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Index for finding configs by user
+    userIdx: index('price_import_configs_user_idx').on(table.createdByUserId),
+    // Index for finding auto-sync configs
+    autoSyncIdx: index('price_import_configs_auto_sync_idx').on(table.autoSync),
+  })
+)
+
 // ==================== RELATIONS ====================
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -488,6 +524,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [userDiscordProfiles.userId],
   }),
   createdPriceAdjustments: many(priceAdjustments), // Adjustments created by this user
+  priceImportConfigs: many(priceImportConfigs), // Import configurations created by this user
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -686,5 +723,16 @@ export const priceAdjustmentsRelations = relations(priceAdjustments, ({ one }) =
   createdByUser: one(users, {
     fields: [priceAdjustments.createdByUserId],
     references: [users.id],
+  }),
+}))
+
+export const priceImportConfigsRelations = relations(priceImportConfigs, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [priceImportConfigs.createdByUserId],
+    references: [users.id],
+  }),
+  defaultLocation: one(fioLocations, {
+    fields: [priceImportConfigs.locationDefault],
+    references: [fioLocations.naturalId],
   }),
 }))
