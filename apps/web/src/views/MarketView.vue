@@ -96,11 +96,11 @@
                 <span v-bind="props">
                   <v-btn
                     color="primary"
-                    prepend-icon="mdi-cart-plus"
+                    prepend-icon="mdi-plus"
                     :disabled="!canCreateAnyOrders"
-                    @click="openBuyOrderDialog"
+                    @click="openOrderDialog"
                   >
-                    Add Buy Order
+                    Create Order
                   </v-btn>
                 </span>
               </template>
@@ -189,6 +189,18 @@
           </div>
         </template>
 
+        <template #item.fioUploadedAt="{ item }">
+          <v-chip
+            v-if="item.fioUploadedAt"
+            size="small"
+            variant="tonal"
+            :color="getFioAgeColor(item.fioUploadedAt)"
+          >
+            {{ formatFioAge(item.fioUploadedAt) }}
+          </v-chip>
+          <span v-else class="text-medium-emphasis text-caption">—</span>
+        </template>
+
         <template #item.price="{ item }">
           <span class="font-weight-medium">
             {{
@@ -202,7 +214,24 @@
         </template>
 
         <template #item.quantity="{ item }">
-          <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+          <v-tooltip location="top">
+            <template #activator="{ props }">
+              <span v-bind="props" class="font-weight-medium">
+                {{ item.remainingQuantity.toLocaleString() }}
+                <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                  / {{ item.quantity.toLocaleString() }}
+                </span>
+              </span>
+            </template>
+            <div>
+              <div>Total: {{ item.quantity.toLocaleString() }}</div>
+              <div v-if="item.reservedQuantity > 0">
+                {{ item.itemType === 'buy' ? 'Filled' : 'Reserved' }}:
+                {{ item.reservedQuantity.toLocaleString() }}
+              </div>
+              <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+            </div>
+          </v-tooltip>
         </template>
 
         <template #item.orderType="{ item }">
@@ -217,21 +246,39 @@
           </v-chip>
         </template>
 
+        <template #item.reserve="{ item }">
+          <v-btn
+            v-if="!item.isOwn && canReserveOrder(item)"
+            size="small"
+            variant="tonal"
+            :color="item.itemType === 'sell' ? 'warning' : 'success'"
+            @click.stop="openReserveDialog(item)"
+          >
+            {{ item.itemType === 'sell' ? 'Reserve' : 'Fill' }}
+          </v-btn>
+        </template>
+
         <template #item.actions="{ item }">
-          <v-menu v-if="item.isOwn">
+          <v-menu>
             <template #activator="{ props }">
               <v-btn v-bind="props" icon size="small" variant="text">
                 <v-icon>mdi-dots-vertical</v-icon>
               </v-btn>
             </template>
             <v-list density="compact">
-              <v-list-item @click="openEditDialog(item)">
+              <v-list-item @click="viewOrder(item)">
+                <template #prepend>
+                  <v-icon>mdi-eye</v-icon>
+                </template>
+                <v-list-item-title>View</v-list-item-title>
+              </v-list-item>
+              <v-list-item v-if="item.isOwn" @click="openEditDialog(item)">
                 <template #prepend>
                   <v-icon color="primary">mdi-pencil</v-icon>
                 </template>
                 <v-list-item-title>Edit</v-list-item-title>
               </v-list-item>
-              <v-list-item @click="openDeleteDialog(item)">
+              <v-list-item v-if="item.isOwn" @click="openDeleteDialog(item)">
                 <template #prepend>
                   <v-icon color="error">mdi-delete</v-icon>
                 </template>
@@ -347,6 +394,22 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Reservation Dialog -->
+    <ReservationDialog
+      v-model="reserveDialog"
+      :order="reservingItem"
+      @reserved="onReservationCreated"
+    />
+
+    <!-- Order Detail Dialog -->
+    <OrderDetailDialog
+      v-model="orderDetailDialog"
+      :order-type="orderDetailType"
+      :order-id="orderDetailId"
+      @deleted="loadMarketItems"
+      @updated="loadMarketItems"
+    />
   </v-container>
 </template>
 
@@ -358,6 +421,8 @@ import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
+import OrderDetailDialog from '../components/OrderDetailDialog.vue'
+import ReservationDialog from '../components/ReservationDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
@@ -375,7 +440,11 @@ interface MarketItem {
   currency: Currency
   orderType: OrderType
   quantity: number // availableQuantity or quantity
+  remainingQuantity: number
+  reservedQuantity: number
+  activeReservationCount: number
   isOwn: boolean
+  fioUploadedAt: string | null // When seller's FIO inventory was last synced
 }
 
 interface Filters {
@@ -400,14 +469,46 @@ const getCommodityCategory = (ticker: string): string | null => {
   return commodityService.getCommodityCategory(ticker)
 }
 
+// Format FIO age as a short duration (e.g., "2h", "3d")
+const formatFioAge = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  const now = Date.now()
+  const diffMs = now - date.getTime()
+
+  if (diffMs < 0) return 'Future?'
+
+  const minutes = Math.floor(diffMs / (1000 * 60))
+  const hours = Math.floor(diffMs / (1000 * 60 * 60))
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (days > 0) return `${days}d`
+  if (hours > 0) return `${hours}h`
+  if (minutes > 0) return `${minutes}m`
+  return '<1m'
+}
+
+// Get color based on FIO data age (fresh = green, stale = red)
+const getFioAgeColor = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  const now = Date.now()
+  const hoursAgo = (now - date.getTime()) / (1000 * 60 * 60)
+
+  if (hoursAgo < 1) return 'success' // Less than 1 hour - very fresh
+  if (hoursAgo < 24) return 'default' // Less than 24 hours - fine
+  if (hoursAgo < 72) return 'warning' // 1-3 days - getting stale
+  return 'error' // More than 3 days - very stale
+}
+
 const headers = [
   { title: '', key: 'itemType', sortable: true, width: 70 },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'User', key: 'userName', sortable: true },
+  { title: 'FIO Age', key: 'fioUploadedAt', sortable: true },
   { title: 'Price', key: 'price', sortable: true, align: 'end' as const },
   { title: 'Visibility', key: 'orderType', sortable: true },
+  { title: '', key: 'reserve', sortable: false, width: 90 },
   { title: '', key: 'actions', sortable: false, width: 50 },
 ]
 
@@ -417,6 +518,11 @@ const search = ref('')
 
 const orderDialog = ref(false)
 const orderDialogTab = ref<'buy' | 'sell'>('buy')
+
+// Order detail dialog
+const orderDetailDialog = ref(false)
+const orderDetailType = ref<'sell' | 'buy'>('sell')
+const orderDetailId = ref<number>(0)
 
 // Edit dialog
 const editDialog = ref(false)
@@ -433,6 +539,22 @@ const canCreateInternalOrders = computed(() =>
 const canCreatePartnerOrders = computed(() =>
   userStore.hasPermission(PERMISSIONS.ORDERS_POST_PARTNER)
 )
+
+// Check permissions for reservations
+const canReserveInternal = computed(() =>
+  userStore.hasPermission(PERMISSIONS.RESERVATIONS_PLACE_INTERNAL)
+)
+const canReservePartner = computed(() =>
+  userStore.hasPermission(PERMISSIONS.RESERVATIONS_PLACE_PARTNER)
+)
+
+const canReserveOrder = (item: MarketItem): boolean => {
+  if (item.isOwn) return false
+  if (item.remainingQuantity <= 0) return false
+  if (item.orderType === 'internal') return canReserveInternal.value
+  if (item.orderType === 'partner') return canReservePartner.value
+  return false
+}
 
 const orderTypes = computed(() => {
   const types: { title: string; value: OrderType }[] = []
@@ -460,6 +582,10 @@ const deleteDialog = ref(false)
 const deletingItem = ref<MarketItem | null>(null)
 const deleting = ref(false)
 
+// Reserve dialog
+const reserveDialog = ref(false)
+const reservingItem = ref<MarketItem | null>(null)
+
 // Filters
 const filters = ref<Filters>({
   itemType: null,
@@ -470,9 +596,12 @@ const filters = ref<Filters>({
   orderType: null,
 })
 
-// Row highlighting for own orders
-const getRowProps = ({ item }: { item: MarketItem }) => {
-  return item.isOwn ? { class: 'own-listing-row' } : {}
+// Row highlighting for own orders and alternating colors
+const getRowProps = ({ item, index }: { item: MarketItem; index: number }) => {
+  const classes: string[] = []
+  if (item.isOwn) classes.push('own-listing-row')
+  if (index % 2 === 1) classes.push('alt-row')
+  return classes.length > 0 ? { class: classes.join(' ') } : {}
 }
 
 // Computed filter options based on market items data
@@ -603,7 +732,11 @@ const loadMarketItems = async () => {
       currency: listing.currency,
       orderType: listing.orderType,
       quantity: listing.availableQuantity,
+      remainingQuantity: listing.remainingQuantity,
+      reservedQuantity: listing.reservedQuantity,
+      activeReservationCount: listing.activeReservationCount,
       isOwn: listing.isOwn,
+      fioUploadedAt: listing.fioUploadedAt,
     }))
 
     // Transform buy requests to unified format
@@ -617,7 +750,11 @@ const loadMarketItems = async () => {
       currency: request.currency,
       orderType: request.orderType,
       quantity: request.quantity,
+      remainingQuantity: request.remainingQuantity,
+      reservedQuantity: request.reservedQuantity,
+      activeReservationCount: request.activeReservationCount,
       isOwn: request.isOwn,
+      fioUploadedAt: request.fioUploadedAt,
     }))
 
     // Combine and sort by commodity, then location, then price
@@ -638,9 +775,25 @@ const loadMarketItems = async () => {
   }
 }
 
-const openBuyOrderDialog = () => {
+const openOrderDialog = () => {
   orderDialogTab.value = 'buy'
   orderDialog.value = true
+}
+
+const viewOrder = (item: MarketItem) => {
+  orderDetailType.value = item.itemType
+  orderDetailId.value = item.id
+  orderDetailDialog.value = true
+}
+
+const openReserveDialog = (item: MarketItem) => {
+  reservingItem.value = item
+  reserveDialog.value = true
+}
+
+const onReservationCreated = async () => {
+  showSnackbar('Reservation created successfully')
+  await loadMarketItems()
 }
 
 const onOrderCreated = async (type: 'buy' | 'sell') => {
@@ -749,6 +902,15 @@ onMounted(() => {
 <style>
 /* Non-scoped to target v-data-table rows */
 .own-listing-row {
+  background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
+
+.alt-row {
+  background-color: rgba(var(--v-theme-on-surface), 0.03) !important;
+}
+
+/* Ensure own-listing-row takes precedence over alt-row */
+.own-listing-row.alt-row {
   background-color: rgba(var(--v-theme-info), 0.08) !important;
 }
 </style>

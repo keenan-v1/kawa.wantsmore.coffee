@@ -39,6 +39,12 @@ vi.mock('../db/index.js', () => ({
   fioLocations: {
     naturalId: 'naturalId',
   },
+  orderReservations: {
+    sellOrderId: 'sellOrderId',
+    buyOrderId: 'buyOrderId',
+    quantity: 'quantity',
+    status: 'status',
+  },
 }))
 
 vi.mock('../utils/permissionService.js', () => ({
@@ -53,6 +59,17 @@ describe('SellOrdersController', () => {
   let mockDelete: any
   const mockRequest = { user: { userId: 1, username: 'testuser', roles: ['member'] } }
 
+  // Helper to create a chainable mock for where() that supports .groupBy()
+  const createWhereChainWithGroupBy = (groupByResult: any[]) => {
+    const chain: any = {
+      groupBy: vi.fn().mockResolvedValue(groupByResult),
+    }
+    // Make the chain thenable in case it's awaited without groupBy
+    chain.then = (resolve: any) => Promise.resolve([]).then(resolve)
+    chain.catch = (reject: any) => Promise.resolve([]).catch(reject)
+    return chain
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     controller = new SellOrdersController()
@@ -61,7 +78,8 @@ describe('SellOrdersController', () => {
       from: vi.fn().mockReturnThis(),
       leftJoin: vi.fn().mockReturnThis(),
       innerJoin: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),
+      groupBy: vi.fn().mockResolvedValue([]),
     }
     mockInsert = {
       values: vi.fn().mockReturnThis(),
@@ -110,14 +128,22 @@ describe('SellOrdersController', () => {
           limitQuantity: 200,
         },
       ]
-      // Second query returns inventory with location from storage
+      // Second query returns inventory with location from storage (now includes lastSyncedAt)
       const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' },
-        { commodityTicker: 'RAT', quantity: 500, locationId: 'BEN' },
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
+        { commodityTicker: 'RAT', quantity: 500, locationId: 'BEN', lastSyncedAt: new Date() },
       ]
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      // Query sequence:
+      // 1. Orders query
+      // 2. Inventory query
+      // 3. Reservation stats query (uses .groupBy())
+      // 4. Fulfilled reservations query
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats with groupBy
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -133,6 +159,10 @@ describe('SellOrdersController', () => {
         limitQuantity: null,
         fioQuantity: 1000,
         availableQuantity: 1000, // none mode: full quantity
+        activeReservationCount: 0,
+        reservedQuantity: 0,
+        fulfilledQuantity: 0,
+        remainingQuantity: 1000,
       })
       expect(result[1]).toEqual({
         id: 2,
@@ -145,6 +175,10 @@ describe('SellOrdersController', () => {
         limitQuantity: 200,
         fioQuantity: 500,
         availableQuantity: 200, // max_sell mode: min(500, 200)
+        activeReservationCount: 0,
+        reservedQuantity: 0,
+        fulfilledQuantity: 0,
+        remainingQuantity: 200,
       })
     })
 
@@ -161,10 +195,15 @@ describe('SellOrdersController', () => {
           limitQuantity: 500,
         },
       ]
-      const mockInventory = [{ commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN' }]
+      const mockInventory = [
+        { commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN', lastSyncedAt: new Date() },
+      ]
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -187,8 +226,11 @@ describe('SellOrdersController', () => {
       // No inventory for this location/commodity
       const mockInventory: any[] = []
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -218,10 +260,15 @@ describe('SellOrdersController', () => {
           limitQuantity: null,
         },
       ]
-      const mockInventory = [{ commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
+      ]
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -242,9 +289,14 @@ describe('SellOrdersController', () => {
         limitMode: 'none',
         limitQuantity: null,
       }
-      // First query: get order, Second query: getInventoryQuantity
+      // First query: get order
       mockSelect.where.mockResolvedValueOnce([mockOrder])
-      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000 }])
+      // Second query: getInventoryWithSyncTime
+      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000, lastSyncedAt: new Date() }])
+      // Third query: getReservationCounts - active stats
+      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }])
+      // Fourth query: getReservationCounts - fulfilled reservations (for FIO-backed 'none' mode)
+      mockSelect.where.mockResolvedValueOnce([])
 
       const result = await controller.getSellOrder(1, mockRequest)
 
@@ -599,7 +651,9 @@ describe('SellOrdersController', () => {
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory
+      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory (with sync time)
+      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
+      mockSelect.where.mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.updateSellOrder(1, { price: 150 }, mockRequest)
 
@@ -622,7 +676,9 @@ describe('SellOrdersController', () => {
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory
+      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory (with sync time)
+      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
+      mockSelect.where.mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.updateSellOrder(1, { orderType: 'partner' }, mockRequest)
 
@@ -660,7 +716,9 @@ describe('SellOrdersController', () => {
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000 }])
+      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000, lastSyncedAt: new Date() }])
+      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
+      mockSelect.where.mockResolvedValueOnce([{ total: 0 }]) // fulfilled total (max_sell uses sum query)
 
       const result = await controller.updateSellOrder(
         1,
@@ -723,10 +781,15 @@ describe('SellOrdersController', () => {
           limitQuantity: 1500, // Reserve more than we have
         },
       ]
-      const mockInventory = [{ commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN' }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
+      ]
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -747,10 +810,15 @@ describe('SellOrdersController', () => {
           limitQuantity: 2000, // Want to sell more than we have
         },
       ]
-      const mockInventory = [{ commodityTicker: 'H2O', quantity: 500, locationId: 'BEN' }]
+      const mockInventory = [
+        { commodityTicker: 'H2O', quantity: 500, locationId: 'BEN', lastSyncedAt: new Date() },
+      ]
 
-      mockSelect.where.mockResolvedValueOnce(mockOrders)
-      mockSelect.where.mockResolvedValueOnce(mockInventory)
+      mockSelect.where
+        .mockResolvedValueOnce(mockOrders)
+        .mockResolvedValueOnce(mockInventory)
+        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
+        .mockResolvedValueOnce([]) // fulfilled reservations
 
       const result = await controller.getSellOrders(mockRequest)
 

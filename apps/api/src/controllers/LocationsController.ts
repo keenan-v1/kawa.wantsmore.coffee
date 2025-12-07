@@ -1,6 +1,8 @@
 import { Controller, Get, Path, Query, Route, Tags } from 'tsoa'
 import { db, fioLocations } from '../db/index.js'
 import { eq, sql } from 'drizzle-orm'
+import { fioClient } from '../services/fio/client.js'
+import { BadRequest } from '../utils/errors.js'
 
 type LocationType = 'Station' | 'Planet'
 
@@ -150,5 +152,28 @@ export class LocationsController extends Controller {
       .orderBy(fioLocations.systemName)
 
     return results
+  }
+
+  /**
+   * Get the jump count (distance) between two locations
+   * @param from Starting location ID (system, planet ID, or planet name)
+   * @param to Destination location ID (system, planet ID, or planet name)
+   */
+  @Get('distance')
+  public async getDistance(
+    @Query() from: string,
+    @Query() to: string
+  ): Promise<{ from: string; to: string; jumpCount: number | null }> {
+    if (!from || !to) {
+      throw BadRequest('Both "from" and "to" parameters are required')
+    }
+
+    const jumpCount = await fioClient.getJumpCount(from, to)
+
+    return {
+      from,
+      to,
+      jumpCount,
+    }
   }
 }

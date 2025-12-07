@@ -112,7 +112,31 @@
                     label="Commodity Display Mode"
                     prepend-icon="mdi-package-variant"
                     hint="How to display commodity names in dropdowns and tables"
+                    class="mb-4"
                   />
+
+                  <v-divider class="my-4" />
+
+                  <div class="text-subtitle-1 font-weight-bold mb-3">Notifications</div>
+
+                  <div class="d-flex align-center">
+                    <v-switch
+                      v-model="browserNotificationsEnabled"
+                      color="primary"
+                      hide-details
+                      @change="handleBrowserNotificationToggle"
+                    >
+                      <template #prepend>
+                        <v-icon>mdi-bell-ring</v-icon>
+                      </template>
+                    </v-switch>
+                    <div class="ml-2">
+                      <div class="text-body-2">Browser Notifications</div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ browserNotificationStatus }}
+                      </div>
+                    </div>
+                  </div>
                 </v-form>
               </v-col>
             </v-row>
@@ -770,6 +794,71 @@ const syncingRoles = ref(false)
 // Delete account state
 const deleteAccountDialog = ref(false)
 const deletingAccount = ref(false)
+
+// Browser notifications
+const browserNotificationsEnabled = ref(userStore.getBrowserNotificationsEnabled())
+
+const browserNotificationStatus = computed(() => {
+  if (!('Notification' in window)) {
+    return 'Not supported by your browser'
+  }
+
+  if (window.Notification.permission === 'denied') {
+    return 'Blocked by browser - enable in browser settings'
+  }
+
+  if (browserNotificationsEnabled.value) {
+    if (window.Notification.permission === 'granted') {
+      return 'Enabled - you will receive browser notifications'
+    }
+    return 'Pending permission request'
+  }
+
+  return 'Disabled - enable to receive browser notifications'
+})
+
+const handleBrowserNotificationToggle = async () => {
+  if (browserNotificationsEnabled.value) {
+    // User wants to enable notifications
+    if (!('Notification' in window)) {
+      showSnackbar('Browser notifications are not supported', 'error')
+      browserNotificationsEnabled.value = false
+      return
+    }
+
+    if (window.Notification.permission === 'denied') {
+      showSnackbar(
+        'Browser notifications are blocked. Please enable them in your browser settings.',
+        'error'
+      )
+      browserNotificationsEnabled.value = false
+      return
+    }
+
+    if (window.Notification.permission !== 'granted') {
+      // Request permission
+      const permission = await window.Notification.requestPermission()
+      if (permission !== 'granted') {
+        showSnackbar('Browser notification permission was denied', 'error')
+        browserNotificationsEnabled.value = false
+        return
+      }
+    }
+
+    userStore.setBrowserNotificationsEnabled(true)
+    showSnackbar('Browser notifications enabled')
+
+    // Show a test notification
+    new window.Notification('Kawakawa CX', {
+      body: 'Browser notifications are now enabled!',
+      icon: '/logo.svg',
+    })
+  } else {
+    // User wants to disable notifications
+    userStore.setBrowserNotificationsEnabled(false)
+    showSnackbar('Browser notifications disabled')
+  }
+}
 
 // Computed Discord avatar URL
 const discordAvatarUrl = computed(() => {

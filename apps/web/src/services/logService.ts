@@ -179,12 +179,30 @@ export const logger = {
   flush: () => flushLogs(),
 }
 
+// Error messages to ignore (harmless browser warnings)
+const IGNORED_ERROR_PATTERNS = [
+  /ResizeObserver loop/i,
+  /ResizeObserver loop completed with undelivered notifications/i,
+]
+
+/**
+ * Check if an error message should be ignored
+ */
+function shouldIgnoreError(message: string): boolean {
+  return IGNORED_ERROR_PATTERNS.some(pattern => pattern.test(message))
+}
+
 /**
  * Install global error handlers
  */
 export function installErrorHandlers(): void {
   // Capture unhandled errors
   window.addEventListener('error', event => {
+    // Filter out harmless browser warnings
+    if (shouldIgnoreError(event.message)) {
+      return
+    }
+
     logger.error('Unhandled error', {
       message: event.message,
       filename: event.filename,
@@ -219,6 +237,16 @@ export function installErrorHandlers(): void {
   })
 }
 
+// Endpoints to skip logging (high-frequency polling, etc.)
+const SKIP_LOGGING_ENDPOINTS = ['/api/notifications/unread-count']
+
+/**
+ * Check if an endpoint should skip logging
+ */
+function shouldSkipLogging(url: string): boolean {
+  return SKIP_LOGGING_ENDPOINTS.some(endpoint => url.includes(endpoint))
+}
+
 /**
  * Fetch wrapper that automatically logs API errors
  * Use this instead of raw fetch() for API calls
@@ -234,7 +262,8 @@ export async function fetchWithLogging(
     const response = await fetch(input, init)
 
     // Log non-successful responses (but not 401 which is expected for auth flows)
-    if (!response.ok && response.status !== 401) {
+    // Skip logging for high-frequency polling endpoints
+    if (!response.ok && response.status !== 401 && !shouldSkipLogging(url)) {
       // Try to get error message from response body
       let errorBody: string | undefined
       try {
@@ -257,11 +286,14 @@ export async function fetchWithLogging(
     return response
   } catch (error) {
     // Network errors (fetch itself failed)
-    logger.error('API network error', {
-      url: sanitizeUrl(url),
-      method,
-      errorMessage: error instanceof Error ? error.message : String(error),
-    })
+    // Skip logging for high-frequency polling endpoints
+    if (!shouldSkipLogging(url)) {
+      logger.error('API network error', {
+        url: sanitizeUrl(url),
+        method,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+    }
     throw error
   }
 }

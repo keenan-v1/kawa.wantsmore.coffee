@@ -12,11 +12,15 @@ const app = express()
 // HTTP request logging with PII redaction
 const httpLoggerOptions: PinoHttpOptions = {
   logger,
-  // Don't log health checks or static assets
+  // Don't log health checks, static assets, or high-frequency polling endpoints
   autoLogging: {
     ignore: req => {
       const url = req.url || ''
-      return url === '/health' || url.startsWith('/docs')
+      return (
+        url === '/health' ||
+        url.startsWith('/docs') ||
+        url.startsWith('/notifications/unread-count')
+      )
     },
   },
   // Redact sensitive headers

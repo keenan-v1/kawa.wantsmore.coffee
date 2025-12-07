@@ -18,10 +18,21 @@ export class FioApiError extends Error {
 export class FioClient {
   private baseUrl: string
   private apiKey?: string
+  // Cache for jump counts - planets don't move relative to each other
+  private jumpCountCache: Map<string, number | null> = new Map()
 
   constructor(apiKey?: string) {
     this.baseUrl = FIO_BASE_URL
     this.apiKey = apiKey
+  }
+
+  /**
+   * Get cache key for jump count lookups (order-independent)
+   */
+  private getJumpCacheKey(from: string, to: string): string {
+    // Sort alphabetically to ensure same key regardless of direction
+    const sorted = [from.toUpperCase(), to.toUpperCase()].sort()
+    return `${sorted[0]}:${sorted[1]}`
   }
 
   /**
@@ -358,6 +369,51 @@ export class FioClient {
         `Failed to fetch GroupHub data from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
     }
+  }
+
+  /**
+   * Get the jump count (number of system jumps) between two locations
+   * Locations can be: SystemId, PlanetId, PlanetNaturalId, or PlanetName
+   * Results are cached since planetary distances don't change.
+   * @returns Jump count or null if route not found
+   */
+  async getJumpCount(from: string, to: string): Promise<number | null> {
+    // Check cache first
+    const cacheKey = this.getJumpCacheKey(from, to)
+    if (this.jumpCountCache.has(cacheKey)) {
+      return this.jumpCountCache.get(cacheKey)!
+    }
+
+    try {
+      const response = await this.fetchJson<number>(
+        `/systemstars/jumpcount/${encodeURIComponent(from)}/${encodeURIComponent(to)}`
+      )
+      // Cache the result
+      this.jumpCountCache.set(cacheKey, response)
+      return response
+    } catch (error) {
+      // Return null if route not found (404) or other errors
+      if (error instanceof FioApiError && error.statusCode === 404) {
+        // Cache the null result too (route doesn't exist)
+        this.jumpCountCache.set(cacheKey, null)
+        return null
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Get the current cache size for jump counts
+   */
+  getJumpCountCacheSize(): number {
+    return this.jumpCountCache.size
+  }
+
+  /**
+   * Clear the jump count cache (useful for testing)
+   */
+  clearJumpCountCache(): void {
+    this.jumpCountCache.clear()
   }
 }
 

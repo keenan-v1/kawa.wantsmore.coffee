@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   ORDERS_POST_INTERNAL: 'orders.post_internal',
   ORDERS_VIEW_PARTNER: 'orders.view_partner',
   ORDERS_POST_PARTNER: 'orders.post_partner',
+  RESERVATIONS_PLACE_INTERNAL: 'reservations.place_internal',
+  RESERVATIONS_PLACE_PARTNER: 'reservations.place_partner',
   ADMIN_MANAGE_USERS: 'admin.manage_users',
   ADMIN_MANAGE_ROLES: 'admin.manage_roles',
 } as const
@@ -110,6 +112,26 @@ export interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // availableQuantity - reservedQuantity
+}
+
+export interface MarketBuyRequest {
+  id: number
+  buyerName: string
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: number
+  currency: Currency
+  orderType: OrderType
+  isOwn: boolean
+  jumpCount: number | null // Jump count from destination (null if no destination specified)
+  activeReservationCount: number // count of pending/confirmed reservations
+  reservedQuantity: number // sum of quantities in active reservations
+  remainingQuantity: number // quantity - reservedQuantity
 }
 
 // ==================== DISCORD INTEGRATION ====================
@@ -253,4 +275,121 @@ export interface DiscordRegisterResponse {
   token: string
   user: DiscordAuthUser
   needsProfileCompletion: boolean
+}
+
+// ==================== NOTIFICATIONS ====================
+
+export type NotificationType =
+  | 'reservation_placed'
+  | 'reservation_confirmed'
+  | 'reservation_rejected'
+  | 'reservation_fulfilled'
+  | 'reservation_cancelled'
+  | 'reservation_expired'
+  | 'user_needs_approval'
+  | 'user_auto_approved'
+  | 'user_approved'
+  | 'user_rejected'
+
+export const NOTIFICATION_TYPES: NotificationType[] = [
+  'reservation_placed',
+  'reservation_confirmed',
+  'reservation_rejected',
+  'reservation_fulfilled',
+  'reservation_cancelled',
+  'reservation_expired',
+  'user_needs_approval',
+  'user_auto_approved',
+  'user_approved',
+  'user_rejected',
+]
+
+export interface Notification {
+  id: number
+  type: NotificationType
+  title: string
+  message: string | null
+  data: Record<string, unknown> | null // { orderId, reservationId, counterpartyId, roles, etc. }
+  isRead: boolean
+  createdAt: string // ISO date string
+}
+
+export interface NotificationUnreadCount {
+  count: number
+}
+
+// ==================== ORDER RESERVATIONS ====================
+
+export type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'fulfilled'
+  | 'expired'
+  | 'cancelled'
+
+export const RESERVATION_STATUSES: ReservationStatus[] = [
+  'pending',
+  'confirmed',
+  'rejected',
+  'fulfilled',
+  'expired',
+  'cancelled',
+]
+
+export interface OrderReservation {
+  id: number
+  // One of these will be set - indicates which order is being reserved from / filled
+  sellOrderId: number | null // Set when reserving from a sell order
+  buyOrderId: number | null // Set when filling a buy order
+  counterpartyUserId: number // The user making the reservation
+  quantity: number
+  status: ReservationStatus
+  notes: string | null
+  expiresAt: string | null // ISO date string
+  createdAt: string // ISO date string
+  updatedAt: string // ISO date string
+}
+
+// Reservation with related order and user info
+export interface ReservationWithDetails extends OrderReservation {
+  // The order owner (seller if sellOrderId set, buyer if buyOrderId set)
+  orderOwnerName: string
+  orderOwnerUserId: number
+  // The counterparty (buyer if sellOrderId set, seller if buyOrderId set)
+  counterpartyName: string
+  // Order details
+  commodityTicker: string
+  locationId: string
+  price: number // Price from the order
+  currency: Currency
+  // Helpers for the current user
+  isOrderOwner: boolean // true if current user owns the order being reserved/filled
+  isCounterparty: boolean // true if current user is the one who created the reservation
+}
+
+// Request to create a reservation against a sell order (user wants to buy)
+export interface CreateSellOrderReservationRequest {
+  sellOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string // ISO date string
+}
+
+// Request to create a reservation against a buy order (user wants to sell/fill)
+export interface CreateBuyOrderReservationRequest {
+  buyOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string // ISO date string
+}
+
+// Union type for creating any reservation
+export type CreateReservationRequest =
+  | CreateSellOrderReservationRequest
+  | CreateBuyOrderReservationRequest
+
+// Request to update reservation status
+export interface UpdateReservationStatusRequest {
+  notes?: string
 }
