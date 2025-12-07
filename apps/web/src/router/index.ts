@@ -93,20 +93,6 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresVerified: true, requiresAdmin: true },
     },
     {
-      path: '/orders/sell/:id',
-      name: 'sell-order-detail',
-      component: () => import('../views/OrderDetailView.vue'),
-      meta: { requiresAuth: true, requiresVerified: true },
-      props: route => ({ orderType: 'sell', orderId: Number(route.params.id) }),
-    },
-    {
-      path: '/orders/buy/:id',
-      name: 'buy-order-detail',
-      component: () => import('../views/OrderDetailView.vue'),
-      meta: { requiresAuth: true, requiresVerified: true },
-      props: route => ({ orderType: 'buy', orderId: Number(route.params.id) }),
-    },
-    {
       path: '/:pathMatch(.*)*',
       redirect: '/market',
     },

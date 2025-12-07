@@ -339,8 +339,10 @@ export const RESERVATION_STATUSES: ReservationStatus[] = [
 
 export interface OrderReservation {
   id: number
-  buyOrderId: number
-  sellOrderId: number
+  // One of these will be set - indicates which order is being reserved from / filled
+  sellOrderId: number | null // Set when reserving from a sell order
+  buyOrderId: number | null // Set when filling a buy order
+  counterpartyUserId: number // The user making the reservation
   quantity: number
   status: ReservationStatus
   notes: string | null
@@ -351,25 +353,41 @@ export interface OrderReservation {
 
 // Reservation with related order and user info
 export interface ReservationWithDetails extends OrderReservation {
-  buyerName: string
-  sellerName: string
+  // The order owner (seller if sellOrderId set, buyer if buyOrderId set)
+  orderOwnerName: string
+  orderOwnerUserId: number
+  // The counterparty (buyer if sellOrderId set, seller if buyOrderId set)
+  counterpartyName: string
+  // Order details
   commodityTicker: string
   locationId: string
-  buyOrderPrice: number
-  sellOrderPrice: number
+  price: number // Price from the order
   currency: Currency
-  isBuyer: boolean // true if current user is the buyer
-  isSeller: boolean // true if current user is the seller
+  // Helpers for the current user
+  isOrderOwner: boolean // true if current user owns the order being reserved/filled
+  isCounterparty: boolean // true if current user is the one who created the reservation
 }
 
-// Request to create a reservation
-export interface CreateReservationRequest {
-  buyOrderId: number
+// Request to create a reservation against a sell order (user wants to buy)
+export interface CreateSellOrderReservationRequest {
   sellOrderId: number
   quantity: number
   notes?: string
   expiresAt?: string // ISO date string
 }
+
+// Request to create a reservation against a buy order (user wants to sell/fill)
+export interface CreateBuyOrderReservationRequest {
+  buyOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string // ISO date string
+}
+
+// Union type for creating any reservation
+export type CreateReservationRequest =
+  | CreateSellOrderReservationRequest
+  | CreateBuyOrderReservationRequest
 
 // Request to update reservation status
 export interface UpdateReservationStatusRequest {

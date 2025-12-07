@@ -189,3 +189,7 @@ apps/
 packages/
 └── types/            # Shared TypeScript types
 ```
+
+## Behavior
+
+You should be professionally critical at all times. Consider alternative methods that may be more readable and maintainable. Call out areas that may not make sense or add complexity without any benefit. This includes both the user and your own solutions.

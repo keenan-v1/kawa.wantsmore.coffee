@@ -213,6 +213,7 @@ interface SellOrderResponse {
   availableQuantity: number
   activeReservationCount: number
   reservedQuantity: number
+  fulfilledQuantity: number
   remainingQuantity: number
 }
 
@@ -245,6 +246,7 @@ interface BuyOrderResponse {
   orderType: OrderType
   activeReservationCount: number
   reservedQuantity: number
+  fulfilledQuantity: number
   remainingQuantity: number
 }
 
@@ -279,6 +281,7 @@ interface MarketListing {
   activeReservationCount: number
   reservedQuantity: number
   remainingQuantity: number
+  fioUploadedAt: string | null
 }
 
 interface MarketBuyRequest {
@@ -295,6 +298,7 @@ interface MarketBuyRequest {
   activeReservationCount: number
   reservedQuantity: number
   remainingQuantity: number
+  fioUploadedAt: string | null
 }
 
 // Notification types
@@ -331,28 +335,35 @@ type ReservationStatus =
 
 interface ReservationWithDetails {
   id: number
-  buyOrderId: number
-  sellOrderId: number
+  sellOrderId: number | null
+  buyOrderId: number | null
+  counterpartyUserId: number
   quantity: number
   status: ReservationStatus
   notes: string | null
   expiresAt: string | null
   createdAt: string
   updatedAt: string
-  buyerName: string
-  sellerName: string
+  orderOwnerName: string
+  orderOwnerUserId: number
+  counterpartyName: string
   commodityTicker: string
   locationId: string
-  buyOrderPrice: number
-  sellOrderPrice: number
+  price: number
   currency: Currency
-  isBuyer: boolean
-  isSeller: boolean
+  isOrderOwner: boolean
+  isCounterparty: boolean
 }
 
-interface CreateReservationRequest {
-  buyOrderId: number
+interface CreateSellOrderReservationRequest {
   sellOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string
+}
+
+interface CreateBuyOrderReservationRequest {
+  buyOrderId: number
   quantity: number
   notes?: string
   expiresAt?: string
@@ -1194,10 +1205,15 @@ const realApi = {
   },
 
   // Market methods
-  getMarketListings: async (commodity?: string, location?: string): Promise<MarketListing[]> => {
+  getMarketListings: async (
+    commodity?: string,
+    location?: string,
+    destination?: string
+  ): Promise<MarketListing[]> => {
     const params = new URLSearchParams()
     if (commodity) params.append('commodity', commodity)
     if (location) params.append('location', location)
+    if (destination) params.append('destination', destination)
 
     const url = `/api/market/listings${params.toString() ? '?' + params.toString() : ''}`
     const response = await fetchWithLogging(url, {
@@ -1222,11 +1238,13 @@ const realApi = {
 
   getMarketBuyRequests: async (
     commodity?: string,
-    location?: string
+    location?: string,
+    destination?: string
   ): Promise<MarketBuyRequest[]> => {
     const params = new URLSearchParams()
     if (commodity) params.append('commodity', commodity)
     if (location) params.append('location', location)
+    if (destination) params.append('destination', destination)
 
     const url = `/api/market/buy-requests${params.toString() ? '?' + params.toString() : ''}`
     const response = await fetchWithLogging(url, {
@@ -1882,7 +1900,7 @@ const realApi = {
 
   // Reservations methods
   getReservations: async (
-    role?: 'buyer' | 'seller',
+    role?: 'owner' | 'counterparty' | 'all',
     status?: ReservationStatus
   ): Promise<ReservationWithDetails[]> => {
     const params = new URLSearchParams()
@@ -1928,8 +1946,36 @@ const realApi = {
     return response.json()
   },
 
-  createReservation: async (request: CreateReservationRequest): Promise<ReservationWithDetails> => {
-    const response = await fetchWithLogging('/api/reservations', {
+  createSellOrderReservation: async (
+    request: CreateSellOrderReservationRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging('/api/reservations/sell-order', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to create reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createBuyOrderReservation: async (
+    request: CreateBuyOrderReservationRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging('/api/reservations/buy-order', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(request),
@@ -1957,7 +2003,7 @@ const realApi = {
     request?: UpdateReservationStatusRequest
   ): Promise<ReservationWithDetails> => {
     const response = await fetchWithLogging(`/api/reservations/${id}/confirm`, {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request || {}),
     })
@@ -1984,7 +2030,7 @@ const realApi = {
     request?: UpdateReservationStatusRequest
   ): Promise<ReservationWithDetails> => {
     const response = await fetchWithLogging(`/api/reservations/${id}/reject`, {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request || {}),
     })
@@ -2011,7 +2057,7 @@ const realApi = {
     request?: UpdateReservationStatusRequest
   ): Promise<ReservationWithDetails> => {
     const response = await fetchWithLogging(`/api/reservations/${id}/fulfill`, {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request || {}),
     })
@@ -2038,7 +2084,7 @@ const realApi = {
     request?: UpdateReservationStatusRequest
   ): Promise<ReservationWithDetails> => {
     const response = await fetchWithLogging(`/api/reservations/${id}/cancel`, {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(request || {}),
     })
@@ -2055,6 +2101,33 @@ const realApi = {
         throw new Error(error.message || 'Permission denied')
       }
       throw new Error(`Failed to cancel reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  reopenReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/reopen`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to reopen reservation: ${response.statusText}`)
     }
 
     return response.json()
@@ -2167,10 +2240,10 @@ export const api = {
     delete: (id: number) => realApi.deleteBuyOrder(id),
   },
   market: {
-    getListings: (commodity?: string, location?: string) =>
-      realApi.getMarketListings(commodity, location),
-    getBuyRequests: (commodity?: string, location?: string) =>
-      realApi.getMarketBuyRequests(commodity, location),
+    getListings: (commodity?: string, location?: string, destination?: string) =>
+      realApi.getMarketListings(commodity, location, destination),
+    getBuyRequests: (commodity?: string, location?: string, destination?: string) =>
+      realApi.getMarketBuyRequests(commodity, location, destination),
   },
   roles: {
     list: () => realApi.getRoles(),
@@ -2212,10 +2285,13 @@ export const api = {
     delete: (id: number) => realApi.deleteNotification(id),
   },
   reservations: {
-    list: (role?: 'buyer' | 'seller', status?: ReservationStatus) =>
+    list: (role?: 'owner' | 'counterparty' | 'all', status?: ReservationStatus) =>
       realApi.getReservations(role, status),
     get: (id: number) => realApi.getReservation(id),
-    create: (request: CreateReservationRequest) => realApi.createReservation(request),
+    createForSellOrder: (request: CreateSellOrderReservationRequest) =>
+      realApi.createSellOrderReservation(request),
+    createForBuyOrder: (request: CreateBuyOrderReservationRequest) =>
+      realApi.createBuyOrderReservation(request),
     confirm: (id: number, request?: UpdateReservationStatusRequest) =>
       realApi.confirmReservation(id, request),
     reject: (id: number, request?: UpdateReservationStatusRequest) =>
@@ -2224,6 +2300,8 @@ export const api = {
       realApi.fulfillReservation(id, request),
     cancel: (id: number, request?: UpdateReservationStatusRequest) =>
       realApi.cancelReservation(id, request),
+    reopen: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.reopenReservation(id, request),
     delete: (id: number) => realApi.deleteReservation(id),
   },
   locations: {
@@ -2246,6 +2324,7 @@ export type {
   NotificationType,
   ReservationStatus,
   ReservationWithDetails,
-  CreateReservationRequest,
+  CreateSellOrderReservationRequest,
+  CreateBuyOrderReservationRequest,
   UpdateReservationStatusRequest,
 }

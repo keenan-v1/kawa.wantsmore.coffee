@@ -296,13 +296,10 @@ function getOrderLink(notification: Notification): string | null {
   const data = notification.data as Record<string, unknown> | null
   if (!data) return null
 
-  // Reservation notifications link to the order detail
+  // Reservation notifications link to the orders page
   if (notification.type.startsWith('reservation_')) {
-    if (data.sellOrderId) {
-      return `/orders/sell/${data.sellOrderId}`
-    }
-    if (data.buyOrderId) {
-      return `/orders/buy/${data.buyOrderId}`
+    if (data.sellOrderId || data.buyOrderId) {
+      return '/orders'
     }
   }
 

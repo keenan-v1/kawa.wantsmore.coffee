@@ -15,13 +15,14 @@ import {
 } from 'tsoa'
 import type {
   ReservationWithDetails,
-  CreateReservationRequest,
+  CreateSellOrderReservationRequest,
+  CreateBuyOrderReservationRequest,
   UpdateReservationStatusRequest,
   ReservationStatus,
   NotificationType,
 } from '@kawakawa/types'
 import { db, orderReservations, buyOrders, sellOrders, users } from '../db/index.js'
-import { eq, or, desc } from 'drizzle-orm'
+import { eq, or } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { notificationService } from '../services/notificationService.js'
@@ -29,8 +30,9 @@ import { hasPermission } from '../utils/permissionService.js'
 
 interface ReservationResponse {
   id: number
-  buyOrderId: number
-  sellOrderId: number
+  sellOrderId: number | null
+  buyOrderId: number | null
+  counterpartyUserId: number
   quantity: number
   status: ReservationStatus
   notes: string | null
@@ -44,90 +46,127 @@ interface ReservationResponse {
 @Security('jwt')
 export class ReservationsController extends Controller {
   /**
-   * Get all reservations for the current user (as buyer or seller)
-   * @param role Filter by role: 'buyer', 'seller', or 'all' (default)
+   * Get all reservations for the current user (as order owner or counterparty)
+   * @param role Filter by role: 'owner' (my orders being reserved), 'counterparty' (my reservations), or 'all'
    * @param status Filter by reservation status
    */
   @Get()
   public async getReservations(
     @Request() request: { user: JwtPayload },
-    @Query() role?: 'buyer' | 'seller' | 'all',
+    @Query() role?: 'owner' | 'counterparty' | 'all',
     @Query() status?: ReservationStatus
   ): Promise<ReservationWithDetails[]> {
     const userId = request.user.userId
     const filterRole = role ?? 'all'
 
-    // Build the query with joins to get all related data
-    const results = await db
+    // Get reservations with sell order info (reserving from sell orders)
+    const sellOrderReservations = await db
       .select({
         id: orderReservations.id,
-        buyOrderId: orderReservations.buyOrderId,
         sellOrderId: orderReservations.sellOrderId,
+        buyOrderId: orderReservations.buyOrderId,
+        counterpartyUserId: orderReservations.counterpartyUserId,
         quantity: orderReservations.quantity,
         status: orderReservations.status,
         notes: orderReservations.notes,
         expiresAt: orderReservations.expiresAt,
         createdAt: orderReservations.createdAt,
         updatedAt: orderReservations.updatedAt,
-        buyerUserId: buyOrders.userId,
-        sellerUserId: sellOrders.userId,
+        orderOwnerUserId: sellOrders.userId,
+        commodityTicker: sellOrders.commodityTicker,
+        locationId: sellOrders.locationId,
+        price: sellOrders.price,
+        currency: sellOrders.currency,
+      })
+      .from(orderReservations)
+      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
+      .where(
+        filterRole === 'owner'
+          ? eq(sellOrders.userId, userId)
+          : filterRole === 'counterparty'
+            ? eq(orderReservations.counterpartyUserId, userId)
+            : or(eq(sellOrders.userId, userId), eq(orderReservations.counterpartyUserId, userId))
+      )
+
+    // Get reservations with buy order info (filling buy orders)
+    const buyOrderReservations = await db
+      .select({
+        id: orderReservations.id,
+        sellOrderId: orderReservations.sellOrderId,
+        buyOrderId: orderReservations.buyOrderId,
+        counterpartyUserId: orderReservations.counterpartyUserId,
+        quantity: orderReservations.quantity,
+        status: orderReservations.status,
+        notes: orderReservations.notes,
+        expiresAt: orderReservations.expiresAt,
+        createdAt: orderReservations.createdAt,
+        updatedAt: orderReservations.updatedAt,
+        orderOwnerUserId: buyOrders.userId,
         commodityTicker: buyOrders.commodityTicker,
         locationId: buyOrders.locationId,
-        buyOrderPrice: buyOrders.price,
-        sellOrderPrice: sellOrders.price,
+        price: buyOrders.price,
         currency: buyOrders.currency,
       })
       .from(orderReservations)
       .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
-      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
       .where(
-        filterRole === 'buyer'
+        filterRole === 'owner'
           ? eq(buyOrders.userId, userId)
-          : filterRole === 'seller'
-            ? eq(sellOrders.userId, userId)
-            : or(eq(buyOrders.userId, userId), eq(sellOrders.userId, userId))
+          : filterRole === 'counterparty'
+            ? eq(orderReservations.counterpartyUserId, userId)
+            : or(eq(buyOrders.userId, userId), eq(orderReservations.counterpartyUserId, userId))
       )
-      .orderBy(desc(orderReservations.createdAt))
 
-    // Get user names
-    const buyerIds = [...new Set(results.map(r => r.buyerUserId))]
-    const sellerIds = [...new Set(results.map(r => r.sellerUserId))]
-    const allUserIds = [...new Set([...buyerIds, ...sellerIds])]
+    // Combine results
+    const allReservations = [...sellOrderReservations, ...buyOrderReservations]
 
-    const userRows = await db
-      .select({ id: users.id, displayName: users.displayName })
-      .from(users)
-      .where(
-        or(...allUserIds.map(id => eq(users.id, id))) ?? eq(users.id, -1) // Fallback that won't match
-      )
+    // Get all user IDs for name lookup
+    const allUserIds = [
+      ...new Set([
+        ...allReservations.map(r => r.orderOwnerUserId),
+        ...allReservations.map(r => r.counterpartyUserId),
+      ]),
+    ]
+
+    const userRows =
+      allUserIds.length > 0
+        ? await db
+            .select({ id: users.id, displayName: users.displayName })
+            .from(users)
+            .where(or(...allUserIds.map(id => eq(users.id, id)))!)
+        : []
 
     const userMap = new Map(userRows.map(u => [u.id, u.displayName]))
 
-    // Filter by status if provided
-    let filteredResults = results
+    // Filter by status if provided and map to response
+    let results = allReservations
     if (status) {
-      filteredResults = results.filter(r => r.status === status)
+      results = results.filter(r => r.status === status)
     }
 
-    return filteredResults.map(r => ({
+    // Sort by createdAt descending
+    results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+    return results.map(r => ({
       id: r.id,
-      buyOrderId: r.buyOrderId,
       sellOrderId: r.sellOrderId,
+      buyOrderId: r.buyOrderId,
+      counterpartyUserId: r.counterpartyUserId,
       quantity: r.quantity,
       status: r.status,
       notes: r.notes,
       expiresAt: r.expiresAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
-      buyerName: userMap.get(r.buyerUserId) ?? 'Unknown',
-      sellerName: userMap.get(r.sellerUserId) ?? 'Unknown',
+      orderOwnerName: userMap.get(r.orderOwnerUserId) ?? 'Unknown',
+      orderOwnerUserId: r.orderOwnerUserId,
+      counterpartyName: userMap.get(r.counterpartyUserId) ?? 'Unknown',
       commodityTicker: r.commodityTicker,
       locationId: r.locationId,
-      buyOrderPrice: parseFloat(r.buyOrderPrice),
-      sellOrderPrice: parseFloat(r.sellOrderPrice),
+      price: parseFloat(r.price),
       currency: r.currency,
-      isBuyer: r.buyerUserId === userId,
-      isSeller: r.sellerUserId === userId,
+      isOrderOwner: r.orderOwnerUserId === userId,
+      isCounterparty: r.counterpartyUserId === userId,
     }))
   }
 
@@ -141,38 +180,59 @@ export class ReservationsController extends Controller {
   ): Promise<ReservationWithDetails> {
     const userId = request.user.userId
 
-    const results = await db
+    // Try to find as sell order reservation
+    const sellResults = await db
       .select({
         id: orderReservations.id,
-        buyOrderId: orderReservations.buyOrderId,
         sellOrderId: orderReservations.sellOrderId,
+        buyOrderId: orderReservations.buyOrderId,
+        counterpartyUserId: orderReservations.counterpartyUserId,
         quantity: orderReservations.quantity,
         status: orderReservations.status,
         notes: orderReservations.notes,
         expiresAt: orderReservations.expiresAt,
         createdAt: orderReservations.createdAt,
         updatedAt: orderReservations.updatedAt,
-        buyerUserId: buyOrders.userId,
-        sellerUserId: sellOrders.userId,
+        orderOwnerUserId: sellOrders.userId,
+        commodityTicker: sellOrders.commodityTicker,
+        locationId: sellOrders.locationId,
+        price: sellOrders.price,
+        currency: sellOrders.currency,
+      })
+      .from(orderReservations)
+      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
+      .where(eq(orderReservations.id, id))
+
+    // Try to find as buy order reservation
+    const buyResults = await db
+      .select({
+        id: orderReservations.id,
+        sellOrderId: orderReservations.sellOrderId,
+        buyOrderId: orderReservations.buyOrderId,
+        counterpartyUserId: orderReservations.counterpartyUserId,
+        quantity: orderReservations.quantity,
+        status: orderReservations.status,
+        notes: orderReservations.notes,
+        expiresAt: orderReservations.expiresAt,
+        createdAt: orderReservations.createdAt,
+        updatedAt: orderReservations.updatedAt,
+        orderOwnerUserId: buyOrders.userId,
         commodityTicker: buyOrders.commodityTicker,
         locationId: buyOrders.locationId,
-        buyOrderPrice: buyOrders.price,
-        sellOrderPrice: sellOrders.price,
+        price: buyOrders.price,
         currency: buyOrders.currency,
       })
       .from(orderReservations)
       .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
-      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
       .where(eq(orderReservations.id, id))
 
-    if (results.length === 0) {
+    const r = sellResults[0] || buyResults[0]
+    if (!r) {
       throw NotFound('Reservation not found')
     }
 
-    const r = results[0]
-
-    // Only buyer or seller can view the reservation
-    if (r.buyerUserId !== userId && r.sellerUserId !== userId) {
+    // Only order owner or counterparty can view
+    if (r.orderOwnerUserId !== userId && r.counterpartyUserId !== userId) {
       throw Forbidden('You do not have access to this reservation')
     }
 
@@ -180,53 +240,43 @@ export class ReservationsController extends Controller {
     const userRows = await db
       .select({ id: users.id, displayName: users.displayName })
       .from(users)
-      .where(or(eq(users.id, r.buyerUserId), eq(users.id, r.sellerUserId))!)
+      .where(or(eq(users.id, r.orderOwnerUserId), eq(users.id, r.counterpartyUserId))!)
 
     const userMap = new Map(userRows.map(u => [u.id, u.displayName]))
 
     return {
       id: r.id,
-      buyOrderId: r.buyOrderId,
       sellOrderId: r.sellOrderId,
+      buyOrderId: r.buyOrderId,
+      counterpartyUserId: r.counterpartyUserId,
       quantity: r.quantity,
       status: r.status,
       notes: r.notes,
       expiresAt: r.expiresAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
-      buyerName: userMap.get(r.buyerUserId) ?? 'Unknown',
-      sellerName: userMap.get(r.sellerUserId) ?? 'Unknown',
+      orderOwnerName: userMap.get(r.orderOwnerUserId) ?? 'Unknown',
+      orderOwnerUserId: r.orderOwnerUserId,
+      counterpartyName: userMap.get(r.counterpartyUserId) ?? 'Unknown',
       commodityTicker: r.commodityTicker,
       locationId: r.locationId,
-      buyOrderPrice: parseFloat(r.buyOrderPrice),
-      sellOrderPrice: parseFloat(r.sellOrderPrice),
+      price: parseFloat(r.price),
       currency: r.currency,
-      isBuyer: r.buyerUserId === userId,
-      isSeller: r.sellerUserId === userId,
+      isOrderOwner: r.orderOwnerUserId === userId,
+      isCounterparty: r.counterpartyUserId === userId,
     }
   }
 
   /**
-   * Create a new reservation linking a buy order to a sell order
+   * Create a reservation against a sell order (user wants to buy)
    */
-  @Post()
+  @Post('sell-order')
   @SuccessResponse(201, 'Reservation created')
-  public async createReservation(
-    @Body() body: CreateReservationRequest,
+  public async createSellOrderReservation(
+    @Body() body: CreateSellOrderReservationRequest,
     @Request() request: { user: JwtPayload }
   ): Promise<ReservationResponse> {
     const userId = request.user.userId
-
-    // Verify the buy order exists and belongs to the current user
-    const [buyOrder] = await db.select().from(buyOrders).where(eq(buyOrders.id, body.buyOrderId))
-
-    if (!buyOrder) {
-      throw NotFound('Buy order not found')
-    }
-
-    if (buyOrder.userId !== userId) {
-      throw Forbidden('You can only create reservations for your own buy orders')
-    }
 
     // Verify the sell order exists
     const [sellOrder] = await db
@@ -236,6 +286,11 @@ export class ReservationsController extends Controller {
 
     if (!sellOrder) {
       throw NotFound('Sell order not found')
+    }
+
+    // Cannot reserve from your own sell order
+    if (sellOrder.userId === userId) {
+      throw BadRequest('You cannot create a reservation against your own sell order')
     }
 
     // Check permission based on order type
@@ -251,24 +306,6 @@ export class ReservationsController extends Controller {
       )
     }
 
-    // Verify orders are compatible (same commodity, location, currency)
-    if (buyOrder.commodityTicker !== sellOrder.commodityTicker) {
-      throw BadRequest('Buy and sell orders must be for the same commodity')
-    }
-
-    if (buyOrder.locationId !== sellOrder.locationId) {
-      throw BadRequest('Buy and sell orders must be for the same location')
-    }
-
-    if (buyOrder.currency !== sellOrder.currency) {
-      throw BadRequest('Buy and sell orders must use the same currency')
-    }
-
-    // Cannot reserve from your own sell order
-    if (sellOrder.userId === userId) {
-      throw BadRequest('You cannot create a reservation against your own sell order')
-    }
-
     // Validate quantity
     if (body.quantity <= 0) {
       throw BadRequest('Quantity must be greater than 0')
@@ -278,8 +315,9 @@ export class ReservationsController extends Controller {
     const [reservation] = await db
       .insert(orderReservations)
       .values({
-        buyOrderId: body.buyOrderId,
         sellOrderId: body.sellOrderId,
+        buyOrderId: null,
+        counterpartyUserId: userId,
         quantity: body.quantity,
         status: 'pending',
         notes: body.notes ?? null,
@@ -299,22 +337,22 @@ export class ReservationsController extends Controller {
       sellOrder.userId,
       'reservation_placed',
       'New Reservation',
-      `${buyer?.displayName ?? 'Someone'} wants to reserve ${body.quantity} ${buyOrder.commodityTicker} from your sell order`,
+      `${buyer?.displayName ?? 'Someone'} wants to reserve ${body.quantity} ${sellOrder.commodityTicker} from your sell order`,
       {
         reservationId: reservation.id,
-        buyOrderId: body.buyOrderId,
         sellOrderId: body.sellOrderId,
-        buyerId: userId,
+        counterpartyUserId: userId,
         quantity: body.quantity,
-        commodityTicker: buyOrder.commodityTicker,
-        locationId: buyOrder.locationId,
+        commodityTicker: sellOrder.commodityTicker,
+        locationId: sellOrder.locationId,
       }
     )
 
     return {
       id: reservation.id,
-      buyOrderId: reservation.buyOrderId,
       sellOrderId: reservation.sellOrderId,
+      buyOrderId: reservation.buyOrderId,
+      counterpartyUserId: reservation.counterpartyUserId,
       quantity: reservation.quantity,
       status: reservation.status,
       notes: reservation.notes,
@@ -325,7 +363,99 @@ export class ReservationsController extends Controller {
   }
 
   /**
-   * Confirm a reservation (seller only)
+   * Create a reservation against a buy order (user wants to sell/fill)
+   */
+  @Post('buy-order')
+  @SuccessResponse(201, 'Reservation created')
+  public async createBuyOrderReservation(
+    @Body() body: CreateBuyOrderReservationRequest,
+    @Request() request: { user: JwtPayload }
+  ): Promise<ReservationResponse> {
+    const userId = request.user.userId
+
+    // Verify the buy order exists
+    const [buyOrder] = await db.select().from(buyOrders).where(eq(buyOrders.id, body.buyOrderId))
+
+    if (!buyOrder) {
+      throw NotFound('Buy order not found')
+    }
+
+    // Cannot fill your own buy order
+    if (buyOrder.userId === userId) {
+      throw BadRequest('You cannot create a reservation against your own buy order')
+    }
+
+    // Check permission based on order type
+    const userRoles = request.user.roles
+    const requiredPermission =
+      buyOrder.orderType === 'internal'
+        ? 'reservations.place_internal'
+        : 'reservations.place_partner'
+
+    if (!(await hasPermission(userRoles, requiredPermission))) {
+      throw Forbidden(
+        `You do not have permission to place reservations on ${buyOrder.orderType} orders`
+      )
+    }
+
+    // Validate quantity
+    if (body.quantity <= 0) {
+      throw BadRequest('Quantity must be greater than 0')
+    }
+
+    // Create the reservation
+    const [reservation] = await db
+      .insert(orderReservations)
+      .values({
+        sellOrderId: null,
+        buyOrderId: body.buyOrderId,
+        counterpartyUserId: userId,
+        quantity: body.quantity,
+        status: 'pending',
+        notes: body.notes ?? null,
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      })
+      .returning()
+
+    this.setStatus(201)
+
+    // Notify the buyer (order owner)
+    const [seller] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, userId))
+
+    await notificationService.create(
+      buyOrder.userId,
+      'reservation_placed',
+      'Order Fill Request',
+      `${seller?.displayName ?? 'Someone'} wants to fill ${body.quantity} ${buyOrder.commodityTicker} from your buy order`,
+      {
+        reservationId: reservation.id,
+        buyOrderId: body.buyOrderId,
+        counterpartyUserId: userId,
+        quantity: body.quantity,
+        commodityTicker: buyOrder.commodityTicker,
+        locationId: buyOrder.locationId,
+      }
+    )
+
+    return {
+      id: reservation.id,
+      sellOrderId: reservation.sellOrderId,
+      buyOrderId: reservation.buyOrderId,
+      counterpartyUserId: reservation.counterpartyUserId,
+      quantity: reservation.quantity,
+      status: reservation.status,
+      notes: reservation.notes,
+      expiresAt: reservation.expiresAt?.toISOString() ?? null,
+      createdAt: reservation.createdAt.toISOString(),
+      updatedAt: reservation.updatedAt.toISOString(),
+    }
+  }
+
+  /**
+   * Confirm a reservation (order owner only)
    */
   @Put('{id}/confirm')
   @SuccessResponse(200, 'Reservation confirmed')
@@ -334,11 +464,11 @@ export class ReservationsController extends Controller {
     @Body() body: UpdateReservationStatusRequest,
     @Request() request: { user: JwtPayload }
   ): Promise<ReservationResponse> {
-    return this.updateReservationStatus(id, 'confirmed', request.user.userId, body.notes, 'seller')
+    return this.updateReservationStatus(id, 'confirmed', request.user.userId, body.notes, 'owner')
   }
 
   /**
-   * Reject a reservation (seller only)
+   * Reject a reservation (order owner only)
    */
   @Put('{id}/reject')
   @SuccessResponse(200, 'Reservation rejected')
@@ -347,7 +477,7 @@ export class ReservationsController extends Controller {
     @Body() body: UpdateReservationStatusRequest,
     @Request() request: { user: JwtPayload }
   ): Promise<ReservationResponse> {
-    return this.updateReservationStatus(id, 'rejected', request.user.userId, body.notes, 'seller')
+    return this.updateReservationStatus(id, 'rejected', request.user.userId, body.notes, 'owner')
   }
 
   /**
@@ -364,7 +494,7 @@ export class ReservationsController extends Controller {
   }
 
   /**
-   * Cancel a reservation (buyer can cancel pending, seller can cancel any)
+   * Cancel a reservation (counterparty can cancel pending, owner can cancel any)
    */
   @Put('{id}/cancel')
   @SuccessResponse(200, 'Reservation cancelled')
@@ -377,7 +507,26 @@ export class ReservationsController extends Controller {
   }
 
   /**
-   * Delete a reservation (buyer only, if pending)
+   * Reopen a cancelled reservation (counterparty only)
+   */
+  @Put('{id}/reopen')
+  @SuccessResponse(200, 'Reservation reopened')
+  public async reopenReservation(
+    @Path() id: number,
+    @Body() body: UpdateReservationStatusRequest,
+    @Request() request: { user: JwtPayload }
+  ): Promise<ReservationResponse> {
+    return this.updateReservationStatus(
+      id,
+      'pending',
+      request.user.userId,
+      body.notes,
+      'counterparty'
+    )
+  }
+
+  /**
+   * Delete a reservation (counterparty only, if pending)
    */
   @Delete('{id}')
   @SuccessResponse(204, 'Reservation deleted')
@@ -387,28 +536,19 @@ export class ReservationsController extends Controller {
   ): Promise<void> {
     const userId = request.user.userId
 
-    // Get the reservation with order info
-    const results = await db
-      .select({
-        id: orderReservations.id,
-        status: orderReservations.status,
-        buyerUserId: buyOrders.userId,
-        sellerUserId: sellOrders.userId,
-      })
+    // Get the reservation
+    const [reservation] = await db
+      .select()
       .from(orderReservations)
-      .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
-      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
       .where(eq(orderReservations.id, id))
 
-    if (results.length === 0) {
+    if (!reservation) {
       throw NotFound('Reservation not found')
     }
 
-    const reservation = results[0]
-
-    // Only buyer can delete, and only if pending
-    if (reservation.buyerUserId !== userId) {
-      throw Forbidden('Only the buyer can delete a reservation')
+    // Only counterparty can delete, and only if pending
+    if (reservation.counterpartyUserId !== userId) {
+      throw Forbidden('Only the person who created the reservation can delete it')
     }
 
     if (reservation.status !== 'pending') {
@@ -428,46 +568,56 @@ export class ReservationsController extends Controller {
     newStatus: ReservationStatus,
     userId: number,
     notes: string | undefined,
-    allowedRole: 'buyer' | 'seller' | 'either'
+    allowedRole: 'owner' | 'counterparty' | 'either'
   ): Promise<ReservationResponse> {
-    // Get the reservation with order info
-    const results = await db
-      .select({
-        id: orderReservations.id,
-        buyOrderId: orderReservations.buyOrderId,
-        sellOrderId: orderReservations.sellOrderId,
-        quantity: orderReservations.quantity,
-        status: orderReservations.status,
-        notes: orderReservations.notes,
-        expiresAt: orderReservations.expiresAt,
-        createdAt: orderReservations.createdAt,
-        updatedAt: orderReservations.updatedAt,
-        buyerUserId: buyOrders.userId,
-        sellerUserId: sellOrders.userId,
-        commodityTicker: buyOrders.commodityTicker,
-        locationId: buyOrders.locationId,
-      })
+    // Get the reservation
+    const [reservation] = await db
+      .select()
       .from(orderReservations)
-      .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
-      .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
       .where(eq(orderReservations.id, id))
 
-    if (results.length === 0) {
+    if (!reservation) {
       throw NotFound('Reservation not found')
     }
 
-    const reservation = results[0]
-    const isBuyer = reservation.buyerUserId === userId
-    const isSeller = reservation.sellerUserId === userId
+    // Get order owner info
+    let orderOwnerUserId: number
+    let commodityTicker: string
+    let locationId: string
+
+    if (reservation.sellOrderId) {
+      const [sellOrder] = await db
+        .select()
+        .from(sellOrders)
+        .where(eq(sellOrders.id, reservation.sellOrderId))
+      if (!sellOrder) throw NotFound('Associated sell order not found')
+      orderOwnerUserId = sellOrder.userId
+      commodityTicker = sellOrder.commodityTicker
+      locationId = sellOrder.locationId
+    } else if (reservation.buyOrderId) {
+      const [buyOrder] = await db
+        .select()
+        .from(buyOrders)
+        .where(eq(buyOrders.id, reservation.buyOrderId))
+      if (!buyOrder) throw NotFound('Associated buy order not found')
+      orderOwnerUserId = buyOrder.userId
+      commodityTicker = buyOrder.commodityTicker
+      locationId = buyOrder.locationId
+    } else {
+      throw BadRequest('Reservation has no associated order')
+    }
+
+    const isOrderOwner = orderOwnerUserId === userId
+    const isCounterparty = reservation.counterpartyUserId === userId
 
     // Check authorization
-    if (allowedRole === 'buyer' && !isBuyer) {
-      throw Forbidden('Only the buyer can perform this action')
+    if (allowedRole === 'owner' && !isOrderOwner) {
+      throw Forbidden('Only the order owner can perform this action')
     }
-    if (allowedRole === 'seller' && !isSeller) {
-      throw Forbidden('Only the seller can perform this action')
+    if (allowedRole === 'counterparty' && !isCounterparty) {
+      throw Forbidden('Only the person who created the reservation can perform this action')
     }
-    if (allowedRole === 'either' && !isBuyer && !isSeller) {
+    if (allowedRole === 'either' && !isOrderOwner && !isCounterparty) {
       throw Forbidden('You do not have access to this reservation')
     }
 
@@ -478,7 +628,7 @@ export class ReservationsController extends Controller {
       rejected: [],
       fulfilled: [],
       expired: [],
-      cancelled: [],
+      cancelled: ['pending'], // Allow reopening cancelled reservations
     }
 
     if (!validTransitions[reservation.status].includes(newStatus)) {
@@ -503,7 +653,7 @@ export class ReservationsController extends Controller {
       .where(eq(users.id, userId))
 
     const actorName = actor?.displayName ?? 'Someone'
-    const otherPartyId = isBuyer ? reservation.sellerUserId : reservation.buyerUserId
+    const otherPartyId = isOrderOwner ? reservation.counterpartyUserId : orderOwnerUserId
 
     const notificationTypes: Record<
       ReservationStatus,
@@ -518,31 +668,31 @@ export class ReservationsController extends Controller {
         type: 'reservation_confirmed',
         title: 'Reservation Confirmed',
         getMessage: n =>
-          `${n} confirmed your reservation for ${reservation.quantity} ${reservation.commodityTicker}`,
+          `${n} confirmed your reservation for ${reservation.quantity} ${commodityTicker}`,
       },
       rejected: {
         type: 'reservation_rejected',
         title: 'Reservation Rejected',
         getMessage: n =>
-          `${n} rejected your reservation for ${reservation.quantity} ${reservation.commodityTicker}`,
+          `${n} rejected your reservation for ${reservation.quantity} ${commodityTicker}`,
       },
       fulfilled: {
         type: 'reservation_fulfilled',
         title: 'Reservation Fulfilled',
         getMessage: n =>
-          `${n} marked the reservation for ${reservation.quantity} ${reservation.commodityTicker} as fulfilled`,
+          `${n} marked the reservation for ${reservation.quantity} ${commodityTicker} as fulfilled`,
       },
       cancelled: {
         type: 'reservation_cancelled',
         title: 'Reservation Cancelled',
         getMessage: n =>
-          `${n} cancelled the reservation for ${reservation.quantity} ${reservation.commodityTicker}`,
+          `${n} cancelled the reservation for ${reservation.quantity} ${commodityTicker}`,
       },
       expired: {
         type: 'reservation_expired',
         title: 'Reservation Expired',
         getMessage: () =>
-          `Your reservation for ${reservation.quantity} ${reservation.commodityTicker} has expired`,
+          `Your reservation for ${reservation.quantity} ${commodityTicker} has expired`,
       },
     }
 
@@ -554,18 +704,19 @@ export class ReservationsController extends Controller {
       notifConfig.getMessage(actorName),
       {
         reservationId: id,
-        buyOrderId: reservation.buyOrderId,
         sellOrderId: reservation.sellOrderId,
+        buyOrderId: reservation.buyOrderId,
         quantity: reservation.quantity,
-        commodityTicker: reservation.commodityTicker,
-        locationId: reservation.locationId,
+        commodityTicker,
+        locationId,
       }
     )
 
     return {
       id: updated.id,
-      buyOrderId: updated.buyOrderId,
       sellOrderId: updated.sellOrderId,
+      buyOrderId: updated.buyOrderId,
+      counterpartyUserId: updated.counterpartyUserId,
       quantity: updated.quantity,
       status: updated.status,
       notes: updated.notes,

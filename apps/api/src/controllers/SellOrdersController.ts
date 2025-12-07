@@ -22,7 +22,7 @@ import {
   fioLocations,
   orderReservations,
 } from '../db/index.js'
-import { eq, and, inArray, or, sql } from 'drizzle-orm'
+import { eq, and, inArray, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
@@ -44,7 +44,8 @@ interface SellOrderResponse {
   availableQuantity: number
   activeReservationCount: number // count of pending/confirmed reservations
   reservedQuantity: number // sum of quantities in active reservations
-  remainingQuantity: number // availableQuantity - reservedQuantity
+  fulfilledQuantity: number // sum of quantities in fulfilled reservations
+  remainingQuantity: number // availableQuantity - reservedQuantity - fulfilledQuantity
 }
 
 interface CreateSellOrderRequest {
@@ -115,49 +116,123 @@ export class SellOrdersController extends Controller {
     // Get sell orders - we'll look up inventory separately due to the new schema
     const orders = await db.select().from(sellOrders).where(eq(sellOrders.userId, userId))
 
-    // Get all user's inventory with location info for matching
+    // Get all user's inventory with location info and sync timestamps
     const inventory = await db
       .select({
         commodityTicker: fioInventory.commodityTicker,
         quantity: fioInventory.quantity,
         locationId: fioUserStorage.locationId,
+        lastSyncedAt: fioUserStorage.lastSyncedAt,
       })
       .from(fioInventory)
       .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
       .where(eq(fioUserStorage.userId, userId))
 
-    // Build a lookup map: "ticker:locationId" -> total quantity
+    // Build lookup maps:
+    // - inventoryMap: "ticker:locationId" -> total quantity
+    // - syncTimeMap: locationId -> most recent lastSyncedAt
     const inventoryMap = new Map<string, number>()
+    const syncTimeMap = new Map<string, Date>()
     for (const item of inventory) {
       if (item.locationId) {
         const key = `${item.commodityTicker}:${item.locationId}`
         inventoryMap.set(key, (inventoryMap.get(key) ?? 0) + item.quantity)
+
+        // Track the most recent sync time per location
+        const existingSync = syncTimeMap.get(item.locationId)
+        if (!existingSync || item.lastSyncedAt > existingSync) {
+          syncTimeMap.set(item.locationId, item.lastSyncedAt)
+        }
       }
     }
 
     // Get reservation counts for all sell orders
+    // For FIO-backed orders (none/reserve), only count fulfilled reservations
+    // that occurred AFTER the last FIO sync (otherwise FIO already reflects it)
     const orderIds = orders.map(o => o.id)
-    const reservationMap = new Map<number, { count: number; quantity: number }>()
+    const reservationMap = new Map<
+      number,
+      { count: number; quantity: number; fulfilledQuantity: number }
+    >()
 
     if (orderIds.length > 0) {
+      // Get active reservations (pending/confirmed) and all fulfilled with timestamps
       const reservationStats = await db
         .select({
           sellOrderId: orderReservations.sellOrderId,
-          count: sql<number>`count(*)::int`,
-          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+          count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
+          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
+          // For fulfilled, we need to check per-order whether to count based on limit mode
+          // For max_sell: always count all fulfilled
+          // For none/reserve: only count fulfilled where reservation.updatedAt > fioStorage.lastSyncedAt
+          fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(inArray(orderReservations.sellOrderId, orderIds))
+        .groupBy(orderReservations.sellOrderId)
+
+      // For FIO-backed orders, we need to get fulfilled reservations with timestamps
+      // to filter by sync time
+      const fulfilledReservations = await db
+        .select({
+          sellOrderId: orderReservations.sellOrderId,
+          quantity: orderReservations.quantity,
+          updatedAt: orderReservations.updatedAt,
         })
         .from(orderReservations)
         .where(
           and(
             inArray(orderReservations.sellOrderId, orderIds),
-            or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
+            eq(orderReservations.status, 'fulfilled')
           )
         )
-        .groupBy(orderReservations.sellOrderId)
+
+      // Build a map of orderId -> list of fulfilled reservations
+      const fulfilledByOrder = new Map<number, Array<{ quantity: number; updatedAt: Date }>>()
+      for (const r of fulfilledReservations) {
+        if (r.sellOrderId !== null) {
+          const list = fulfilledByOrder.get(r.sellOrderId) ?? []
+          list.push({ quantity: r.quantity, updatedAt: r.updatedAt })
+          fulfilledByOrder.set(r.sellOrderId, list)
+        }
+      }
+
+      // Build order lookup for limit mode
+      const orderLimitModes = new Map(orders.map(o => [o.id, o.limitMode]))
+      const orderLocations = new Map(orders.map(o => [o.id, o.locationId]))
 
       for (const stat of reservationStats) {
-        reservationMap.set(stat.sellOrderId, { count: stat.count, quantity: stat.quantity })
+        if (stat.sellOrderId !== null) {
+          const limitMode = orderLimitModes.get(stat.sellOrderId) ?? 'none'
+          const locationId = orderLocations.get(stat.sellOrderId)
+          const syncTime = locationId ? syncTimeMap.get(locationId) : null
+
+          let fulfilledQuantity = 0
+
+          if (limitMode === 'max_sell') {
+            // max_sell is not FIO-backed, always count all fulfilled
+            fulfilledQuantity = stat.fulfilledQuantity
+          } else {
+            // none/reserve are FIO-backed
+            // Only count fulfilled reservations that happened AFTER the last FIO sync
+            const fulfilled = fulfilledByOrder.get(stat.sellOrderId) ?? []
+            for (const r of fulfilled) {
+              if (!syncTime || r.updatedAt > syncTime) {
+                fulfilledQuantity += r.quantity
+              }
+            }
+          }
+
+          reservationMap.set(stat.sellOrderId, {
+            count: stat.count,
+            quantity: stat.quantity,
+            fulfilledQuantity,
+          })
+        }
       }
+
+      // Handle orders with no reservations at all (not in reservationStats)
+      // They'll get default values in the map lookup below
     }
 
     return orders.map(order => {
@@ -168,8 +243,15 @@ export class SellOrdersController extends Controller {
         order.limitMode,
         order.limitQuantity
       )
-      const reservationData = reservationMap.get(order.id) ?? { count: 0, quantity: 0 }
-      const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
+      const reservationData = reservationMap.get(order.id) ?? {
+        count: 0,
+        quantity: 0,
+        fulfilledQuantity: 0,
+      }
+      const remainingQuantity = Math.max(
+        0,
+        availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
+      )
 
       return {
         id: order.id,
@@ -184,6 +266,7 @@ export class SellOrdersController extends Controller {
         availableQuantity,
         activeReservationCount: reservationData.count,
         reservedQuantity: reservationData.quantity,
+        fulfilledQuantity: reservationData.fulfilledQuantity,
         remainingQuantity,
       }
     })
@@ -209,8 +292,8 @@ export class SellOrdersController extends Controller {
       throw NotFound('Sell order not found')
     }
 
-    // Get FIO inventory for this commodity/location
-    const fioQuantity = await this.getInventoryQuantity(
+    // Get FIO inventory and sync time for this commodity/location
+    const { quantity: fioQuantity, lastSyncedAt } = await this.getInventoryWithSyncTime(
       userId,
       order.commodityTicker,
       order.locationId
@@ -222,9 +305,12 @@ export class SellOrdersController extends Controller {
       order.limitQuantity
     )
 
-    // Get reservation counts
-    const reservationData = await this.getReservationCounts(order.id)
-    const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
+    // Get reservation counts (with FIO-aware fulfilled calculation)
+    const reservationData = await this.getReservationCounts(order.id, order.limitMode, lastSyncedAt)
+    const remainingQuantity = Math.max(
+      0,
+      availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
+    )
 
     return {
       id: order.id,
@@ -239,20 +325,24 @@ export class SellOrdersController extends Controller {
       availableQuantity,
       activeReservationCount: reservationData.count,
       reservedQuantity: reservationData.quantity,
+      fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
     }
   }
 
   /**
-   * Helper to get inventory quantity for a commodity at a location
+   * Helper to get inventory quantity and sync time for a commodity at a location
    */
-  private async getInventoryQuantity(
+  private async getInventoryWithSyncTime(
     userId: number,
     commodityTicker: string,
     locationId: string
-  ): Promise<number> {
+  ): Promise<{ quantity: number; lastSyncedAt: Date | null }> {
     const items = await db
-      .select({ quantity: fioInventory.quantity })
+      .select({
+        quantity: fioInventory.quantity,
+        lastSyncedAt: fioUserStorage.lastSyncedAt,
+      })
       .from(fioInventory)
       .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
       .where(
@@ -263,29 +353,80 @@ export class SellOrdersController extends Controller {
         )
       )
 
-    return items.reduce((sum, item) => sum + item.quantity, 0)
+    let totalQuantity = 0
+    let latestSyncTime: Date | null = null
+    for (const item of items) {
+      totalQuantity += item.quantity
+      if (!latestSyncTime || item.lastSyncedAt > latestSyncTime) {
+        latestSyncTime = item.lastSyncedAt
+      }
+    }
+
+    return { quantity: totalQuantity, lastSyncedAt: latestSyncTime }
   }
 
   /**
    * Helper to get reservation counts for a sell order
+   * For FIO-backed orders (none/reserve), only counts fulfilled reservations
+   * that occurred after the last FIO sync
    */
   private async getReservationCounts(
-    sellOrderId: number
-  ): Promise<{ count: number; quantity: number }> {
+    sellOrderId: number,
+    limitMode: SellOrderLimitMode,
+    lastSyncedAt: Date | null
+  ): Promise<{ count: number; quantity: number; fulfilledQuantity: number }> {
+    // Get active reservation stats
     const result = await db
       .select({
-        count: sql<number>`count(*)::int`,
-        quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
+        quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
       })
       .from(orderReservations)
-      .where(
-        and(
-          eq(orderReservations.sellOrderId, sellOrderId),
-          or(eq(orderReservations.status, 'pending'), eq(orderReservations.status, 'confirmed'))
-        )
-      )
+      .where(eq(orderReservations.sellOrderId, sellOrderId))
 
-    return result[0] ?? { count: 0, quantity: 0 }
+    const stats = result[0] ?? { count: 0, quantity: 0 }
+
+    // Calculate fulfilled quantity based on limit mode
+    let fulfilledQuantity = 0
+
+    if (limitMode === 'max_sell') {
+      // max_sell is not FIO-backed, always count all fulfilled
+      const fulfilledResult = await db
+        .select({
+          total: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            eq(orderReservations.sellOrderId, sellOrderId),
+            eq(orderReservations.status, 'fulfilled')
+          )
+        )
+      fulfilledQuantity = fulfilledResult[0]?.total ?? 0
+    } else {
+      // none/reserve are FIO-backed
+      // Only count fulfilled reservations that happened AFTER the last FIO sync
+      const fulfilledReservations = await db
+        .select({
+          quantity: orderReservations.quantity,
+          updatedAt: orderReservations.updatedAt,
+        })
+        .from(orderReservations)
+        .where(
+          and(
+            eq(orderReservations.sellOrderId, sellOrderId),
+            eq(orderReservations.status, 'fulfilled')
+          )
+        )
+
+      for (const r of fulfilledReservations) {
+        if (!lastSyncedAt || r.updatedAt > lastSyncedAt) {
+          fulfilledQuantity += r.quantity
+        }
+      }
+    }
+
+    return { count: stats.count, quantity: stats.quantity, fulfilledQuantity }
   }
 
   /**
@@ -372,7 +513,7 @@ export class SellOrdersController extends Controller {
     this.setStatus(201)
 
     // Get FIO inventory for this commodity/location
-    const fioQuantity = await this.getInventoryQuantity(
+    const { quantity: fioQuantity } = await this.getInventoryWithSyncTime(
       userId,
       body.commodityTicker,
       body.locationId
@@ -397,6 +538,7 @@ export class SellOrdersController extends Controller {
       availableQuantity,
       activeReservationCount: 0, // New order has no reservations
       reservedQuantity: 0,
+      fulfilledQuantity: 0,
       remainingQuantity: availableQuantity,
     }
   }
@@ -453,8 +595,8 @@ export class SellOrdersController extends Controller {
       .where(eq(sellOrders.id, id))
       .returning()
 
-    // Get FIO inventory
-    const fioQuantity = await this.getInventoryQuantity(
+    // Get FIO inventory and sync time
+    const { quantity: fioQuantity, lastSyncedAt } = await this.getInventoryWithSyncTime(
       userId,
       updated.commodityTicker,
       updated.locationId
@@ -466,9 +608,16 @@ export class SellOrdersController extends Controller {
       updated.limitQuantity
     )
 
-    // Get reservation counts
-    const reservationData = await this.getReservationCounts(updated.id)
-    const remainingQuantity = Math.max(0, availableQuantity - reservationData.quantity)
+    // Get reservation counts (with FIO-aware fulfilled calculation)
+    const reservationData = await this.getReservationCounts(
+      updated.id,
+      updated.limitMode,
+      lastSyncedAt
+    )
+    const remainingQuantity = Math.max(
+      0,
+      availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
+    )
 
     return {
       id: updated.id,
@@ -483,6 +632,7 @@ export class SellOrdersController extends Controller {
       availableQuantity,
       activeReservationCount: reservationData.count,
       reservedQuantity: reservationData.quantity,
+      fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
     }
   }

@@ -354,17 +354,20 @@ export const notifications = pgTable(
   })
 )
 
-// ==================== ORDER RESERVATIONS (Many-to-Many: Buy Orders <-> Sell Orders) ====================
+// ==================== ORDER RESERVATIONS (User reserving from/filling an order) ====================
+// A reservation links a counterparty user to an order they want to reserve from or fill
+// Either sellOrderId OR buyOrderId is set (not both) - indicating which order is being acted upon
 export const orderReservations = pgTable(
   'order_reservations',
   {
     id: serial('id').primaryKey(),
-    buyOrderId: integer('buy_order_id')
+    // One of these will be set - indicates which order is being reserved from / filled
+    sellOrderId: integer('sell_order_id').references(() => sellOrders.id, { onDelete: 'cascade' }),
+    buyOrderId: integer('buy_order_id').references(() => buyOrders.id, { onDelete: 'cascade' }),
+    // The user making the reservation (buyer if reserving from sell, seller if filling buy)
+    counterpartyUserId: integer('counterparty_user_id')
       .notNull()
-      .references(() => buyOrders.id, { onDelete: 'cascade' }),
-    sellOrderId: integer('sell_order_id')
-      .notNull()
-      .references(() => sellOrders.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: 'cascade' }),
     quantity: integer('quantity').notNull(),
     status: reservationStatusEnum('status').notNull().default('pending'),
     notes: text('notes'),
@@ -373,8 +376,9 @@ export const orderReservations = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   table => ({
-    buyOrderIdx: index('order_reservations_buy_order_idx').on(table.buyOrderId),
     sellOrderIdx: index('order_reservations_sell_order_idx').on(table.sellOrderId),
+    buyOrderIdx: index('order_reservations_buy_order_idx').on(table.buyOrderId),
+    counterpartyIdx: index('order_reservations_counterparty_idx').on(table.counterpartyUserId),
   })
 )
 
@@ -391,6 +395,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   sellOrders: many(sellOrders),
   buyOrders: many(buyOrders),
   notifications: many(notifications),
+  reservations: many(orderReservations), // Reservations where user is the counterparty
   discordProfile: one(userDiscordProfiles, {
     fields: [users.id],
     references: [userDiscordProfiles.userId],
@@ -548,5 +553,9 @@ export const orderReservationsRelations = relations(orderReservations, ({ one })
   sellOrder: one(sellOrders, {
     fields: [orderReservations.sellOrderId],
     references: [sellOrders.id],
+  }),
+  counterpartyUser: one(users, {
+    fields: [orderReservations.counterpartyUserId],
+    references: [users.id],
   }),
 }))
