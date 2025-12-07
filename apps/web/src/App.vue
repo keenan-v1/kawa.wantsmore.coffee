@@ -39,22 +39,7 @@
           </template>
           Account
         </v-tooltip>
-        <v-tooltip location="bottom">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" to="/notifications" icon size="small" class="mx-1">
-              <v-badge
-                v-if="unreadNotificationCount > 0"
-                :content="unreadNotificationCount"
-                color="error"
-                floating
-              >
-                <v-icon>mdi-bell</v-icon>
-              </v-badge>
-              <v-icon v-else>mdi-bell-outline</v-icon>
-            </v-btn>
-          </template>
-          Notifications
-        </v-tooltip>
+        <NotificationDropdown ref="notificationDropdown" />
         <v-tooltip v-if="isAdmin" location="bottom">
           <template #activator="{ props }">
             <v-btn v-bind="props" to="/admin" icon size="small" class="mx-1">
@@ -96,12 +81,13 @@ import { commodityService } from './services/commodityService'
 import { locationService } from './services/locationService'
 import { roleService } from './services/roleService'
 import { api } from './services/api'
+import NotificationDropdown from './components/NotificationDropdown.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const isAuthenticated = ref(false)
 const pendingApprovalsCount = ref(0)
-const unreadNotificationCount = ref(0)
+const notificationDropdown = ref<InstanceType<typeof NotificationDropdown> | null>(null)
 
 const isVerified = computed(() => {
   const user = userStore.getUser()
@@ -126,21 +112,6 @@ const fetchPendingApprovalsCount = async () => {
   } catch (error) {
     console.error('Failed to fetch pending approvals count:', error)
     pendingApprovalsCount.value = 0
-  }
-}
-
-// Fetch unread notification count
-const fetchUnreadNotificationCount = async () => {
-  if (!isVerified.value) {
-    unreadNotificationCount.value = 0
-    return
-  }
-  try {
-    const result = await api.notifications.getUnreadCount()
-    unreadNotificationCount.value = result.count
-  } catch (error) {
-    console.error('Failed to fetch unread notification count:', error)
-    unreadNotificationCount.value = 0
   }
 }
 
@@ -191,7 +162,7 @@ const handleTokenRefreshed = async () => {
     userStore.setUser(user)
     // Refresh counts after token refresh
     fetchPendingApprovalsCount()
-    fetchUnreadNotificationCount()
+    notificationDropdown.value?.loadUnreadCount()
   } catch (error) {
     console.error('Failed to refresh user profile:', error)
   }
@@ -202,16 +173,10 @@ const handleApprovalQueueUpdated = () => {
   fetchPendingApprovalsCount()
 }
 
-// Listen for notification updates (emitted from NotificationsView)
-const handleNotificationsUpdated = () => {
-  fetchUnreadNotificationCount()
-}
-
 onMounted(async () => {
   // Listen for token refresh events
   window.addEventListener('token-refreshed', handleTokenRefreshed)
   window.addEventListener('approval-queue-updated', handleApprovalQueueUpdated)
-  window.addEventListener('notifications-updated', handleNotificationsUpdated)
 
   router.afterEach(() => {
     checkAuth()
@@ -227,15 +192,12 @@ onMounted(async () => {
     roleService.prefetch().catch(err => console.error('Failed to prefetch roles:', err))
     // Fetch pending approvals count for admins
     fetchPendingApprovalsCount()
-    // Fetch unread notification count
-    fetchUnreadNotificationCount()
   }
 })
 
 onUnmounted(() => {
   window.removeEventListener('token-refreshed', handleTokenRefreshed)
   window.removeEventListener('approval-queue-updated', handleApprovalQueueUpdated)
-  window.removeEventListener('notifications-updated', handleNotificationsUpdated)
 })
 </script>
 

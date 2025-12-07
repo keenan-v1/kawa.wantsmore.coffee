@@ -65,6 +65,16 @@ export const useUserStore = () => {
     return user?.commodityDisplayMode || 'both'
   }
 
+  // Browser notifications preference (stored in localStorage)
+  const setBrowserNotificationsEnabled = (enabled: boolean) => {
+    localStorage.setItem('browserNotificationsEnabled', JSON.stringify(enabled))
+  }
+
+  const getBrowserNotificationsEnabled = (): boolean => {
+    const stored = localStorage.getItem('browserNotificationsEnabled')
+    return stored ? JSON.parse(stored) : false
+  }
+
   // Check if user has a specific permission
   const hasPermission = (permissionId: string): boolean => {
     const user = getUser()
@@ -90,6 +100,8 @@ export const useUserStore = () => {
     getLocationDisplayMode,
     updateCommodityDisplayMode,
     getCommodityDisplayMode,
+    setBrowserNotificationsEnabled,
+    getBrowserNotificationsEnabled,
     hasPermission,
     hasAnyPermission,
   }

@@ -1853,7 +1853,7 @@ const realApi = {
 
   markNotificationAsRead: async (id: number): Promise<void> => {
     const response = await fetchWithLogging(`/api/notifications/${id}/read`, {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
     })
 
@@ -1869,7 +1869,7 @@ const realApi = {
 
   markAllNotificationsAsRead: async (): Promise<{ count: number }> => {
     const response = await fetchWithLogging('/api/notifications/read-all', {
-      method: 'POST',
+      method: 'PUT',
       headers: getAuthHeaders(),
     })
 

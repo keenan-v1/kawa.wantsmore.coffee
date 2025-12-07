@@ -9,7 +9,7 @@ import {
   users,
   orderReservations,
 } from '../db/index.js'
-import { eq, inArray, or, and, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
 import { fioClient } from '../services/fio/client.js'

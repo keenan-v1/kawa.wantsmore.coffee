@@ -74,10 +74,7 @@
                         min="0"
                         step="0.01"
                         :rules="[
-                          v =>
-                            remainingBuyOrderQuantity <= 0 ||
-                            v > 0 ||
-                            'Price must be positive',
+                          v => remainingBuyOrderQuantity <= 0 || v > 0 || 'Price must be positive',
                         ]"
                         :required="remainingBuyOrderQuantity > 0"
                         :hint="
@@ -225,10 +222,7 @@
             <v-divider class="mb-2" />
 
             <!-- Placeholder when commodity/location not set -->
-            <div
-              v-if="!shouldShowMatchingColumn"
-              class="text-center py-8 text-medium-emphasis"
-            >
+            <div v-if="!shouldShowMatchingColumn" class="text-center py-8 text-medium-emphasis">
               <v-icon size="48" class="mb-3" color="grey">mdi-arrow-left</v-icon>
               <div class="text-body-2">Select a commodity and location</div>
               <div class="text-caption">to see matching orders</div>
@@ -370,7 +364,10 @@
             </v-table>
 
             <!-- Reservations Summary -->
-            <div v-if="shouldShowMatchingColumn && totalReservationQuantity > 0" class="mt-3 pa-2 bg-grey-darken-3 rounded">
+            <div
+              v-if="shouldShowMatchingColumn && totalReservationQuantity > 0"
+              class="mt-3 pa-2 bg-grey-darken-3 rounded"
+            >
               <div class="d-flex justify-space-between align-center">
                 <span class="text-caption"
                   >Total to {{ activeTab === 'buy' ? 'reserve' : 'fill' }}:</span
@@ -398,7 +395,10 @@
               >
                 <span class="text-caption">Order max sell:</span>
                 <span class="font-weight-bold">{{
-                  Math.max(0, (sellForm.limitQuantity || 0) - totalReservationQuantity).toLocaleString()
+                  Math.max(
+                    0,
+                    (sellForm.limitQuantity || 0) - totalReservationQuantity
+                  ).toLocaleString()
                 }}</span>
               </div>
             </div>
