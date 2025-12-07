@@ -4,13 +4,16 @@
 import { syncCommodities } from '../services/fio/sync-commodities.js'
 import { syncLocations } from '../services/fio/sync-locations.js'
 import { syncStations } from '../services/fio/sync-stations.js'
+import { syncFioExchangePrices, type FioPriceField } from '../services/fio/sync-exchange-prices.js'
 import { client } from '../db/index.js'
 import { createLogger } from '../utils/logger.js'
 
 const log = createLogger({ script: 'sync-fio' })
 
-const SYNC_TYPES = ['commodities', 'locations', 'stations', 'all'] as const
+const SYNC_TYPES = ['commodities', 'locations', 'stations', 'prices', 'all'] as const
 type SyncType = (typeof SYNC_TYPES)[number]
+
+const VALID_PRICE_FIELDS: FioPriceField[] = ['MMBuy', 'MMSell', 'PriceAverage', 'Ask', 'Bid']
 
 async function main() {
   const args = process.argv.slice(2)
@@ -62,6 +65,37 @@ async function main() {
         log.error(
           { errorCount: stationsResult.errors.length, errors: stationsResult.errors },
           'Stations sync failed'
+        )
+      }
+    }
+
+    if (syncType === 'prices' || syncType === 'all') {
+      // Get price field from args (optional, defaults to PriceAverage)
+      const priceFieldArg = args[1]
+      const priceField: FioPriceField =
+        priceFieldArg && VALID_PRICE_FIELDS.includes(priceFieldArg as FioPriceField)
+          ? (priceFieldArg as FioPriceField)
+          : 'PriceAverage'
+
+      log.info({ priceField }, 'Syncing FIO exchange prices')
+      const pricesResult = await syncFioExchangePrices(undefined, priceField)
+
+      if (pricesResult.success) {
+        log.info(
+          {
+            totalUpdated: pricesResult.totalUpdated,
+            totalSkipped: pricesResult.totalSkipped,
+            exchanges: pricesResult.exchanges.map(e => ({
+              code: e.exchangeCode,
+              updated: e.pricesUpdated,
+            })),
+          },
+          'Exchange prices sync completed'
+        )
+      } else {
+        log.error(
+          { errorCount: pricesResult.errors.length, errors: pricesResult.errors },
+          'Exchange prices sync failed'
         )
       }
     }

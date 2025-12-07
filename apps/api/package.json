@@ -27,6 +27,7 @@
     "fio:sync:commodities": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts commodities",
     "fio:sync:locations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts locations",
     "fio:sync:stations": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts stations",
+    "fio:sync:prices": "tsx --env-file-if-exists=.env src/scripts/sync-fio.ts prices",
     "fio:sync:users": "tsx --env-file-if-exists=.env src/scripts/sync-all-users.ts",
     "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts",
     "admin:password": "tsx --env-file-if-exists=.env src/scripts/admin-password.ts",
