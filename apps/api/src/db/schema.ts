@@ -57,6 +57,16 @@ export const reservationStatusEnum = pgEnum('reservation_status', [
   'cancelled',
 ])
 
+// ==================== PRICING SYSTEM ENUMS ====================
+export const priceSourceEnum = pgEnum('price_source', [
+  'manual',
+  'csv_import',
+  'google_sheets',
+  'fio_exchange',
+])
+
+export const adjustmentTypeEnum = pgEnum('adjustment_type', ['percentage', 'fixed'])
+
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(
   'settings',
@@ -382,6 +392,83 @@ export const orderReservations = pgTable(
   })
 )
 
+// ==================== FIO EXCHANGES (Exchange code to location mapping) ====================
+// Maps exchange codes (CI1, NC1, KAWA, etc.) to their physical station locations
+export const fioExchanges = pgTable('fio_exchanges', {
+  code: varchar('code', { length: 20 }).primaryKey(), // CI1, NC1, IC1, AI1, KAWA, etc.
+  name: varchar('name', { length: 100 }).notNull(), // "Commodity Exchange - Benton", "KAWA Internal", etc.
+  locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // NULL for virtual exchanges like KAWA
+  currency: currencyEnum('currency').notNull(), // Primary currency for this exchange
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+// ==================== PRICE LISTS (Base prices by exchange + location + commodity) ====================
+export const priceLists = pgTable(
+  'price_lists',
+  {
+    id: serial('id').primaryKey(),
+    exchangeCode: varchar('exchange_code', { length: 20 }).notNull(), // KAWA, CI1, NC1, etc. (not FK to allow flexibility)
+    commodityTicker: varchar('commodity_ticker', { length: 10 })
+      .notNull()
+      .references(() => fioCommodities.ticker),
+    locationId: varchar('location_id', { length: 20 })
+      .notNull()
+      .references(() => fioLocations.naturalId),
+    price: decimal('price', { precision: 12, scale: 2 }).notNull(),
+    currency: currencyEnum('currency').notNull(),
+    source: priceSourceEnum('source').notNull(), // How this price was set
+    sourceReference: text('source_reference'), // Google Sheets URL, CSV filename, sync timestamp, etc.
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Unique constraint: one price per exchange/commodity/location/currency combination
+    uniqueExchangeCommodityLocationCurrency: uniqueIndex(
+      'price_lists_exchange_commodity_location_currency_idx'
+    ).on(table.exchangeCode, table.commodityTicker, table.locationId, table.currency),
+    // Index for efficient lookups by exchange
+    exchangeIdx: index('price_lists_exchange_idx').on(table.exchangeCode),
+  })
+)
+
+// ==================== PRICE ADJUSTMENTS (Modifiers for prices) ====================
+// Adjustments can target specific exchanges, locations, commodities, or any combination
+// NULL fields act as wildcards (match anything)
+export const priceAdjustments = pgTable(
+  'price_adjustments',
+  {
+    id: serial('id').primaryKey(),
+    exchangeCode: varchar('exchange_code', { length: 20 }), // NULL = applies to all exchanges
+    commodityTicker: varchar('commodity_ticker', { length: 10 }).references(
+      () => fioCommodities.ticker
+    ), // NULL = applies to all commodities
+    locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // NULL = applies to all locations
+    currency: currencyEnum('currency'), // NULL = applies to all currencies
+    adjustmentType: adjustmentTypeEnum('adjustment_type').notNull(), // 'percentage' or 'fixed'
+    adjustmentValue: decimal('adjustment_value', { precision: 12, scale: 4 }).notNull(), // e.g., 5.00 for +5% or +5 units
+    priority: integer('priority').notNull().default(0), // Order of application (lower = first)
+    description: text('description'), // Human-readable explanation
+    isActive: boolean('is_active').notNull().default(true), // Enable/disable without deleting
+    effectiveFrom: timestamp('effective_from'), // NULL = immediately effective
+    effectiveUntil: timestamp('effective_until'), // NULL = no expiration
+    createdByUserId: integer('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Index for efficient lookups when calculating effective prices
+    adjustmentLookupIdx: index('price_adjustments_lookup_idx').on(
+      table.exchangeCode,
+      table.locationId,
+      table.commodityTicker
+    ),
+    // Index for active adjustments
+    activeIdx: index('price_adjustments_active_idx').on(table.isActive),
+  })
+)
+
 // ==================== RELATIONS ====================
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -400,6 +487,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [userDiscordProfiles.userId],
   }),
+  createdPriceAdjustments: many(priceAdjustments), // Adjustments created by this user
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -451,11 +539,16 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
 export const fioCommoditiesRelations = relations(fioCommodities, ({ many }) => ({
   fioInventory: many(fioInventory),
   sellOrders: many(sellOrders),
+  priceLists: many(priceLists),
+  priceAdjustments: many(priceAdjustments),
 }))
 
 export const fioLocationsRelations = relations(fioLocations, ({ many }) => ({
   fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
+  fioExchanges: many(fioExchanges),
+  priceLists: many(priceLists),
+  priceAdjustments: many(priceAdjustments),
 }))
 
 export const fioUserStorageRelations = relations(fioUserStorage, ({ one, many }) => ({
@@ -556,6 +649,42 @@ export const orderReservationsRelations = relations(orderReservations, ({ one })
   }),
   counterpartyUser: one(users, {
     fields: [orderReservations.counterpartyUserId],
+    references: [users.id],
+  }),
+}))
+
+// ==================== PRICING SYSTEM RELATIONS ====================
+
+export const fioExchangesRelations = relations(fioExchanges, ({ one, many }) => ({
+  location: one(fioLocations, {
+    fields: [fioExchanges.locationId],
+    references: [fioLocations.naturalId],
+  }),
+  priceLists: many(priceLists),
+}))
+
+export const priceListsRelations = relations(priceLists, ({ one }) => ({
+  commodity: one(fioCommodities, {
+    fields: [priceLists.commodityTicker],
+    references: [fioCommodities.ticker],
+  }),
+  location: one(fioLocations, {
+    fields: [priceLists.locationId],
+    references: [fioLocations.naturalId],
+  }),
+}))
+
+export const priceAdjustmentsRelations = relations(priceAdjustments, ({ one }) => ({
+  commodity: one(fioCommodities, {
+    fields: [priceAdjustments.commodityTicker],
+    references: [fioCommodities.ticker],
+  }),
+  location: one(fioLocations, {
+    fields: [priceAdjustments.locationId],
+    references: [fioLocations.naturalId],
+  }),
+  createdByUser: one(users, {
+    fields: [priceAdjustments.createdByUserId],
     references: [users.id],
   }),
 }))
