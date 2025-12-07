@@ -39,6 +39,16 @@ const PERMISSIONS_DATA = [
     description: 'Can create orders for trade partners',
   },
   {
+    id: 'reservations.place_internal',
+    name: 'Place Internal Reservations',
+    description: 'Can place reservations on internal orders',
+  },
+  {
+    id: 'reservations.place_partner',
+    name: 'Place Partner Reservations',
+    description: 'Can place reservations on partner orders',
+  },
+  {
     id: 'admin.manage_users',
     name: 'Manage Users',
     description: 'Can view and modify user accounts',
@@ -60,16 +70,24 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'orders.view_partner',
     // Note: applicants cannot post by default
   ],
-  member: ['orders.view_internal', 'orders.view_partner', 'orders.post_internal'],
+  member: [
+    'orders.view_internal',
+    'orders.view_partner',
+    'orders.post_internal',
+    'reservations.place_internal',
+  ],
   lead: [
     'orders.view_internal',
     'orders.view_partner',
     'orders.post_internal',
     'orders.post_partner',
+    'reservations.place_internal',
+    'reservations.place_partner',
   ],
   'trade-partner': [
     'orders.view_partner', // Can only see partner orders
     'orders.post_partner', // Can post partner orders
+    'reservations.place_partner', // Can place reservations on partner orders
   ],
   administrator: [
     'orders.view_internal',

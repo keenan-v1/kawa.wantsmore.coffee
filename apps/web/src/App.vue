@@ -2,9 +2,8 @@
   <v-app>
     <v-app-bar v-if="isAuthenticated" color="primary" density="compact">
       <template #prepend>
-        <KawaLogo :size="32" class="ml-3" />
+        <img src="/navbar-logo.svg" alt="Kawakawa CX" class="navbar-logo ml-3" />
       </template>
-      <v-app-bar-title class="ml-2">Kawakawa CX</v-app-bar-title>
       <v-spacer />
       <!-- Only show navigation for verified users -->
       <template v-if="isVerified">
@@ -40,6 +39,7 @@
           </template>
           Account
         </v-tooltip>
+        <NotificationDropdown ref="notificationDropdown" />
         <v-tooltip v-if="isAdmin" location="bottom">
           <template #activator="{ props }">
             <v-btn v-bind="props" to="/admin" icon size="small" class="mx-1">
@@ -77,16 +77,17 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
-import KawaLogo from './components/KawaLogo.vue'
 import { commodityService } from './services/commodityService'
 import { locationService } from './services/locationService'
 import { roleService } from './services/roleService'
 import { api } from './services/api'
+import NotificationDropdown from './components/NotificationDropdown.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const isAuthenticated = ref(false)
 const pendingApprovalsCount = ref(0)
+const notificationDropdown = ref<InstanceType<typeof NotificationDropdown> | null>(null)
 
 const isVerified = computed(() => {
   const user = userStore.getUser()
@@ -159,8 +160,9 @@ const handleTokenRefreshed = async () => {
   try {
     const user = await api.account.getProfile()
     userStore.setUser(user)
-    // Refresh pending approvals count after token refresh
+    // Refresh counts after token refresh
     fetchPendingApprovalsCount()
+    notificationDropdown.value?.loadUnreadCount()
   } catch (error) {
     console.error('Failed to refresh user profile:', error)
   }
@@ -198,3 +200,10 @@ onUnmounted(() => {
   window.removeEventListener('approval-queue-updated', handleApprovalQueueUpdated)
 })
 </script>
+
+<style scoped>
+.navbar-logo {
+  height: 32px;
+  width: auto;
+}
+</style>

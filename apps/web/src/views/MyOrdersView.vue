@@ -29,6 +29,17 @@
           class="ml-2"
         />
       </v-tab>
+      <v-tab value="reservations">
+        <v-icon start>mdi-clipboard-check</v-icon>
+        Reservations
+        <v-badge
+          v-if="activeReservationsCount > 0"
+          :content="activeReservationsCount"
+          color="warning"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -94,21 +105,44 @@
             </template>
 
             <template #item.availableQuantity="{ item }">
-              <div>
-                <span class="font-weight-medium">{{
-                  item.availableQuantity.toLocaleString()
-                }}</span>
-                <span
-                  v-if="item.availableQuantity !== item.fioQuantity"
-                  class="text-medium-emphasis"
-                >
-                  / {{ item.fioQuantity.toLocaleString() }}
-                </span>
-              </div>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <div v-bind="props">
+                    <span class="font-weight-medium">{{
+                      item.remainingQuantity.toLocaleString()
+                    }}</span>
+                    <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                      / {{ item.availableQuantity.toLocaleString() }}
+                    </span>
+                  </div>
+                </template>
+                <div>
+                  <div>FIO Inventory: {{ item.fioQuantity.toLocaleString() }}</div>
+                  <div>Available: {{ item.availableQuantity.toLocaleString() }}</div>
+                  <div v-if="item.reservedQuantity > 0">
+                    Reserved: {{ item.reservedQuantity.toLocaleString() }}
+                  </div>
+                  <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+                </div>
+              </v-tooltip>
               <div v-if="item.limitMode !== 'none'" class="text-caption text-medium-emphasis">
                 {{ getLimitModeLabel(item.limitMode) }}
                 <span v-if="item.limitQuantity">: {{ item.limitQuantity.toLocaleString() }}</span>
               </div>
+            </template>
+
+            <template #item.activeReservationCount="{ item }">
+              <v-chip
+                v-if="item.activeReservationCount > 0"
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="cursor-pointer"
+                @click="viewSellOrder(item)"
+              >
+                {{ item.activeReservationCount }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">-</span>
             </template>
 
             <template #item.orderType="{ item }">
@@ -123,6 +157,20 @@
 
             <template #item.actions="{ item }">
               <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="viewSellOrder(item)"
+                    >
+                      <v-icon>mdi-eye</v-icon>
+                    </v-btn>
+                  </template>
+                  View order
+                </v-tooltip>
                 <v-tooltip location="top">
                   <template #activator="{ props }">
                     <v-btn
@@ -249,7 +297,37 @@
             </template>
 
             <template #item.quantity="{ item }">
-              <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <span v-bind="props" class="font-weight-medium">
+                    {{ item.remainingQuantity.toLocaleString() }}
+                    <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
+                      / {{ item.quantity.toLocaleString() }}
+                    </span>
+                  </span>
+                </template>
+                <div>
+                  <div>Total: {{ item.quantity.toLocaleString() }}</div>
+                  <div v-if="item.reservedQuantity > 0">
+                    Filled: {{ item.reservedQuantity.toLocaleString() }}
+                  </div>
+                  <div>Remaining: {{ item.remainingQuantity.toLocaleString() }}</div>
+                </div>
+              </v-tooltip>
+            </template>
+
+            <template #item.activeReservationCount="{ item }">
+              <v-chip
+                v-if="item.activeReservationCount > 0"
+                size="small"
+                color="primary"
+                variant="tonal"
+                class="cursor-pointer"
+                @click="viewBuyOrder(item)"
+              >
+                {{ item.activeReservationCount }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">-</span>
             </template>
 
             <template #item.orderType="{ item }">
@@ -264,6 +342,20 @@
 
             <template #item.actions="{ item }">
               <div class="d-flex ga-1">
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="viewBuyOrder(item)"
+                    >
+                      <v-icon>mdi-eye</v-icon>
+                    </v-btn>
+                  </template>
+                  View order
+                </v-tooltip>
                 <v-tooltip location="top">
                   <template #activator="{ props }">
                     <v-btn
@@ -327,10 +419,289 @@
           </v-data-table>
         </v-card>
       </v-tabs-window-item>
+
+      <!-- RESERVATIONS TAB -->
+      <v-tabs-window-item value="reservations">
+        <v-card>
+          <v-card-title>
+            <v-row align="center">
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="reservationSearch"
+                  prepend-icon="mdi-magnify"
+                  label="Search reservations..."
+                  single-line
+                  hide-details
+                  clearable
+                  density="compact"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-select
+                  v-model="reservationRoleFilter"
+                  :items="reservationRoleOptions"
+                  item-title="title"
+                  item-value="value"
+                  label="Role"
+                  density="compact"
+                  hide-details
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-select
+                  v-model="reservationStatusFilter"
+                  :items="reservationStatusOptions"
+                  item-title="title"
+                  item-value="value"
+                  label="Status"
+                  density="compact"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+            </v-row>
+          </v-card-title>
+
+          <v-data-table
+            :headers="reservationHeaders"
+            :items="filteredReservations"
+            :loading="loadingReservations"
+            :items-per-page="25"
+            class="elevation-0"
+          >
+            <template #item.orderType="{ item }">
+              <v-chip
+                :color="item.sellOrderId ? 'warning' : 'info'"
+                size="x-small"
+                variant="outlined"
+              >
+                {{ item.sellOrderId ? 'Sell' : 'Buy' }}
+              </v-chip>
+            </template>
+
+            <template #item.commodityTicker="{ item }">
+              <span class="font-weight-medium">{{
+                getCommodityDisplay(item.commodityTicker)
+              }}</span>
+            </template>
+
+            <template #item.locationId="{ item }">
+              {{ getLocationDisplay(item.locationId) }}
+            </template>
+
+            <template #item.counterparty="{ item }">
+              {{ item.isOrderOwner ? item.counterpartyName : item.orderOwnerName }}
+            </template>
+
+            <template #item.price="{ item }">
+              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+            </template>
+
+            <template #item.quantity="{ item }">
+              <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+            </template>
+
+            <template #item.status="{ item }">
+              <ReservationStatusChip :status="item.status" size="small" />
+            </template>
+
+            <template #item.expiresAt="{ item }">
+              <span v-if="item.expiresAt" class="text-caption">
+                {{ formatDate(item.expiresAt) }}
+              </span>
+              <span v-else class="text-medium-emphasis">-</span>
+            </template>
+
+            <template #item.notes="{ item }">
+              <v-tooltip v-if="item.notes" location="top" max-width="300">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="small" color="info">mdi-note-text</v-icon>
+                </template>
+                {{ item.notes }}
+              </v-tooltip>
+            </template>
+
+            <template #item.actions="{ item }">
+              <div class="d-flex ga-1">
+                <!-- Order Owner Actions -->
+                <template v-if="item.isOrderOwner">
+                  <!-- Pending: Confirm / Reject -->
+                  <template v-if="item.status === 'pending'">
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="success"
+                          :loading="reservationActionLoading === `confirm-${item.id}`"
+                          @click="confirmReservation(item.id)"
+                        >
+                          <v-icon>mdi-check</v-icon>
+                        </v-btn>
+                      </template>
+                      Confirm
+                    </v-tooltip>
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="error"
+                          :loading="reservationActionLoading === `reject-${item.id}`"
+                          @click="rejectReservation(item.id)"
+                        >
+                          <v-icon>mdi-close</v-icon>
+                        </v-btn>
+                      </template>
+                      Reject
+                    </v-tooltip>
+                  </template>
+                  <!-- Confirmed: Fulfill / Cancel -->
+                  <template v-if="item.status === 'confirmed'">
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="success"
+                          :loading="reservationActionLoading === `fulfill-${item.id}`"
+                          @click="fulfillReservation(item.id)"
+                        >
+                          <v-icon>mdi-check-all</v-icon>
+                        </v-btn>
+                      </template>
+                      Mark Fulfilled
+                    </v-tooltip>
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="warning"
+                          :loading="reservationActionLoading === `cancel-${item.id}`"
+                          @click="cancelReservation(item.id)"
+                        >
+                          <v-icon>mdi-cancel</v-icon>
+                        </v-btn>
+                      </template>
+                      Cancel
+                    </v-tooltip>
+                  </template>
+                </template>
+
+                <!-- Counterparty Actions -->
+                <template v-if="item.isCounterparty">
+                  <!-- Pending: Cancel -->
+                  <template v-if="item.status === 'pending'">
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="warning"
+                          :loading="reservationActionLoading === `cancel-${item.id}`"
+                          @click="cancelReservation(item.id)"
+                        >
+                          <v-icon>mdi-cancel</v-icon>
+                        </v-btn>
+                      </template>
+                      Cancel
+                    </v-tooltip>
+                  </template>
+                  <!-- Confirmed: Fulfill / Cancel -->
+                  <template v-if="item.status === 'confirmed'">
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="success"
+                          :loading="reservationActionLoading === `fulfill-${item.id}`"
+                          @click="fulfillReservation(item.id)"
+                        >
+                          <v-icon>mdi-check-all</v-icon>
+                        </v-btn>
+                      </template>
+                      Mark Fulfilled
+                    </v-tooltip>
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="warning"
+                          :loading="reservationActionLoading === `cancel-${item.id}`"
+                          @click="cancelReservation(item.id)"
+                        >
+                          <v-icon>mdi-cancel</v-icon>
+                        </v-btn>
+                      </template>
+                      Cancel
+                    </v-tooltip>
+                  </template>
+                  <!-- Cancelled: Reopen -->
+                  <template v-if="item.status === 'cancelled'">
+                    <v-tooltip location="top">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          size="small"
+                          variant="text"
+                          color="primary"
+                          :loading="reservationActionLoading === `reopen-${item.id}`"
+                          @click="reopenReservation(item.id)"
+                        >
+                          <v-icon>mdi-refresh</v-icon>
+                        </v-btn>
+                      </template>
+                      Reopen
+                    </v-tooltip>
+                  </template>
+                </template>
+              </div>
+            </template>
+
+            <template #no-data>
+              <div class="text-center py-8">
+                <v-icon size="64" color="grey-lighten-1">mdi-clipboard-check</v-icon>
+                <p class="text-h6 mt-4">No reservations</p>
+                <p class="text-body-2 text-medium-emphasis">
+                  Reservations you've made or received will appear here
+                </p>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Order Dialog -->
     <OrderDialog v-model="orderDialog" :initial-tab="orderDialogTab" @created="onOrderCreated" />
+
+    <!-- Order Detail Dialog -->
+    <OrderDetailDialog
+      v-model="orderDetailDialog"
+      :order-type="orderDetailType"
+      :order-id="orderDetailId"
+      @deleted="onOrderDeleted"
+      @updated="onOrderUpdated"
+    />
 
     <!-- Edit Sell Order Dialog -->
     <v-dialog v-model="editSellDialog" max-width="500" persistent>
@@ -516,11 +887,19 @@ import {
   type SellOrderLimitMode,
   type OrderType,
 } from '@kawakawa/types'
-import { api, type SellOrderResponse, type BuyOrderResponse } from '../services/api'
+import {
+  api,
+  type SellOrderResponse,
+  type BuyOrderResponse,
+  type ReservationWithDetails,
+  type ReservationStatus,
+} from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import OrderDialog from '../components/OrderDialog.vue'
+import OrderDetailDialog from '../components/OrderDetailDialog.vue'
+import ReservationStatusChip from '../components/ReservationStatusChip.vue'
 
 const userStore = useUserStore()
 
@@ -540,8 +919,14 @@ const sellHeaders = [
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'Price', key: 'price', sortable: true },
   { title: 'Available', key: 'availableQuantity', sortable: true, align: 'end' as const },
+  {
+    title: 'Reservations',
+    key: 'activeReservationCount',
+    sortable: true,
+    align: 'center' as const,
+  },
   { title: 'Type', key: 'orderType', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 120 },
 ]
 
 const buyHeaders = [
@@ -549,8 +934,43 @@ const buyHeaders = [
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'Price', key: 'price', sortable: true },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
+  {
+    title: 'Reservations',
+    key: 'activeReservationCount',
+    sortable: true,
+    align: 'center' as const,
+  },
   { title: 'Type', key: 'orderType', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 120 },
+]
+
+const reservationHeaders = [
+  { title: 'Order', key: 'orderType', sortable: false, width: 60 },
+  { title: 'Commodity', key: 'commodityTicker', sortable: true },
+  { title: 'Location', key: 'locationId', sortable: true },
+  { title: 'With', key: 'counterparty', sortable: true },
+  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Qty', key: 'quantity', sortable: true, align: 'end' as const },
+  { title: 'Status', key: 'status', sortable: true },
+  { title: 'Expires', key: 'expiresAt', sortable: true },
+  { title: '', key: 'notes', sortable: false, width: 40 },
+  { title: 'Actions', key: 'actions', sortable: false, width: 120 },
+]
+
+const reservationRoleOptions = [
+  { title: 'All', value: 'all' },
+  { title: 'My Orders', value: 'owner' },
+  { title: 'I Reserved', value: 'counterparty' },
+]
+
+const reservationStatusOptions = [
+  { title: 'All Statuses', value: null },
+  { title: 'Pending', value: 'pending' },
+  { title: 'Confirmed', value: 'confirmed' },
+  { title: 'Fulfilled', value: 'fulfilled' },
+  { title: 'Rejected', value: 'rejected' },
+  { title: 'Cancelled', value: 'cancelled' },
+  { title: 'Expired', value: 'expired' },
 ]
 
 // Sell orders state
@@ -564,6 +984,19 @@ const loadingBuy = ref(false)
 const buySearch = ref('')
 const orderDialog = ref(false)
 const orderDialogTab = ref<'buy' | 'sell'>('buy')
+
+// Reservations state
+const reservations = ref<ReservationWithDetails[]>([])
+const loadingReservations = ref(false)
+const reservationSearch = ref('')
+const reservationRoleFilter = ref<'all' | 'owner' | 'counterparty'>('all')
+const reservationStatusFilter = ref<ReservationStatus | null>(null)
+const reservationActionLoading = ref<string | null>(null)
+
+// Order detail dialog
+const orderDetailDialog = ref(false)
+const orderDetailType = ref<'sell' | 'buy'>('sell')
+const orderDetailId = ref<number>(0)
 
 // Edit sell order state
 const editSellDialog = ref(false)
@@ -661,8 +1094,52 @@ const filteredBuyOrders = computed(() => {
   )
 })
 
+const filteredReservations = computed(() => {
+  let result = reservations.value
+
+  // Filter by role
+  if (reservationRoleFilter.value === 'owner') {
+    result = result.filter(r => r.isOrderOwner)
+  } else if (reservationRoleFilter.value === 'counterparty') {
+    result = result.filter(r => r.isCounterparty)
+  }
+
+  // Filter by status
+  if (reservationStatusFilter.value) {
+    result = result.filter(r => r.status === reservationStatusFilter.value)
+  }
+
+  // Filter by search
+  if (reservationSearch.value) {
+    const searchLower = reservationSearch.value.toLowerCase()
+    result = result.filter(
+      r =>
+        r.commodityTicker.toLowerCase().includes(searchLower) ||
+        r.locationId.toLowerCase().includes(searchLower) ||
+        r.counterpartyName.toLowerCase().includes(searchLower) ||
+        r.orderOwnerName.toLowerCase().includes(searchLower)
+    )
+  }
+
+  return result
+})
+
+const activeReservationsCount = computed(() => {
+  return reservations.value.filter(r => r.status === 'pending' || r.status === 'confirmed').length
+})
+
 const formatPrice = (price: number): string => {
   return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const getLimitModeLabel = (mode: SellOrderLimitMode): string => {
@@ -701,6 +1178,90 @@ const loadBuyOrders = async () => {
   }
 }
 
+const loadReservations = async () => {
+  try {
+    loadingReservations.value = true
+    // Load all reservations (both as owner and counterparty)
+    reservations.value = await api.reservations.list('all')
+  } catch (error) {
+    console.error('Failed to load reservations', error)
+    showSnackbar('Failed to load reservations', 'error')
+  } finally {
+    loadingReservations.value = false
+  }
+}
+
+// Reservation actions
+const confirmReservation = async (id: number) => {
+  try {
+    reservationActionLoading.value = `confirm-${id}`
+    await api.reservations.confirm(id)
+    showSnackbar('Reservation confirmed')
+    await loadReservations()
+  } catch (error) {
+    console.error('Failed to confirm reservation', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to confirm reservation', 'error')
+  } finally {
+    reservationActionLoading.value = null
+  }
+}
+
+const rejectReservation = async (id: number) => {
+  try {
+    reservationActionLoading.value = `reject-${id}`
+    await api.reservations.reject(id)
+    showSnackbar('Reservation rejected')
+    await loadReservations()
+  } catch (error) {
+    console.error('Failed to reject reservation', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to reject reservation', 'error')
+  } finally {
+    reservationActionLoading.value = null
+  }
+}
+
+const fulfillReservation = async (id: number) => {
+  try {
+    reservationActionLoading.value = `fulfill-${id}`
+    await api.reservations.fulfill(id)
+    showSnackbar('Reservation marked as fulfilled')
+    await loadReservations()
+  } catch (error) {
+    console.error('Failed to fulfill reservation', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to fulfill reservation', 'error')
+  } finally {
+    reservationActionLoading.value = null
+  }
+}
+
+const cancelReservation = async (id: number) => {
+  try {
+    reservationActionLoading.value = `cancel-${id}`
+    await api.reservations.cancel(id)
+    showSnackbar('Reservation cancelled')
+    await loadReservations()
+  } catch (error) {
+    console.error('Failed to cancel reservation', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to cancel reservation', 'error')
+  } finally {
+    reservationActionLoading.value = null
+  }
+}
+
+const reopenReservation = async (id: number) => {
+  try {
+    reservationActionLoading.value = `reopen-${id}`
+    await api.reservations.reopen(id)
+    showSnackbar('Reservation reopened')
+    await loadReservations()
+  } catch (error) {
+    console.error('Failed to reopen reservation', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to reopen reservation', 'error')
+  } finally {
+    reservationActionLoading.value = null
+  }
+}
+
 // Open order dialogs
 const openBuyOrderDialog = () => {
   orderDialogTab.value = 'buy'
@@ -712,9 +1273,39 @@ const openSellOrderDialog = () => {
   orderDialog.value = true
 }
 
+// View order functions
+const viewSellOrder = (order: SellOrderResponse) => {
+  orderDetailType.value = 'sell'
+  orderDetailId.value = order.id
+  orderDetailDialog.value = true
+}
+
+const viewBuyOrder = (order: BuyOrderResponse) => {
+  orderDetailType.value = 'buy'
+  orderDetailId.value = order.id
+  orderDetailDialog.value = true
+}
+
 // Handler for OrderDialog creation
 const onOrderCreated = async (type: 'buy' | 'sell') => {
   if (type === 'buy') {
+    await loadBuyOrders()
+  } else {
+    await loadSellOrders()
+  }
+}
+
+// Handlers for OrderDetailDialog events
+const onOrderDeleted = async () => {
+  if (orderDetailType.value === 'buy') {
+    await loadBuyOrders()
+  } else {
+    await loadSellOrders()
+  }
+}
+
+const onOrderUpdated = async () => {
+  if (orderDetailType.value === 'buy') {
     await loadBuyOrders()
   } else {
     await loadSellOrders()
@@ -851,5 +1442,6 @@ const deleteBuyOrder = async () => {
 onMounted(() => {
   loadSellOrders()
   loadBuyOrders()
+  loadReservations()
 })
 </script>

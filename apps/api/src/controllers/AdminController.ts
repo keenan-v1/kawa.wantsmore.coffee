@@ -32,6 +32,7 @@ import { invalidateCachedRoles } from '../utils/roleCache.js'
 import { invalidatePermissionCache } from '../utils/permissionService.js'
 import crypto from 'crypto'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
+import { notificationService } from '../services/notificationService.js'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -371,6 +372,21 @@ export class AdminController extends Controller {
 
     // Invalidate role cache
     invalidateCachedRoles(userId)
+
+    // Get role name for notification
+    const [roleInfo] = await db
+      .select({ name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, targetRoleId))
+
+    // Send notification to the approved user
+    await notificationService.create(
+      userId,
+      'user_approved',
+      'Account Approved',
+      `Your account has been approved! You have been assigned the "${roleInfo?.name || targetRoleId}" role.`,
+      { roleId: targetRoleId, roleName: roleInfo?.name || targetRoleId }
+    )
 
     // Return updated user
     return this.getUser(userId)

@@ -211,6 +211,10 @@ interface SellOrderResponse {
   limitQuantity: number | null
   fioQuantity: number
   availableQuantity: number
+  activeReservationCount: number
+  reservedQuantity: number
+  fulfilledQuantity: number
+  remainingQuantity: number
 }
 
 interface CreateSellOrderRequest {
@@ -240,6 +244,10 @@ interface BuyOrderResponse {
   price: number
   currency: Currency
   orderType: OrderType
+  activeReservationCount: number
+  reservedQuantity: number
+  fulfilledQuantity: number
+  remainingQuantity: number
 }
 
 interface CreateBuyOrderRequest {
@@ -269,6 +277,11 @@ interface MarketListing {
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean
+  jumpCount: number | null
+  activeReservationCount: number
+  reservedQuantity: number
+  remainingQuantity: number
+  fioUploadedAt: string | null
 }
 
 interface MarketBuyRequest {
@@ -281,6 +294,83 @@ interface MarketBuyRequest {
   currency: Currency
   orderType: OrderType
   isOwn: boolean
+  jumpCount: number | null
+  activeReservationCount: number
+  reservedQuantity: number
+  remainingQuantity: number
+  fioUploadedAt: string | null
+}
+
+// Notification types
+type NotificationType =
+  | 'reservation_placed'
+  | 'reservation_confirmed'
+  | 'reservation_rejected'
+  | 'reservation_fulfilled'
+  | 'reservation_cancelled'
+  | 'reservation_expired'
+  | 'user_needs_approval'
+  | 'user_auto_approved'
+  | 'user_approved'
+  | 'user_rejected'
+
+interface Notification {
+  id: number
+  type: NotificationType
+  title: string
+  message: string | null
+  data: Record<string, unknown> | null
+  isRead: boolean
+  createdAt: string
+}
+
+// Reservation types
+type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'fulfilled'
+  | 'expired'
+  | 'cancelled'
+
+interface ReservationWithDetails {
+  id: number
+  sellOrderId: number | null
+  buyOrderId: number | null
+  counterpartyUserId: number
+  quantity: number
+  status: ReservationStatus
+  notes: string | null
+  expiresAt: string | null
+  createdAt: string
+  updatedAt: string
+  orderOwnerName: string
+  orderOwnerUserId: number
+  counterpartyName: string
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  isOrderOwner: boolean
+  isCounterparty: boolean
+}
+
+interface CreateSellOrderReservationRequest {
+  sellOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string
+}
+
+interface CreateBuyOrderReservationRequest {
+  buyOrderId: number
+  quantity: number
+  notes?: string
+  expiresAt?: string
+}
+
+interface UpdateReservationStatusRequest {
+  notes?: string
 }
 
 // Helper to get JWT token from localStorage
@@ -1115,10 +1205,15 @@ const realApi = {
   },
 
   // Market methods
-  getMarketListings: async (commodity?: string, location?: string): Promise<MarketListing[]> => {
+  getMarketListings: async (
+    commodity?: string,
+    location?: string,
+    destination?: string
+  ): Promise<MarketListing[]> => {
     const params = new URLSearchParams()
     if (commodity) params.append('commodity', commodity)
     if (location) params.append('location', location)
+    if (destination) params.append('destination', destination)
 
     const url = `/api/market/listings${params.toString() ? '?' + params.toString() : ''}`
     const response = await fetchWithLogging(url, {
@@ -1143,11 +1238,13 @@ const realApi = {
 
   getMarketBuyRequests: async (
     commodity?: string,
-    location?: string
+    location?: string,
+    destination?: string
   ): Promise<MarketBuyRequest[]> => {
     const params = new URLSearchParams()
     if (commodity) params.append('commodity', commodity)
     if (location) params.append('location', location)
+    if (destination) params.append('destination', destination)
 
     const url = `/api/market/buy-requests${params.toString() ? '?' + params.toString() : ''}`
     const response = await fetchWithLogging(url, {
@@ -1700,6 +1797,385 @@ const realApi = {
 
     return response.json()
   },
+
+  // Notifications methods
+  getNotifications: async (
+    limit?: number,
+    offset?: number,
+    unreadOnly?: boolean
+  ): Promise<Notification[]> => {
+    const params = new URLSearchParams()
+    if (limit !== undefined) params.append('limit', String(limit))
+    if (offset !== undefined) params.append('offset', String(offset))
+    if (unreadOnly !== undefined) params.append('unreadOnly', String(unreadOnly))
+
+    const url = `/api/notifications${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get notifications: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
+    const response = await fetchWithLogging('/api/notifications/unread-count', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get unread count: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  markNotificationAsRead: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/notifications/${id}/read`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Notification not found')
+      }
+      throw new Error(`Failed to mark as read: ${response.statusText}`)
+    }
+  },
+
+  markAllNotificationsAsRead: async (): Promise<{ count: number }> => {
+    const response = await fetchWithLogging('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to mark all as read: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteNotification: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/notifications/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Notification not found')
+      }
+      throw new Error(`Failed to delete notification: ${response.statusText}`)
+    }
+  },
+
+  // Reservations methods
+  getReservations: async (
+    role?: 'owner' | 'counterparty' | 'all',
+    status?: ReservationStatus
+  ): Promise<ReservationWithDetails[]> => {
+    const params = new URLSearchParams()
+    if (role) params.append('role', role)
+    if (status) params.append('status', status)
+
+    const url = `/api/reservations${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get reservations: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getReservation: async (id: number): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Reservation not found')
+      }
+      throw new Error(`Failed to get reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createSellOrderReservation: async (
+    request: CreateSellOrderReservationRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging('/api/reservations/sell-order', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to create reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createBuyOrderReservation: async (
+    request: CreateBuyOrderReservationRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging('/api/reservations/buy-order', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to create reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  confirmReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/confirm`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to confirm reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  rejectReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/reject`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to reject reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  fulfillReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/fulfill`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to fulfill reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  cancelReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/cancel`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to cancel reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  reopenReservation: async (
+    id: number,
+    request?: UpdateReservationStatusRequest
+  ): Promise<ReservationWithDetails> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}/reopen`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request || {}),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid status transition')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      throw new Error(`Failed to reopen reservation: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteReservation: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/reservations/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Cannot delete reservation')
+      }
+      if (response.status === 403) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error('Reservation not found')
+      }
+      throw new Error(`Failed to delete reservation: ${response.statusText}`)
+    }
+  },
+
+  // Location distance
+  getLocationDistance: async (
+    from: string,
+    to: string
+  ): Promise<{ from: string; to: string; jumpCount: number | null }> => {
+    const params = new URLSearchParams({ from, to })
+    const response = await fetchWithLogging(`/api/locations/distance?${params}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get distance: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -1764,10 +2240,10 @@ export const api = {
     delete: (id: number) => realApi.deleteBuyOrder(id),
   },
   market: {
-    getListings: (commodity?: string, location?: string) =>
-      realApi.getMarketListings(commodity, location),
-    getBuyRequests: (commodity?: string, location?: string) =>
-      realApi.getMarketBuyRequests(commodity, location),
+    getListings: (commodity?: string, location?: string, destination?: string) =>
+      realApi.getMarketListings(commodity, location, destination),
+    getBuyRequests: (commodity?: string, location?: string, destination?: string) =>
+      realApi.getMarketBuyRequests(commodity, location, destination),
   },
   roles: {
     list: () => realApi.getRoles(),
@@ -1800,6 +2276,37 @@ export const api = {
     completeRegistration: (request: DiscordRegisterRequest) =>
       realApi.completeDiscordRegistration(request),
   },
+  notifications: {
+    list: (limit?: number, offset?: number, unreadOnly?: boolean) =>
+      realApi.getNotifications(limit, offset, unreadOnly),
+    getUnreadCount: () => realApi.getUnreadNotificationCount(),
+    markAsRead: (id: number) => realApi.markNotificationAsRead(id),
+    markAllAsRead: () => realApi.markAllNotificationsAsRead(),
+    delete: (id: number) => realApi.deleteNotification(id),
+  },
+  reservations: {
+    list: (role?: 'owner' | 'counterparty' | 'all', status?: ReservationStatus) =>
+      realApi.getReservations(role, status),
+    get: (id: number) => realApi.getReservation(id),
+    createForSellOrder: (request: CreateSellOrderReservationRequest) =>
+      realApi.createSellOrderReservation(request),
+    createForBuyOrder: (request: CreateBuyOrderReservationRequest) =>
+      realApi.createBuyOrderReservation(request),
+    confirm: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.confirmReservation(id, request),
+    reject: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.rejectReservation(id, request),
+    fulfill: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.fulfillReservation(id, request),
+    cancel: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.cancelReservation(id, request),
+    reopen: (id: number, request?: UpdateReservationStatusRequest) =>
+      realApi.reopenReservation(id, request),
+    delete: (id: number) => realApi.deleteReservation(id),
+  },
+  locations: {
+    getDistance: (from: string, to: string) => realApi.getLocationDistance(from, to),
+  },
 }
 
 // Export types for use in components
@@ -1813,4 +2320,11 @@ export type {
   UpdateBuyOrderRequest,
   MarketListing,
   MarketBuyRequest,
+  Notification,
+  NotificationType,
+  ReservationStatus,
+  ReservationWithDetails,
+  CreateSellOrderReservationRequest,
+  CreateBuyOrderReservationRequest,
+  UpdateReservationStatusRequest,
 }

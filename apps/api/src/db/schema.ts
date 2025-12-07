@@ -12,6 +12,8 @@ import {
   pgEnum,
   boolean,
   uniqueIndex,
+  index,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -34,6 +36,26 @@ export const sellOrderLimitModeEnum = pgEnum('sell_order_limit_mode', [
   'reserve',
 ])
 export const orderTypeEnum = pgEnum('order_type', ['internal', 'partner']) // Shared enum for sell/buy orders
+export const notificationTypeEnum = pgEnum('notification_type', [
+  'reservation_placed',
+  'reservation_confirmed',
+  'reservation_rejected',
+  'reservation_fulfilled',
+  'reservation_cancelled',
+  'reservation_expired',
+  'user_needs_approval',
+  'user_auto_approved',
+  'user_approved',
+  'user_rejected',
+])
+export const reservationStatusEnum = pgEnum('reservation_status', [
+  'pending',
+  'confirmed',
+  'rejected',
+  'fulfilled',
+  'expired',
+  'cancelled',
+])
 
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(
@@ -308,6 +330,58 @@ export const buyOrders = pgTable(
   })
 )
 
+// ==================== NOTIFICATIONS ====================
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: notificationTypeEnum('type').notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    message: text('message'),
+    data: jsonb('data'), // { orderId, reservationId, counterpartyId, roles, etc. }
+    isRead: boolean('is_read').notNull().default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  table => ({
+    userReadIdx: index('notifications_user_read_idx').on(
+      table.userId,
+      table.isRead,
+      table.createdAt
+    ),
+  })
+)
+
+// ==================== ORDER RESERVATIONS (User reserving from/filling an order) ====================
+// A reservation links a counterparty user to an order they want to reserve from or fill
+// Either sellOrderId OR buyOrderId is set (not both) - indicating which order is being acted upon
+export const orderReservations = pgTable(
+  'order_reservations',
+  {
+    id: serial('id').primaryKey(),
+    // One of these will be set - indicates which order is being reserved from / filled
+    sellOrderId: integer('sell_order_id').references(() => sellOrders.id, { onDelete: 'cascade' }),
+    buyOrderId: integer('buy_order_id').references(() => buyOrders.id, { onDelete: 'cascade' }),
+    // The user making the reservation (buyer if reserving from sell, seller if filling buy)
+    counterpartyUserId: integer('counterparty_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    quantity: integer('quantity').notNull(),
+    status: reservationStatusEnum('status').notNull().default('pending'),
+    notes: text('notes'),
+    expiresAt: timestamp('expires_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    sellOrderIdx: index('order_reservations_sell_order_idx').on(table.sellOrderId),
+    buyOrderIdx: index('order_reservations_buy_order_idx').on(table.buyOrderId),
+    counterpartyIdx: index('order_reservations_counterparty_idx').on(table.counterpartyUserId),
+  })
+)
+
 // ==================== RELATIONS ====================
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -320,6 +394,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
   buyOrders: many(buyOrders),
+  notifications: many(notifications),
+  reservations: many(orderReservations), // Reservations where user is the counterparty
   discordProfile: one(userDiscordProfiles, {
     fields: [users.id],
     references: [userDiscordProfiles.userId],
@@ -405,7 +481,7 @@ export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
   }),
 }))
 
-export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
+export const sellOrdersRelations = relations(sellOrders, ({ one, many }) => ({
   user: one(users, {
     fields: [sellOrders.userId],
     references: [users.id],
@@ -418,9 +494,10 @@ export const sellOrdersRelations = relations(sellOrders, ({ one }) => ({
     fields: [sellOrders.locationId],
     references: [fioLocations.naturalId],
   }),
+  reservations: many(orderReservations),
 }))
 
-export const buyOrdersRelations = relations(buyOrders, ({ one }) => ({
+export const buyOrdersRelations = relations(buyOrders, ({ one, many }) => ({
   user: one(users, {
     fields: [buyOrders.userId],
     references: [users.id],
@@ -433,6 +510,7 @@ export const buyOrdersRelations = relations(buyOrders, ({ one }) => ({
     fields: [buyOrders.locationId],
     references: [fioLocations.naturalId],
   }),
+  reservations: many(orderReservations),
 }))
 
 // ==================== DISCORD & SETTINGS RELATIONS ====================
@@ -454,6 +532,30 @@ export const discordRoleMappingsRelations = relations(discordRoleMappings, ({ on
 export const userDiscordProfilesRelations = relations(userDiscordProfiles, ({ one }) => ({
   user: one(users, {
     fields: [userDiscordProfiles.userId],
+    references: [users.id],
+  }),
+}))
+
+// ==================== NOTIFICATIONS & RESERVATIONS RELATIONS ====================
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}))
+
+export const orderReservationsRelations = relations(orderReservations, ({ one }) => ({
+  buyOrder: one(buyOrders, {
+    fields: [orderReservations.buyOrderId],
+    references: [buyOrders.id],
+  }),
+  sellOrder: one(sellOrders, {
+    fields: [orderReservations.sellOrderId],
+    references: [sellOrders.id],
+  }),
+  counterpartyUser: one(users, {
+    fields: [orderReservations.counterpartyUserId],
     references: [users.id],
   }),
 }))

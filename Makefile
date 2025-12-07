@@ -1,6 +1,6 @@
 # Kawakawa CX - Development Commands
 
-.PHONY: help install dev build test lint lint-fix format format-check db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
+.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -37,6 +37,17 @@ format: ## Format all files with Prettier
 
 format-check: ## Check formatting without modifying
 	pnpm format:check
+
+generate: ## Generate TSOA routes and Drizzle migrations
+	pnpm --filter @kawakawa/api tsoa:generate
+	pnpm --filter @kawakawa/api db:generate
+
+checkpoint: ## Run full validation: generate, format, lint, build, test
+	$(MAKE) generate
+	$(MAKE) format
+	$(MAKE) lint
+	$(MAKE) build
+	$(MAKE) test
 
 db-init: ## Initialize database (migrate, seed, sync FIO) - idempotent, production-ready
 	pnpm --filter @kawakawa/api db:migrate
