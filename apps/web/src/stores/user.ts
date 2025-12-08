@@ -1,14 +1,21 @@
 // User store for managing user state across the application
+// Note: Display preferences (currency, display modes) are now in the settings store
 import { ref } from 'vue'
-import type { User, Currency, LocationDisplayMode, CommodityDisplayMode } from '../types'
+import type { User } from '../types'
+import { useSettingsStore } from './settings'
 
 const currentUser = ref<User | null>(null)
 
 export const useUserStore = () => {
+  const settingsStore = useSettingsStore()
+
   const setUser = (user: User) => {
     currentUser.value = user
     // Store in localStorage for persistence
     localStorage.setItem('user', JSON.stringify(user))
+    // Load settings for this user
+    settingsStore.loadFromCache()
+    settingsStore.loadSettings()
   }
 
   const getUser = (): User | null => {
@@ -24,55 +31,11 @@ export const useUserStore = () => {
     return null
   }
 
-  const updateCurrency = (currency: Currency) => {
-    if (currentUser.value) {
-      currentUser.value.preferredCurrency = currency
-      localStorage.setItem('user', JSON.stringify(currentUser.value))
-    }
-  }
-
   const clearUser = () => {
     currentUser.value = null
     localStorage.removeItem('user')
-  }
-
-  const getPreferredCurrency = (): Currency => {
-    const user = getUser()
-    return user?.preferredCurrency || 'CIS'
-  }
-
-  const updateLocationDisplayMode = (mode: LocationDisplayMode) => {
-    if (currentUser.value) {
-      currentUser.value.locationDisplayMode = mode
-      localStorage.setItem('user', JSON.stringify(currentUser.value))
-    }
-  }
-
-  const getLocationDisplayMode = (): LocationDisplayMode => {
-    const user = getUser()
-    return user?.locationDisplayMode || 'both'
-  }
-
-  const updateCommodityDisplayMode = (mode: CommodityDisplayMode) => {
-    if (currentUser.value) {
-      currentUser.value.commodityDisplayMode = mode
-      localStorage.setItem('user', JSON.stringify(currentUser.value))
-    }
-  }
-
-  const getCommodityDisplayMode = (): CommodityDisplayMode => {
-    const user = getUser()
-    return user?.commodityDisplayMode || 'both'
-  }
-
-  // Browser notifications preference (stored in localStorage)
-  const setBrowserNotificationsEnabled = (enabled: boolean) => {
-    localStorage.setItem('browserNotificationsEnabled', JSON.stringify(enabled))
-  }
-
-  const getBrowserNotificationsEnabled = (): boolean => {
-    const stored = localStorage.getItem('browserNotificationsEnabled')
-    return stored ? JSON.parse(stored) : false
+    // Clear settings cache
+    settingsStore.clearSettings()
   }
 
   // Check if user has a specific permission
@@ -89,20 +52,56 @@ export const useUserStore = () => {
     return permissionIds.some(id => user.permissions.includes(id))
   }
 
+  // ==================== DEPRECATED - Use settings store instead ====================
+  // These methods are kept for backwards compatibility but delegate to settings store
+
+  const getPreferredCurrency = () => {
+    return settingsStore.preferredCurrency.value
+  }
+
+  const updateCurrency = async (currency: string) => {
+    await settingsStore.updateSetting('display.preferredCurrency', currency)
+  }
+
+  const getLocationDisplayMode = () => {
+    return settingsStore.locationDisplayMode.value
+  }
+
+  const updateLocationDisplayMode = async (mode: string) => {
+    await settingsStore.updateSetting('display.locationDisplayMode', mode)
+  }
+
+  const getCommodityDisplayMode = () => {
+    return settingsStore.commodityDisplayMode.value
+  }
+
+  const updateCommodityDisplayMode = async (mode: string) => {
+    await settingsStore.updateSetting('display.commodityDisplayMode', mode)
+  }
+
+  const getBrowserNotificationsEnabled = () => {
+    return settingsStore.browserNotificationsEnabled.value
+  }
+
+  const setBrowserNotificationsEnabled = async (enabled: boolean) => {
+    await settingsStore.updateSetting('notifications.browserEnabled', enabled)
+  }
+
   return {
     currentUser,
     setUser,
     getUser,
-    updateCurrency,
     clearUser,
-    getPreferredCurrency,
-    updateLocationDisplayMode,
-    getLocationDisplayMode,
-    updateCommodityDisplayMode,
-    getCommodityDisplayMode,
-    setBrowserNotificationsEnabled,
-    getBrowserNotificationsEnabled,
     hasPermission,
     hasAnyPermission,
+    // Deprecated - use settings store directly
+    getPreferredCurrency,
+    updateCurrency,
+    getLocationDisplayMode,
+    updateLocationDisplayMode,
+    getCommodityDisplayMode,
+    updateCommodityDisplayMode,
+    getBrowserNotificationsEnabled,
+    setBrowserNotificationsEnabled,
   }
 }

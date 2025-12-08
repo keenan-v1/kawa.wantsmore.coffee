@@ -179,26 +179,24 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== USER SETTINGS ====================
-export const userSettings = pgTable('user_settings', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  fioUsername: varchar('fio_username', { length: 100 }), // FIO game username
-  fioApiKey: text('fio_api_key'), // FIO API key (encrypted)
-  preferredCurrency: currencyEnum('preferred_currency').notNull().default('CIS'),
-  locationDisplayMode: locationDisplayModeEnum('location_display_mode').notNull().default('both'),
-  commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode')
-    .notNull()
-    .default('both'),
-  // FIO sync preferences
-  fioAutoSync: boolean('fio_auto_sync').notNull().default(true), // Auto-sync inventory on schedule
-  fioExcludedLocations: text('fio_excluded_locations').array(), // Location NaturalIds or Names to exclude
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+// ==================== USER SETTINGS (Key-value settings per user) ====================
+// Stores user preference overrides; defaults come from SETTING_DEFINITIONS in code
+// All settings including FIO credentials (fio.username, fio.apiKey) are stored here
+export const userSettings = pgTable(
+  'user_settings',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    settingKey: varchar('setting_key', { length: 100 }).notNull(), // e.g., 'display.preferredCurrency', 'fio.apiKey'
+    value: text('value').notNull(), // JSON-encoded value
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueUserSetting: uniqueIndex('user_settings_user_key_idx').on(table.userId, table.settingKey),
+  })
+)
 
 // ==================== PASSWORD RESET TOKENS ====================
 export const passwordResetTokens = pgTable('password_reset_tokens', {
@@ -511,11 +509,8 @@ export const importConfigs = pgTable(
 
 // ==================== RELATIONS ====================
 
-export const usersRelations = relations(users, ({ one, many }) => ({
-  settings: one(userSettings, {
-    fields: [users.id],
-    references: [userSettings.userId],
-  }),
+export const usersRelations = relations(users, ({ many, one }) => ({
+  settings: many(userSettings), // Key-value user settings (preferences & FIO credentials)
   userRoles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
   fioUserStorage: many(fioUserStorage),

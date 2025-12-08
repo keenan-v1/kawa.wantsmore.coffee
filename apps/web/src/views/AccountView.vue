@@ -89,7 +89,7 @@
                   <div class="text-subtitle-1 font-weight-bold mb-3">Preferences</div>
 
                   <v-select
-                    v-model="account.preferredCurrency"
+                    v-model="settingsStore.preferredCurrency.value"
                     :items="currencies"
                     label="Preferred Currency"
                     prepend-icon="mdi-currency-usd"
@@ -98,7 +98,7 @@
                   />
 
                   <v-select
-                    v-model="account.locationDisplayMode"
+                    v-model="settingsStore.locationDisplayMode.value"
                     :items="locationDisplayModes"
                     label="Location Display Mode"
                     prepend-icon="mdi-map-marker"
@@ -107,7 +107,7 @@
                   />
 
                   <v-select
-                    v-model="account.commodityDisplayMode"
+                    v-model="settingsStore.commodityDisplayMode.value"
                     :items="commodityDisplayModes"
                     label="Commodity Display Mode"
                     prepend-icon="mdi-package-variant"
@@ -220,7 +220,7 @@
               <v-card-text>
                 <v-form>
                   <v-text-field
-                    v-model="account.fioUsername"
+                    v-model="settingsStore.fioUsername.value"
                     label="FIO Username"
                     prepend-icon="mdi-game-controller"
                     hint="Your Prosperous Universe username"
@@ -228,9 +228,15 @@
                   />
                   <v-text-field
                     v-model="fioApiKey"
-                    :label="account.hasFioApiKey ? 'FIO API Key (configured)' : 'FIO API Key'"
+                    :label="
+                      settingsStore.hasFioCredentials.value
+                        ? 'FIO API Key (configured)'
+                        : 'FIO API Key'
+                    "
                     :placeholder="
-                      account.hasFioApiKey ? '••••••••••••••••' : 'Enter your FIO API key'
+                      settingsStore.hasFioCredentials.value
+                        ? '••••••••••••••••'
+                        : 'Enter your FIO API key'
                     "
                     prepend-icon="mdi-key"
                     :append-inner-icon="showFioApiKey ? 'mdi-eye-off' : 'mdi-eye'"
@@ -246,7 +252,7 @@
                   <div class="text-subtitle-2 mb-3">Sync Preferences</div>
 
                   <v-switch
-                    v-model="account.fioAutoSync"
+                    v-model="settingsStore.fioAutoSync.value"
                     label="Auto Sync"
                     color="primary"
                     hide-details
@@ -303,7 +309,7 @@
                       color="primary"
                       block
                       :loading="syncing"
-                      :disabled="syncing || clearing || !account.hasFioApiKey"
+                      :disabled="syncing || clearing || !settingsStore.hasFioCredentials.value"
                       @click="syncFio"
                     >
                       <v-icon start>mdi-cloud-download</v-icon>
@@ -326,7 +332,7 @@
                 </v-row>
 
                 <v-alert
-                  v-if="!account.hasFioApiKey"
+                  v-if="!settingsStore.hasFioCredentials.value"
                   type="info"
                   variant="tonal"
                   class="mt-4"
@@ -711,15 +717,17 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
 import DiscordIcon from '../components/DiscordIcon.vue'
 import { CURRENCIES } from '../types'
-import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
+import type { LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
 import type { DiscordConnectionStatus } from '@kawakawa/types'
 import { api } from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
 const currencies = CURRENCIES
 const locationDisplayModes: { title: string; value: LocationDisplayMode }[] = [
   { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
@@ -734,27 +742,15 @@ const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = 
 
 const activeTab = ref('profile')
 
+// Profile data (from API)
+// Note: FIO credentials (fioUsername, fioApiKey) are now in user settings, not profile
 const account = ref<{
   profileName: string
   displayName: string
-  fioUsername: string
-  hasFioApiKey: boolean
-  preferredCurrency: Currency
-  locationDisplayMode: LocationDisplayMode
-  commodityDisplayMode: CommodityDisplayMode
-  fioAutoSync: boolean
-  fioExcludedLocations: string[]
   roles: Role[]
 }>({
   profileName: '',
   displayName: '',
-  fioUsername: '',
-  hasFioApiKey: false,
-  preferredCurrency: 'CIS',
-  locationDisplayMode: 'both',
-  commodityDisplayMode: 'both',
-  fioAutoSync: true,
-  fioExcludedLocations: [],
   roles: [],
 })
 
@@ -931,17 +927,20 @@ const loadFioStats = async () => {
 onMounted(async () => {
   try {
     loading.value = true
+
+    // Load profile data from API
     const profile = await api.account.getProfile()
     account.value = {
-      ...profile,
-      locationDisplayMode: profile.locationDisplayMode || 'both',
-      commodityDisplayMode: profile.commodityDisplayMode || 'both',
-      fioAutoSync: profile.fioAutoSync ?? true,
-      fioExcludedLocations: profile.fioExcludedLocations || [],
+      profileName: profile.profileName,
+      displayName: profile.displayName,
+      roles: profile.roles,
     }
-    // Initialize excluded locations text from array
-    excludedLocationsText.value = (profile.fioExcludedLocations || []).join(', ')
     userStore.setUser(profile)
+
+    // Settings are loaded by the settings store (triggered by setUser)
+    // Initialize excluded locations text from settings
+    const excludedLocations = settingsStore.fioExcludedLocations.value
+    excludedLocationsText.value = (excludedLocations || []).join(', ')
 
     // Load FIO stats
     await loadFioStats()
@@ -951,13 +950,13 @@ onMounted(async () => {
     const cachedUser = userStore.getUser()
     if (cachedUser) {
       account.value = {
-        ...cachedUser,
-        locationDisplayMode: cachedUser.locationDisplayMode || 'both',
-        commodityDisplayMode: cachedUser.commodityDisplayMode || 'both',
-        fioAutoSync: cachedUser.fioAutoSync ?? true,
-        fioExcludedLocations: cachedUser.fioExcludedLocations || [],
+        profileName: cachedUser.profileName,
+        displayName: cachedUser.displayName,
+        roles: cachedUser.roles,
       }
-      excludedLocationsText.value = (cachedUser.fioExcludedLocations || []).join(', ')
+      // Settings should be loaded from cache by settings store
+      const excludedLocations = settingsStore.fioExcludedLocations.value
+      excludedLocationsText.value = (excludedLocations || []).join(', ')
     }
     showSnackbar('Failed to load profile from server', 'error')
   } finally {
@@ -968,15 +967,21 @@ onMounted(async () => {
 const saveProfile = async () => {
   try {
     savingProfile.value = true
-    const updateData = {
-      displayName: account.value.displayName,
-      preferredCurrency: account.value.preferredCurrency,
-      locationDisplayMode: account.value.locationDisplayMode,
-      commodityDisplayMode: account.value.commodityDisplayMode,
-    }
 
-    const updated = await api.account.updateProfile(updateData)
+    // Update profile (displayName only)
+    const profileData = {
+      displayName: account.value.displayName,
+    }
+    const updated = await api.account.updateProfile(profileData)
     userStore.setUser(updated)
+
+    // Update settings via settings store
+    await settingsStore.updateSettings({
+      'display.preferredCurrency': settingsStore.preferredCurrency.value,
+      'display.locationDisplayMode': settingsStore.locationDisplayMode.value,
+      'display.commodityDisplayMode': settingsStore.commodityDisplayMode.value,
+    })
+
     showSnackbar('Profile updated successfully')
   } catch (error) {
     console.error('Failed to update profile', error)
@@ -996,27 +1001,20 @@ const saveFioSettings = async () => {
       .map(s => s.trim())
       .filter(s => s.length > 0)
 
-    const updateData: {
-      fioUsername: string
-      fioApiKey?: string
-      fioAutoSync: boolean
-      fioExcludedLocations: string[]
-    } = {
-      fioUsername: account.value.fioUsername || '',
-      fioAutoSync: account.value.fioAutoSync,
-      fioExcludedLocations: excludedLocations,
+    // Build settings update object
+    const settingsUpdate: Record<string, unknown> = {
+      'fio.username': settingsStore.fioUsername.value || '',
+      'fio.autoSync': settingsStore.fioAutoSync.value,
+      'fio.excludedLocations': excludedLocations,
     }
 
-    // Only include fioApiKey if user entered a new one
+    // Only include fio.apiKey if user entered a new one
     if (fioApiKey.value) {
-      updateData.fioApiKey = fioApiKey.value
+      settingsUpdate['fio.apiKey'] = fioApiKey.value
     }
 
-    const updated = await api.account.updateProfile(updateData)
-    account.value.hasFioApiKey = updated.hasFioApiKey
-    account.value.fioAutoSync = updated.fioAutoSync
-    account.value.fioExcludedLocations = updated.fioExcludedLocations
-    userStore.setUser(updated)
+    // Update all FIO settings via settings store
+    await settingsStore.updateSettings(settingsUpdate)
 
     // Clear the API key field after successful save
     fioApiKey.value = ''

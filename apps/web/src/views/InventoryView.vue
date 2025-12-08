@@ -364,15 +364,16 @@ import { api, type FioInventoryItem } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
 import OrderDialog from '../components/OrderDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
 
 // Check if FIO is configured
 const fioConfigured = computed(() => {
-  const user = userStore.getUser()
-  return user?.hasFioApiKey && user?.fioUsername
+  return settingsStore.hasFioCredentials.value
 })
 
 // Check permissions for order creation

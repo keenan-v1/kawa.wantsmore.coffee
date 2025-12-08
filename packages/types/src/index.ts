@@ -31,14 +31,6 @@ export interface Role {
 export interface User {
   profileName: string
   displayName: string
-  fioUsername: string
-  hasFioApiKey: boolean // Indicates if FIO API key is configured (never expose actual key)
-  preferredCurrency: Currency
-  locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
-  commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
-  // FIO sync preferences
-  fioAutoSync: boolean // Auto-sync inventory on schedule (default: true)
-  fioExcludedLocations: string[] // Location NaturalIds or Names to exclude from sync
   roles: Role[] // One user to many roles
   permissions: string[] // Permission IDs granted to this user based on their roles
 }
@@ -400,4 +392,27 @@ export type CreateReservationRequest =
 // Request to update reservation status
 export interface UpdateReservationStatusRequest {
   notes?: string
+}
+
+// ==================== USER SETTINGS ====================
+
+// Setting value types
+export type SettingValueType = 'string' | 'boolean' | 'number' | 'enum' | 'string[]'
+
+// Setting definition (compile-time metadata)
+export interface SettingDefinition<T = unknown> {
+  key: string
+  type: SettingValueType
+  defaultValue: T
+  category: string
+  label: string
+  description: string
+  enumOptions?: readonly string[] // For enum type
+  sensitive?: boolean // If true, value is never returned in API responses (write-only)
+}
+
+// User settings response from API
+export interface UserSettingsResponse {
+  values: Record<string, unknown>
+  definitions: Record<string, SettingDefinition>
 }

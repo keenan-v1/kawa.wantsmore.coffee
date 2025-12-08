@@ -12,21 +12,13 @@ vi.mock('../db/index.js', () => ({
   db: {
     select: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
   },
   users: {
     id: 'id',
     username: 'username',
     displayName: 'displayName',
     passwordHash: 'passwordHash',
-    updatedAt: 'updatedAt',
-  },
-  userSettings: {
-    userId: 'userId',
-    fioUsername: 'fioUsername',
-    fioApiKey: 'fioApiKey',
-    preferredCurrency: 'preferredCurrency',
-    locationDisplayMode: 'locationDisplayMode',
-    commodityDisplayMode: 'commodityDisplayMode',
     updatedAt: 'updatedAt',
   },
   userRoles: {
@@ -43,6 +35,12 @@ vi.mock('../db/index.js', () => ({
 vi.mock('../utils/password.js', () => ({
   hashPassword: vi.fn(),
   verifyPassword: vi.fn(),
+}))
+
+// Mock the userSettingsService (now used for FIO credentials)
+vi.mock('../services/userSettingsService.js', () => ({
+  getFioCredentials: vi.fn(),
+  hasFioCredentials: vi.fn(),
 }))
 
 describe('AccountController', () => {
@@ -75,24 +73,17 @@ describe('AccountController', () => {
   })
 
   describe('getProfile', () => {
-    it('should return user profile with settings and roles', async () => {
+    it('should return user profile with roles and permissions', async () => {
       const mockUser = {
         username: 'testuser',
         displayName: 'Test User',
-        fioUsername: 'fiotest',
-        fioApiKey: 'secret-api-key',
-        preferredCurrency: 'CIS',
-        locationDisplayMode: 'both',
-        commodityDisplayMode: 'ticker-only',
-        fioAutoSync: true,
-        fioExcludedLocations: ['UV-351a'],
       }
       const mockRoles = [
         { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
         { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
       ]
 
-      // Mock first query (user + settings)
+      // Mock first query (user)
       mockSelect.where
         .mockResolvedValueOnce([mockUser])
         // Mock second query (roles)
@@ -101,16 +92,10 @@ describe('AccountController', () => {
       const request = { user: { userId: 1, username: 'testuser', roles: [] } }
       const result = await controller.getProfile(request)
 
+      // FIO credentials are now in user settings, not in profile response
       expect(result).toEqual({
         profileName: 'testuser',
         displayName: 'Test User',
-        fioUsername: 'fiotest',
-        hasFioApiKey: true,
-        preferredCurrency: 'CIS',
-        locationDisplayMode: 'both',
-        commodityDisplayMode: 'ticker-only',
-        fioAutoSync: true,
-        fioExcludedLocations: ['UV-351a'],
         roles: [
           { id: 'member', name: 'Member', color: 'blue' },
           { id: 'lead', name: 'Lead', color: 'green' },
@@ -121,17 +106,10 @@ describe('AccountController', () => {
       expect(permissionService.getPermissions).toHaveBeenCalledWith(['member', 'lead'])
     })
 
-    it('should handle user with no settings (null values)', async () => {
+    it('should handle user with no roles', async () => {
       const mockUser = {
         username: 'newuser',
         displayName: 'New User',
-        fioUsername: null,
-        fioApiKey: null,
-        preferredCurrency: null,
-        locationDisplayMode: null,
-        commodityDisplayMode: null,
-        fioAutoSync: null,
-        fioExcludedLocations: null,
       }
 
       mockSelect.where.mockResolvedValueOnce([mockUser]).mockResolvedValueOnce([])
@@ -144,13 +122,6 @@ describe('AccountController', () => {
       expect(result).toEqual({
         profileName: 'newuser',
         displayName: 'New User',
-        fioUsername: '',
-        hasFioApiKey: false,
-        preferredCurrency: 'CIS',
-        locationDisplayMode: 'both',
-        commodityDisplayMode: 'both',
-        fioAutoSync: true,
-        fioExcludedLocations: [],
         roles: [],
         permissions: [],
       })
@@ -171,11 +142,6 @@ describe('AccountController', () => {
     const mockProfileData = {
       username: 'testuser',
       displayName: 'Updated Name',
-      fioUsername: 'fiotest',
-      fioApiKey: 'existing-api-key',
-      preferredCurrency: 'ICA',
-      locationDisplayMode: 'names-only',
-      commodityDisplayMode: 'both',
     }
 
     beforeEach(() => {
@@ -197,64 +163,6 @@ describe('AccountController', () => {
         updatedAt: expect.any(Date),
       })
       expect(mockUpdate.where).toHaveBeenCalled()
-    })
-
-    it('should update settings in userSettings table', async () => {
-      const request = { user: { userId: 1, username: 'testuser', roles: [] } }
-      const body = {
-        fioUsername: 'newfio',
-        preferredCurrency: 'ICA' as const,
-        locationDisplayMode: 'names-only' as const,
-        commodityDisplayMode: 'ticker-only' as const,
-      }
-
-      await controller.updateProfile(body, request)
-
-      // Should be called once for settings (no displayName update)
-      expect(db.update).toHaveBeenCalledTimes(1)
-      expect(mockUpdate.set).toHaveBeenCalledWith({
-        fioUsername: 'newfio',
-        preferredCurrency: 'ICA',
-        locationDisplayMode: 'names-only',
-        commodityDisplayMode: 'ticker-only',
-        updatedAt: expect.any(Date),
-      })
-    })
-
-    it('should update both users and settings when both provided', async () => {
-      const request = { user: { userId: 1, username: 'testuser', roles: [] } }
-      const body = {
-        displayName: 'New Name',
-        fioUsername: 'newfio',
-        preferredCurrency: 'AIC' as const,
-      }
-
-      await controller.updateProfile(body, request)
-
-      expect(db.update).toHaveBeenCalledTimes(2)
-    })
-
-    it('should update fioApiKey in userSettings table', async () => {
-      const request = { user: { userId: 1, username: 'testuser', roles: [] } }
-      const body = { fioApiKey: 'new-secret-api-key' }
-
-      await controller.updateProfile(body, request)
-
-      expect(db.update).toHaveBeenCalledTimes(1)
-      expect(mockUpdate.set).toHaveBeenCalledWith({
-        fioApiKey: 'new-secret-api-key',
-        updatedAt: expect.any(Date),
-      })
-    })
-
-    it('should not update users table if no displayName provided', async () => {
-      const request = { user: { userId: 1, username: 'testuser', roles: [] } }
-      const body = { fioUsername: 'newfio' }
-
-      await controller.updateProfile(body, request)
-
-      // Should only update settings, not users
-      expect(db.update).toHaveBeenCalledTimes(1)
     })
 
     it('should handle empty update request', async () => {

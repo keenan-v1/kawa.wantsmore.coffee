@@ -1,5 +1,5 @@
 {
-  "id": "8769f592-c7f5-4097-b3ef-6fcb89cf3841",
+  "id": "77369b92-c789-4f95-8b26-667e4a19502d",
   "prevId": "bc1f5d97-04bf-4219-b35a-732e90774d2a",
   "version": "7",
   "dialect": "postgresql",
@@ -2090,61 +2090,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "fio_username": {
-          "name": "fio_username",
+        "setting_key": {
+          "name": "setting_key",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "fio_api_key": {
-          "name": "fio_api_key",
+        "value": {
+          "name": "value",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "preferred_currency": {
-          "name": "preferred_currency",
-          "type": "currency",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'CIS'"
-        },
-        "location_display_mode": {
-          "name": "location_display_mode",
-          "type": "location_display_mode",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'both'"
-        },
-        "commodity_display_mode": {
-          "name": "commodity_display_mode",
-          "type": "commodity_display_mode",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'both'"
-        },
-        "fio_auto_sync": {
-          "name": "fio_auto_sync",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "fio_excluded_locations": {
-          "name": "fio_excluded_locations",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         },
         "updated_at": {
           "name": "updated_at",
@@ -2154,7 +2110,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_settings_user_key_idx": {
+          "name": "user_settings_user_key_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "setting_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "user_settings_user_id_users_id_fk": {
           "name": "user_settings_user_id_users_id_fk",
@@ -2171,15 +2149,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "user_settings_user_id_unique": {
-          "name": "user_settings_user_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

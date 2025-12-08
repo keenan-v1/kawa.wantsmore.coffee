@@ -2,7 +2,7 @@
 // Create an administrator user with a generated password
 // Usage: tsx src/scripts/create-admin.ts <username> [displayName] [email]
 
-import { db, users, userRoles, userSettings } from '../db/index.js'
+import { db, users, userRoles } from '../db/index.js'
 import { eq, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -33,13 +33,10 @@ async function createAdmin(username: string, displayName?: string, email?: strin
     process.exit(1)
   }
 
-  // Reset sequences for all tables used during user creation to handle cases where
+  // Reset sequences for tables used during user creation to handle cases where
   // mock data was inserted with explicit IDs. This ensures auto-increment works correctly.
   await db.execute(
     sql`SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 0) + 1, false)`
-  )
-  await db.execute(
-    sql`SELECT setval(pg_get_serial_sequence('user_settings', 'id'), COALESCE((SELECT MAX(id) FROM user_settings), 0) + 1, false)`
   )
   await db.execute(
     sql`SELECT setval(pg_get_serial_sequence('user_roles', 'id'), COALESCE((SELECT MAX(id) FROM user_roles), 0) + 1, false)`
@@ -63,12 +60,8 @@ async function createAdmin(username: string, displayName?: string, email?: strin
 
   log.info({ userId: newUser.id, username: newUser.username }, 'User created')
 
-  // Create default user settings
-  await db.insert(userSettings).values({
-    userId: newUser.id,
-  })
-
-  log.info({ userId: newUser.id }, 'User settings created')
+  // Note: User settings are now stored in a key-value table with defaults from code
+  // No need to create initial settings row - getAllSettings() returns defaults for new users
 
   // Assign administrator role
   await db.insert(userRoles).values({

@@ -2,7 +2,7 @@
 // This simulates JWT-based authentication and data storage
 // NOTE: Mock API is disabled (USE_MOCK_API = false), this is for reference only
 
-import { PERMISSIONS, type Currency, type User as UserProfile, type Role } from '../types'
+import { PERMISSIONS, type User as UserProfile, type Role } from '../types'
 
 // Mock roles for the mock API (not using roleService to avoid async issues)
 const MOCK_ROLES: Record<string, Role> = {
@@ -41,15 +41,12 @@ const getPermissionsForRoles = (roles: Role[]): string[] => {
   return Array.from(permSet)
 }
 
-interface User {
+// Internal mock user type (includes password for mock auth)
+// Note: FIO credentials are now in user settings, not on the user profile
+interface MockUser {
   profileName: string
   password: string
   displayName: string
-  fioUsername: string
-  hasFioApiKey: boolean
-  preferredCurrency: Currency
-  fioAutoSync: boolean
-  fioExcludedLocations: string[]
   roles: Role[]
 }
 
@@ -69,16 +66,12 @@ interface LoginRequest {
 }
 
 // Mock database - in-memory storage
-const users: User[] = [
+// Note: Settings (preferredCurrency, FIO credentials, etc.) are now managed via user-settings API
+const users: MockUser[] = [
   {
     profileName: 'demo',
     password: 'password',
     displayName: 'Demo User',
-    fioUsername: 'demo_fio',
-    hasFioApiKey: true,
-    preferredCurrency: 'CIS',
-    fioAutoSync: true,
-    fioExcludedLocations: [],
     roles: [MOCK_ROLES.member, MOCK_ROLES.administrator],
   },
 ]
@@ -127,16 +120,12 @@ export const mockApi = {
         }
 
         // Successful login
+        // Note: Settings (including FIO credentials) are now managed via user-settings API
         const response: LoginResponse = {
           token: generateMockJWT(user.profileName),
           user: {
             profileName: user.profileName,
             displayName: user.displayName,
-            fioUsername: user.fioUsername,
-            hasFioApiKey: user.hasFioApiKey,
-            preferredCurrency: user.preferredCurrency,
-            fioAutoSync: user.fioAutoSync,
-            fioExcludedLocations: user.fioExcludedLocations,
             roles: user.roles,
             permissions: getPermissionsForRoles(user.roles),
           },
@@ -184,15 +173,11 @@ export const mockApi = {
         }
 
         // Successful registration - new users get Applicant role by default
-        const newUser: User = {
+        // Note: Settings (including FIO credentials) are now managed via user-settings API
+        const newUser: MockUser = {
           profileName: request.profileName,
           password: request.password,
           displayName: request.profileName,
-          fioUsername: '',
-          hasFioApiKey: false,
-          preferredCurrency: 'CIS', // Default currency
-          fioAutoSync: true,
-          fioExcludedLocations: [],
           roles: [MOCK_ROLES.applicant],
         }
         users.push(newUser)

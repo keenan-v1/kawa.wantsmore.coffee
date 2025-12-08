@@ -1,0 +1,179 @@
+// User Setting Definitions
+// This file defines all available user settings with their metadata.
+// Settings are stored as key-value pairs in the database, with defaults defined here.
+
+import type {
+  SettingDefinition,
+  SettingValueType,
+  Currency,
+  LocationDisplayMode,
+  CommodityDisplayMode,
+} from './index'
+
+// Categories for grouping settings in the UI
+export const SETTING_CATEGORIES = {
+  DISPLAY: 'display',
+  NOTIFICATIONS: 'notifications',
+  FIO: 'fio',
+} as const
+
+export type SettingCategory = (typeof SETTING_CATEGORIES)[keyof typeof SETTING_CATEGORIES]
+
+// Category metadata for UI display
+export const SETTING_CATEGORY_INFO: Record<
+  SettingCategory,
+  { label: string; description: string }
+> = {
+  [SETTING_CATEGORIES.DISPLAY]: {
+    label: 'Display',
+    description: 'Customize how information is displayed',
+  },
+  [SETTING_CATEGORIES.NOTIFICATIONS]: {
+    label: 'Notifications',
+    description: 'Configure notification preferences',
+  },
+  [SETTING_CATEGORIES.FIO]: {
+    label: 'FIO Integration',
+    description: 'Settings for FIO data synchronization',
+  },
+}
+
+// Helper type for defining settings with proper typing
+type SettingDef<T, VT extends SettingValueType> = SettingDefinition<T> & { type: VT }
+
+// All setting definitions
+export const SETTING_DEFINITIONS = {
+  // ==================== DISPLAY SETTINGS ====================
+  'display.preferredCurrency': {
+    key: 'display.preferredCurrency',
+    type: 'enum',
+    defaultValue: 'CIS' as Currency,
+    category: SETTING_CATEGORIES.DISPLAY,
+    label: 'Preferred Currency',
+    description: 'Default currency for displaying prices',
+    enumOptions: ['ICA', 'CIS', 'AIC', 'NCC'] as const,
+  } satisfies SettingDef<Currency, 'enum'>,
+
+  'display.locationDisplayMode': {
+    key: 'display.locationDisplayMode',
+    type: 'enum',
+    defaultValue: 'both' as LocationDisplayMode,
+    category: SETTING_CATEGORIES.DISPLAY,
+    label: 'Location Display Mode',
+    description: 'How to display location names in the UI',
+    enumOptions: ['names-only', 'natural-ids-only', 'both'] as const,
+  } satisfies SettingDef<LocationDisplayMode, 'enum'>,
+
+  'display.commodityDisplayMode': {
+    key: 'display.commodityDisplayMode',
+    type: 'enum',
+    defaultValue: 'both' as CommodityDisplayMode,
+    category: SETTING_CATEGORIES.DISPLAY,
+    label: 'Commodity Display Mode',
+    description: 'How to display commodity names in the UI',
+    enumOptions: ['ticker-only', 'name-only', 'both'] as const,
+  } satisfies SettingDef<CommodityDisplayMode, 'enum'>,
+
+  // ==================== NOTIFICATION SETTINGS ====================
+  'notifications.browserEnabled': {
+    key: 'notifications.browserEnabled',
+    type: 'boolean',
+    defaultValue: false,
+    category: SETTING_CATEGORIES.NOTIFICATIONS,
+    label: 'Browser Notifications',
+    description: 'Enable desktop notifications for important events',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
+  'notifications.reservationPlaced': {
+    key: 'notifications.reservationPlaced',
+    type: 'boolean',
+    defaultValue: true,
+    category: SETTING_CATEGORIES.NOTIFICATIONS,
+    label: 'Reservation Placed',
+    description: 'Notify when someone places a reservation on your order',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
+  'notifications.reservationStatusChange': {
+    key: 'notifications.reservationStatusChange',
+    type: 'boolean',
+    defaultValue: true,
+    category: SETTING_CATEGORIES.NOTIFICATIONS,
+    label: 'Reservation Status Changes',
+    description: 'Notify when a reservation status changes (confirmed, rejected, etc.)',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
+  // ==================== FIO SETTINGS ====================
+  'fio.username': {
+    key: 'fio.username',
+    type: 'string',
+    defaultValue: '',
+    category: SETTING_CATEGORIES.FIO,
+    label: 'FIO Username',
+    description: 'Your FIO username for API access',
+  } satisfies SettingDef<string, 'string'>,
+
+  'fio.apiKey': {
+    key: 'fio.apiKey',
+    type: 'string',
+    defaultValue: '',
+    category: SETTING_CATEGORIES.FIO,
+    label: 'FIO API Key',
+    description: 'Your FIO API key (never displayed after saving)',
+    sensitive: true, // Write-only, never returned in responses
+  } satisfies SettingDef<string, 'string'>,
+
+  'fio.autoSync': {
+    key: 'fio.autoSync',
+    type: 'boolean',
+    defaultValue: true,
+    category: SETTING_CATEGORIES.FIO,
+    label: 'Auto-Sync Inventory',
+    description: 'Automatically sync inventory from FIO on a schedule',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
+  'fio.excludedLocations': {
+    key: 'fio.excludedLocations',
+    type: 'string[]',
+    defaultValue: [] as string[],
+    category: SETTING_CATEGORIES.FIO,
+    label: 'Excluded Locations',
+    description: 'Locations to exclude from FIO inventory sync (by ID or name)',
+  } satisfies SettingDef<string[], 'string[]'>,
+} as const
+
+// Type-safe setting keys
+export type SettingKey = keyof typeof SETTING_DEFINITIONS
+
+// Array of all setting keys (useful for iteration)
+export const SETTING_KEYS = Object.keys(SETTING_DEFINITIONS) as SettingKey[]
+
+// Get a setting definition by key
+export function getSettingDefinition<K extends SettingKey>(
+  key: K
+): (typeof SETTING_DEFINITIONS)[K] {
+  return SETTING_DEFINITIONS[key]
+}
+
+// Get all settings for a category
+export function getSettingsByCategory(category: SettingCategory): SettingDefinition[] {
+  return Object.values(SETTING_DEFINITIONS).filter(def => def.category === category)
+}
+
+// Get default value for a setting
+export function getSettingDefault<K extends SettingKey>(
+  key: K
+): (typeof SETTING_DEFINITIONS)[K]['defaultValue'] {
+  return SETTING_DEFINITIONS[key].defaultValue
+}
+
+// Type helper to get the value type for a setting key
+export type SettingValue<K extends SettingKey> = (typeof SETTING_DEFINITIONS)[K]['defaultValue']
+
+// Check if a setting is sensitive (should not be returned in API responses)
+export function isSettingSensitive(key: SettingKey): boolean {
+  const def = SETTING_DEFINITIONS[key] as SettingDefinition
+  return def.sensitive === true
+}
+
+// Get all sensitive setting keys
+export const SENSITIVE_SETTING_KEYS = SETTING_KEYS.filter(isSettingSensitive)

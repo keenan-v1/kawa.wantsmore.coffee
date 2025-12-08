@@ -57,29 +57,67 @@ INSERT INTO users (id, username, email, display_name, password_hash, is_active) 
 -- Update sequence after explicit ID inserts
 SELECT setval(pg_get_serial_sequence('users', 'id'), 21, true);
 
--- ==================== USER SETTINGS ====================
-INSERT INTO user_settings (user_id, preferred_currency, location_display_mode, commodity_display_mode) VALUES
-  (1, 'CIS', 'both', 'both'),
-  (2, 'CIS', 'both', 'both'),
-  (3, 'ICA', 'names-only', 'ticker-only'),
-  (4, 'CIS', 'both', 'both'),
-  (5, 'NCC', 'natural-ids-only', 'name-only'),
-  (6, 'AIC', 'both', 'ticker-only'),
-  (7, 'CIS', 'names-only', 'both'),
-  (8, 'ICA', 'both', 'both'),
-  (9, 'CIS', 'both', 'name-only'),
-  (10, 'NCC', 'natural-ids-only', 'both'),
-  (11, 'CIS', 'both', 'both'),
-  (12, 'AIC', 'names-only', 'ticker-only'),
-  (13, 'CIS', 'both', 'both'),
-  (14, 'ICA', 'both', 'name-only'),
-  (15, 'CIS', 'names-only', 'both'),
-  (16, 'NCC', 'both', 'both'),
-  (17, 'CIS', 'both', 'ticker-only'),
-  (18, 'AIC', 'natural-ids-only', 'both'),
-  (19, 'CIS', 'both', 'both'),
-  (20, 'ICA', 'names-only', 'name-only'),
-  (21, 'CIS', 'both', 'both');
+-- ==================== USER SETTINGS (Key-Value format) ====================
+-- Settings are now stored as key-value pairs with JSON-encoded values
+-- Users without explicit settings get defaults from code (SETTING_DEFINITIONS)
+
+-- Some users have custom display preferences
+INSERT INTO user_settings (user_id, setting_key, value, updated_at) VALUES
+  -- Bob has custom currency and display modes
+  (3, 'display.preferredCurrency', '"ICA"', NOW()),
+  (3, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (3, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Diana has NCC currency and custom modes
+  (5, 'display.preferredCurrency', '"NCC"', NOW()),
+  (5, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  (5, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Ethan has AIC currency
+  (6, 'display.preferredCurrency', '"AIC"', NOW()),
+  (6, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Fiona has names-only location display
+  (7, 'display.locationDisplayMode', '"names-only"', NOW()),
+  -- George has ICA currency
+  (8, 'display.preferredCurrency', '"ICA"', NOW()),
+  -- Hannah has name-only commodity display
+  (9, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Ivan has NCC and natural-ids-only
+  (10, 'display.preferredCurrency', '"NCC"', NOW()),
+  (10, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  -- Kevin has AIC and names-only
+  (12, 'display.preferredCurrency', '"AIC"', NOW()),
+  (12, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (12, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Mike has ICA and name-only commodity
+  (14, 'display.preferredCurrency', '"ICA"', NOW()),
+  (14, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Nora has names-only location
+  (15, 'display.locationDisplayMode', '"names-only"', NOW()),
+  -- Oscar has NCC currency
+  (16, 'display.preferredCurrency', '"NCC"', NOW()),
+  -- Petra has ticker-only commodity
+  (17, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Quinn has AIC and natural-ids-only
+  (18, 'display.preferredCurrency', '"AIC"', NOW()),
+  (18, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  -- Steve has ICA and names-only
+  (20, 'display.preferredCurrency', '"ICA"', NOW()),
+  (20, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (20, 'display.commodityDisplayMode', '"name-only"', NOW());
+
+-- FIO credentials for some users (for testing FIO sync)
+INSERT INTO user_settings (user_id, setting_key, value, updated_at) VALUES
+  -- Alice (Lead) has FIO credentials
+  (2, 'fio.username', '"alice_fio"', NOW()),
+  (2, 'fio.apiKey', '"alice-test-api-key-12345"', NOW()),
+  -- Bob (Lead) has FIO credentials
+  (3, 'fio.username', '"bob_fio"', NOW()),
+  (3, 'fio.apiKey', '"bob-test-api-key-67890"', NOW()),
+  -- Charlie (Lead + Admin) has FIO username only (no key)
+  (4, 'fio.username', '"charlie_fio"', NOW()),
+  -- Diana has auto-sync disabled
+  (5, 'fio.autoSync', 'false', NOW()),
+  -- Ethan has excluded locations
+  (6, 'fio.excludedLocations', '["HUB", "ARC"]', NOW());
 
 -- ==================== USER ROLES ====================
 -- Admin user (full access)

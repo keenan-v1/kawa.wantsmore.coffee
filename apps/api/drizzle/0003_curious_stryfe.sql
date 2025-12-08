@@ -1,3 +1,4 @@
+-- ==================== PRICING SYSTEM ====================
 CREATE TYPE "public"."adjustment_type" AS ENUM('percentage', 'fixed');--> statement-breakpoint
 CREATE TYPE "public"."import_format" AS ENUM('flat', 'pivot', 'kawa');--> statement-breakpoint
 CREATE TYPE "public"."import_source_type" AS ENUM('csv', 'google_sheets');--> statement-breakpoint
@@ -70,4 +71,49 @@ CREATE INDEX "import_configs_price_list_idx" ON "import_configs" USING btree ("p
 CREATE INDEX "price_adjustments_lookup_idx" ON "price_adjustments" USING btree ("price_list_code","location_id","commodity_ticker");--> statement-breakpoint
 CREATE INDEX "price_adjustments_active_idx" ON "price_adjustments" USING btree ("is_active");--> statement-breakpoint
 CREATE UNIQUE INDEX "prices_price_list_commodity_location_idx" ON "prices" USING btree ("price_list_code","commodity_ticker","location_id");--> statement-breakpoint
-CREATE INDEX "prices_price_list_idx" ON "prices" USING btree ("price_list_code");
+CREATE INDEX "prices_price_list_idx" ON "prices" USING btree ("price_list_code");--> statement-breakpoint
+
+-- ==================== USER SETTINGS MIGRATION ====================
+-- Migrate from old user_settings table (one row per user with fixed columns)
+-- to user_setting_values table (key-value store, many rows per user)
+-- Then rename user_setting_values to user_settings
+
+-- Step 1: Copy FIO credentials from old table to new key-value table
+INSERT INTO user_setting_values (user_id, setting_key, value, updated_at)
+SELECT
+  user_id,
+  'fio.username',
+  '"' || fio_username || '"',  -- JSON encode as string
+  COALESCE(updated_at, NOW())
+FROM user_settings
+WHERE fio_username IS NOT NULL AND fio_username != ''
+ON CONFLICT (user_id, setting_key) DO UPDATE SET
+  value = EXCLUDED.value,
+  updated_at = NOW();--> statement-breakpoint
+
+INSERT INTO user_setting_values (user_id, setting_key, value, updated_at)
+SELECT
+  user_id,
+  'fio.apiKey',
+  '"' || fio_api_key || '"',  -- JSON encode as string
+  COALESCE(updated_at, NOW())
+FROM user_settings
+WHERE fio_api_key IS NOT NULL AND fio_api_key != ''
+ON CONFLICT (user_id, setting_key) DO UPDATE SET
+  value = EXCLUDED.value,
+  updated_at = NOW();--> statement-breakpoint
+
+-- Step 2: Drop the old user_settings table
+DROP TABLE user_settings;--> statement-breakpoint
+
+-- Step 3: Rename user_setting_values to user_settings
+ALTER TABLE user_setting_values RENAME TO user_settings;--> statement-breakpoint
+
+-- Step 4: Rename the unique index to match new table name
+ALTER INDEX user_setting_values_user_key_idx RENAME TO user_settings_user_key_idx;--> statement-breakpoint
+
+-- Step 5: Rename the foreign key constraint
+ALTER TABLE user_settings RENAME CONSTRAINT user_setting_values_user_id_users_id_fk TO user_settings_user_id_users_id_fk;--> statement-breakpoint
+
+-- Step 6: Rename the sequence for the id column
+ALTER SEQUENCE user_setting_values_id_seq RENAME TO user_settings_id_seq;

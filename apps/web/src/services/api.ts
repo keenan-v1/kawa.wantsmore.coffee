@@ -300,6 +300,22 @@ interface FioExchangeResponse {
   createdAt: string
 }
 
+// User Settings types
+interface SettingDefinitionDto {
+  key: string
+  type: 'string' | 'boolean' | 'number' | 'enum' | 'string[]'
+  defaultValue: unknown
+  category: string
+  label: string
+  description: string
+  enumOptions?: string[]
+}
+
+interface UserSettingsResponse {
+  values: Record<string, unknown>
+  definitions: Record<string, SettingDefinitionDto>
+}
+
 // CSV Import types
 interface CsvFieldMapping {
   ticker: string | number
@@ -3334,6 +3350,100 @@ const realApi = {
 
     return response.json()
   },
+
+  // ==================== USER SETTINGS ====================
+
+  getUserSettings: async (): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error('Failed to get user settings')
+    }
+
+    return response.json()
+  },
+
+  updateUserSettings: async (settings: Record<string, unknown>): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ settings }),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid settings')
+      }
+      throw new Error('Failed to update user settings')
+    }
+
+    return response.json()
+  },
+
+  resetUserSetting: async (key: string): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging(`/api/user-settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid setting key')
+      }
+      throw new Error('Failed to reset user setting')
+    }
+
+    return response.json()
+  },
+
+  resetAllUserSettings: async (): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error('Failed to reset user settings')
+    }
+
+    return response.json()
+  },
 }
 
 // Types for KAWA sheet preview and sync
@@ -3541,6 +3651,11 @@ export const api = {
     sync: (id: number) => realApi.syncImportConfig(id),
     preview: (id: number) => realApi.previewImportConfig(id),
   },
+  // User Settings
+  getUserSettings: () => realApi.getUserSettings(),
+  updateUserSettings: (settings: Record<string, unknown>) => realApi.updateUserSettings(settings),
+  resetUserSetting: (key: string) => realApi.resetUserSetting(key),
+  resetAllUserSettings: () => realApi.resetAllUserSettings(),
 }
 
 // Export types for use in components

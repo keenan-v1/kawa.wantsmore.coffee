@@ -12,7 +12,6 @@ import {
   userDiscordProfiles,
   userRoles,
   roles,
-  userSettings,
   discordRoleMappings,
 } from '../db/index.js'
 import { eq, desc } from 'drizzle-orm'
@@ -269,10 +268,8 @@ export class DiscordAuthController extends Controller {
       })
       .returning()
 
-    // Create default user settings
-    await db.insert(userSettings).values({
-      userId: newUser.id,
-    })
+    // Note: User settings are now stored in a key-value table with defaults from code
+    // No need to create initial settings row - getAllSettings() returns defaults for new users
 
     // Link Discord account
     await db.insert(userDiscordProfiles).values({
