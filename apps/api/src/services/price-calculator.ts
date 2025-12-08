@@ -1,5 +1,12 @@
 import type { Currency } from '@kawakawa/types'
-import { db, priceLists, priceAdjustments, fioCommodities, fioLocations } from '../db/index.js'
+import {
+  db,
+  prices,
+  priceLists,
+  priceAdjustments,
+  fioCommodities,
+  fioLocations,
+} from '../db/index.js'
 import { eq, and, or, isNull, lte, gt } from 'drizzle-orm'
 
 export type PriceSource = 'manual' | 'csv_import' | 'google_sheets' | 'fio_exchange'
@@ -14,7 +21,7 @@ export interface AppliedAdjustment {
 }
 
 export interface EffectivePrice {
-  exchangeCode: string
+  priceListCode: string
   commodityTicker: string
   commodityName: string | null
   locationId: string
@@ -25,10 +32,12 @@ export interface EffectivePrice {
   sourceReference: string | null
   adjustments: AppliedAdjustment[]
   finalPrice: number
+  // Backwards compatibility
+  exchangeCode: string
 }
 
 /**
- * Calculate the effective price for a commodity at a specific exchange and location
+ * Calculate the effective price for a commodity at a specific price list and location
  * Applies all matching adjustments in priority order
  */
 export async function calculateEffectivePrice(
@@ -37,31 +46,32 @@ export async function calculateEffectivePrice(
   locationId: string,
   currency: Currency
 ): Promise<EffectivePrice | null> {
-  const exchangeCode = exchange.toUpperCase()
+  const priceListCode = exchange.toUpperCase()
   const commodityTicker = ticker.toUpperCase()
   const location = locationId.toUpperCase()
 
-  // Get the base price
+  // Get the base price from prices table, joined with priceLists for currency
   const basePriceResult = await db
     .select({
-      exchangeCode: priceLists.exchangeCode,
-      commodityTicker: priceLists.commodityTicker,
+      priceListCode: prices.priceListCode,
+      commodityTicker: prices.commodityTicker,
       commodityName: fioCommodities.name,
-      locationId: priceLists.locationId,
+      locationId: prices.locationId,
       locationName: fioLocations.name,
-      price: priceLists.price,
+      price: prices.price,
       currency: priceLists.currency,
-      source: priceLists.source,
-      sourceReference: priceLists.sourceReference,
+      source: prices.source,
+      sourceReference: prices.sourceReference,
     })
-    .from(priceLists)
-    .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-    .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+    .from(prices)
+    .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+    .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+    .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
     .where(
       and(
-        eq(priceLists.exchangeCode, exchangeCode),
-        eq(priceLists.commodityTicker, commodityTicker),
-        eq(priceLists.locationId, location),
+        eq(prices.priceListCode, priceListCode),
+        eq(prices.commodityTicker, commodityTicker),
+        eq(prices.locationId, location),
         eq(priceLists.currency, currency)
       )
     )
@@ -77,20 +87,18 @@ export async function calculateEffectivePrice(
 
   // Get all matching adjustments
   // An adjustment matches if:
-  // - exchangeCode is NULL (applies to all) OR matches the specific exchange
+  // - priceListCode is NULL (applies to all) OR matches the specific price list
   // - commodityTicker is NULL (applies to all) OR matches the specific commodity
   // - locationId is NULL (applies to all) OR matches the specific location
-  // - currency is NULL (applies to all) OR matches the specific currency
   // - isActive is true
   // - effectiveFrom is NULL OR <= now
   // - effectiveUntil is NULL OR > now
   const adjustmentResults = await db
     .select({
       id: priceAdjustments.id,
-      exchangeCode: priceAdjustments.exchangeCode,
+      priceListCode: priceAdjustments.priceListCode,
       commodityTicker: priceAdjustments.commodityTicker,
       locationId: priceAdjustments.locationId,
-      currency: priceAdjustments.currency,
       adjustmentType: priceAdjustments.adjustmentType,
       adjustmentValue: priceAdjustments.adjustmentValue,
       priority: priceAdjustments.priority,
@@ -99,8 +107,11 @@ export async function calculateEffectivePrice(
     .from(priceAdjustments)
     .where(
       and(
-        // Match exchange (NULL = wildcard)
-        or(isNull(priceAdjustments.exchangeCode), eq(priceAdjustments.exchangeCode, exchangeCode)),
+        // Match price list (NULL = wildcard)
+        or(
+          isNull(priceAdjustments.priceListCode),
+          eq(priceAdjustments.priceListCode, priceListCode)
+        ),
         // Match commodity (NULL = wildcard)
         or(
           isNull(priceAdjustments.commodityTicker),
@@ -108,8 +119,6 @@ export async function calculateEffectivePrice(
         ),
         // Match location (NULL = wildcard)
         or(isNull(priceAdjustments.locationId), eq(priceAdjustments.locationId, location)),
-        // Match currency (NULL = wildcard)
-        or(isNull(priceAdjustments.currency), eq(priceAdjustments.currency, currency)),
         // Must be active
         eq(priceAdjustments.isActive, true),
         // Must be in effective date range
@@ -150,7 +159,7 @@ export async function calculateEffectivePrice(
   const finalPrice = Math.round(currentPrice * 100) / 100
 
   return {
-    exchangeCode: baseRecord.exchangeCode,
+    priceListCode: baseRecord.priceListCode,
     commodityTicker: baseRecord.commodityTicker,
     commodityName: baseRecord.commodityName,
     locationId: baseRecord.locationId,
@@ -161,54 +170,56 @@ export async function calculateEffectivePrice(
     sourceReference: baseRecord.sourceReference,
     adjustments: appliedAdjustments,
     finalPrice,
+    // Backwards compatibility
+    exchangeCode: baseRecord.priceListCode,
   }
 }
 
 /**
- * Calculate effective prices for all commodities at a specific exchange and location
+ * Calculate effective prices for all commodities at a specific price list and location
  */
 export async function calculateEffectivePrices(
   exchange: string,
   locationId: string,
   currency: Currency
 ): Promise<EffectivePrice[]> {
-  const exchangeCode = exchange.toUpperCase()
+  const priceListCode = exchange.toUpperCase()
   const location = locationId.toUpperCase()
 
-  // Get all base prices for this exchange/location/currency
+  // Get all base prices for this price list/location/currency
   const basePriceResults = await db
     .select({
-      exchangeCode: priceLists.exchangeCode,
-      commodityTicker: priceLists.commodityTicker,
+      priceListCode: prices.priceListCode,
+      commodityTicker: prices.commodityTicker,
       commodityName: fioCommodities.name,
-      locationId: priceLists.locationId,
+      locationId: prices.locationId,
       locationName: fioLocations.name,
-      price: priceLists.price,
+      price: prices.price,
       currency: priceLists.currency,
-      source: priceLists.source,
-      sourceReference: priceLists.sourceReference,
+      source: prices.source,
+      sourceReference: prices.sourceReference,
     })
-    .from(priceLists)
-    .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-    .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+    .from(prices)
+    .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+    .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+    .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
     .where(
       and(
-        eq(priceLists.exchangeCode, exchangeCode),
-        eq(priceLists.locationId, location),
+        eq(prices.priceListCode, priceListCode),
+        eq(prices.locationId, location),
         eq(priceLists.currency, currency)
       )
     )
-    .orderBy(priceLists.commodityTicker)
+    .orderBy(prices.commodityTicker)
 
   // For efficiency, get all potentially matching adjustments once
   const now = new Date()
   const allAdjustments = await db
     .select({
       id: priceAdjustments.id,
-      exchangeCode: priceAdjustments.exchangeCode,
+      priceListCode: priceAdjustments.priceListCode,
       commodityTicker: priceAdjustments.commodityTicker,
       locationId: priceAdjustments.locationId,
-      currency: priceAdjustments.currency,
       adjustmentType: priceAdjustments.adjustmentType,
       adjustmentValue: priceAdjustments.adjustmentValue,
       priority: priceAdjustments.priority,
@@ -217,12 +228,13 @@ export async function calculateEffectivePrices(
     .from(priceAdjustments)
     .where(
       and(
-        // Must match exchange or be global
-        or(isNull(priceAdjustments.exchangeCode), eq(priceAdjustments.exchangeCode, exchangeCode)),
+        // Must match price list or be global
+        or(
+          isNull(priceAdjustments.priceListCode),
+          eq(priceAdjustments.priceListCode, priceListCode)
+        ),
         // Must match location or be global
         or(isNull(priceAdjustments.locationId), eq(priceAdjustments.locationId, location)),
-        // Must match currency or be global
-        or(isNull(priceAdjustments.currency), eq(priceAdjustments.currency, currency)),
         // Must be active
         eq(priceAdjustments.isActive, true),
         // Must be in effective date range
@@ -271,7 +283,7 @@ export async function calculateEffectivePrices(
     const finalPrice = Math.round(currentPrice * 100) / 100
 
     results.push({
-      exchangeCode: baseRecord.exchangeCode,
+      priceListCode: baseRecord.priceListCode,
       commodityTicker: baseRecord.commodityTicker,
       commodityName: baseRecord.commodityName,
       locationId: baseRecord.locationId,
@@ -282,6 +294,8 @@ export async function calculateEffectivePrices(
       sourceReference: baseRecord.sourceReference,
       adjustments: appliedAdjustments,
       finalPrice,
+      // Backwards compatibility
+      exchangeCode: baseRecord.priceListCode,
     })
   }
 

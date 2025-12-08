@@ -1,5 +1,5 @@
 {
-  "id": "12ab9eac-3d94-4015-a86d-a73f2b045ff2",
+  "id": "c1114fba-8f34-4b68-89f1-be37313bddfb",
   "prevId": "bc1f5d97-04bf-4219-b35a-732e90774d2a",
   "version": "7",
   "dialect": "postgresql",
@@ -319,65 +319,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.fio_exchanges": {
-      "name": "fio_exchanges",
-      "schema": "",
-      "columns": {
-        "code": {
-          "name": "code",
-          "type": "varchar(20)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "currency": {
-          "name": "currency",
-          "type": "currency",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "fio_exchanges_location_id_fio_locations_natural_id_fk": {
-          "name": "fio_exchanges_location_id_fio_locations_natural_id_fk",
-          "tableFrom": "fio_exchanges",
-          "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.fio_inventory": {
       "name": "fio_inventory",
       "schema": "",
@@ -630,6 +571,113 @@
             "natural_id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.import_configs": {
+      "name": "import_configs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "price_list_code": {
+          "name": "price_list_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "import_source_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "import_format",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sheets_url": {
+          "name": "sheets_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sheet_gid": {
+          "name": "sheet_gid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "import_configs_price_list_idx": {
+          "name": "import_configs_price_list_idx",
+          "columns": [
+            {
+              "expression": "price_list_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "import_configs_price_list_code_price_lists_code_fk": {
+          "name": "import_configs_price_list_code_price_lists_code_fk",
+          "tableFrom": "import_configs",
+          "tableTo": "price_lists",
+          "columnsFrom": [
+            "price_list_code"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -1029,8 +1077,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "exchange_code": {
-          "name": "exchange_code",
+        "price_list_code": {
+          "name": "price_list_code",
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": false
@@ -1044,13 +1092,6 @@
         "location_id": {
           "name": "location_id",
           "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "currency": {
-          "name": "currency",
-          "type": "currency",
-          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -1125,7 +1166,7 @@
           "name": "price_adjustments_lookup_idx",
           "columns": [
             {
-              "expression": "exchange_code",
+              "expression": "price_list_code",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1165,6 +1206,19 @@
         }
       },
       "foreignKeys": {
+        "price_adjustments_price_list_code_price_lists_code_fk": {
+          "name": "price_adjustments_price_list_code_price_lists_code_fk",
+          "tableFrom": "price_adjustments",
+          "tableTo": "price_lists",
+          "columnsFrom": [
+            "price_list_code"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "price_adjustments_commodity_ticker_fio_commodities_ticker_fk": {
           "name": "price_adjustments_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "price_adjustments",
@@ -1211,13 +1265,13 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.price_import_configs": {
-      "name": "price_import_configs",
+    "public.price_lists": {
+      "name": "price_lists",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
+        "code": {
+          "name": "code",
+          "type": "varchar(20)",
           "primaryKey": true,
           "notNull": true
         },
@@ -1227,81 +1281,38 @@
           "primaryKey": false,
           "notNull": true
         },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "type": {
           "name": "type",
-          "type": "import_config_type",
+          "type": "price_list_type",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
-        "exchange_code": {
-          "name": "exchange_code",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sheet_gid": {
-          "name": "sheet_gid",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "field_mapping": {
-          "name": "field_mapping",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location_default": {
-          "name": "location_default",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "currency_default": {
-          "name": "currency_default",
+        "currency": {
+          "name": "currency",
           "type": "currency",
           "typeSchema": "public",
           "primaryKey": false,
+          "notNull": true
+        },
+        "default_location_id": {
+          "name": "default_location_id",
+          "type": "varchar(20)",
+          "primaryKey": false,
           "notNull": false
         },
-        "auto_sync": {
-          "name": "auto_sync",
+        "is_active": {
+          "name": "is_active",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
-        },
-        "sync_interval_hours": {
-          "name": "sync_interval_hours",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 24
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_sync_result": {
-          "name": "last_sync_result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
+          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -1318,58 +1329,14 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "price_import_configs_user_idx": {
-          "name": "price_import_configs_user_idx",
-          "columns": [
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "price_import_configs_auto_sync_idx": {
-          "name": "price_import_configs_auto_sync_idx",
-          "columns": [
-            {
-              "expression": "auto_sync",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "price_import_configs_created_by_user_id_users_id_fk": {
-          "name": "price_import_configs_created_by_user_id_users_id_fk",
-          "tableFrom": "price_import_configs",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "pic_location_default_fk": {
-          "name": "pic_location_default_fk",
-          "tableFrom": "price_import_configs",
+        "price_lists_default_location_id_fio_locations_natural_id_fk": {
+          "name": "price_lists_default_location_id_fio_locations_natural_id_fk",
+          "tableFrom": "price_lists",
           "tableTo": "fio_locations",
           "columnsFrom": [
-            "location_default"
+            "default_location_id"
           ],
           "columnsTo": [
             "natural_id"
@@ -1384,8 +1351,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.price_lists": {
-      "name": "price_lists",
+    "public.prices": {
+      "name": "prices",
       "schema": "",
       "columns": {
         "id": {
@@ -1394,8 +1361,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "exchange_code": {
-          "name": "exchange_code",
+        "price_list_code": {
+          "name": "price_list_code",
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
@@ -1415,13 +1382,6 @@
         "price": {
           "name": "price",
           "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "currency": {
-          "name": "currency",
-          "type": "currency",
-          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -1454,11 +1414,11 @@
         }
       },
       "indexes": {
-        "price_lists_exchange_commodity_location_currency_idx": {
-          "name": "price_lists_exchange_commodity_location_currency_idx",
+        "prices_price_list_commodity_location_idx": {
+          "name": "prices_price_list_commodity_location_idx",
           "columns": [
             {
-              "expression": "exchange_code",
+              "expression": "price_list_code",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1474,12 +1434,6 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
-            {
-              "expression": "currency",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
             }
           ],
           "isUnique": true,
@@ -1487,11 +1441,11 @@
           "method": "btree",
           "with": {}
         },
-        "price_lists_exchange_idx": {
-          "name": "price_lists_exchange_idx",
+        "prices_price_list_idx": {
+          "name": "prices_price_list_idx",
           "columns": [
             {
-              "expression": "exchange_code",
+              "expression": "price_list_code",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1504,9 +1458,22 @@
         }
       },
       "foreignKeys": {
-        "price_lists_commodity_ticker_fio_commodities_ticker_fk": {
-          "name": "price_lists_commodity_ticker_fio_commodities_ticker_fk",
-          "tableFrom": "price_lists",
+        "prices_price_list_code_price_lists_code_fk": {
+          "name": "prices_price_list_code_price_lists_code_fk",
+          "tableFrom": "prices",
+          "tableTo": "price_lists",
+          "columnsFrom": [
+            "price_list_code"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "prices_commodity_ticker_fio_commodities_ticker_fk": {
+          "name": "prices_commodity_ticker_fio_commodities_ticker_fk",
+          "tableFrom": "prices",
           "tableTo": "fio_commodities",
           "columnsFrom": [
             "commodity_ticker"
@@ -1517,9 +1484,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "price_lists_location_id_fio_locations_natural_id_fk": {
-          "name": "price_lists_location_id_fio_locations_natural_id_fk",
-          "tableFrom": "price_lists",
+        "prices_location_id_fio_locations_natural_id_fk": {
+          "name": "prices_location_id_fio_locations_natural_id_fk",
+          "tableFrom": "prices",
           "tableTo": "fio_locations",
           "columnsFrom": [
             "location_id"
@@ -2318,12 +2285,20 @@
         "NCC"
       ]
     },
-    "public.import_config_type": {
-      "name": "import_config_type",
+    "public.import_format": {
+      "name": "import_format",
       "schema": "public",
       "values": [
-        "google_sheets",
-        "csv_url"
+        "flat",
+        "pivot"
+      ]
+    },
+    "public.import_source_type": {
+      "name": "import_source_type",
+      "schema": "public",
+      "values": [
+        "csv",
+        "google_sheets"
       ]
     },
     "public.location_display_mode": {
@@ -2365,6 +2340,14 @@
       "values": [
         "internal",
         "partner"
+      ]
+    },
+    "public.price_list_type": {
+      "name": "price_list_type",
+      "schema": "public",
+      "values": [
+        "fio",
+        "custom"
       ]
     },
     "public.price_source": {

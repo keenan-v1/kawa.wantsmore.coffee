@@ -8,25 +8,28 @@ vi.mock('../../db/index.js', () => ({
     insert: vi.fn(),
     update: vi.fn(),
   },
-  priceLists: {
+  prices: {
     id: 'id',
-    exchangeCode: 'exchangeCode',
+    priceListCode: 'priceListCode',
     commodityTicker: 'commodityTicker',
     locationId: 'locationId',
     price: 'price',
-    currency: 'currency',
     source: 'source',
     sourceReference: 'sourceReference',
     updatedAt: 'updatedAt',
+  },
+  priceLists: {
+    code: 'code',
+    name: 'name',
+    type: 'type',
+    currency: 'currency',
+    defaultLocationId: 'defaultLocationId',
   },
   fioCommodities: {
     ticker: 'ticker',
   },
   fioLocations: {
     naturalId: 'naturalId',
-  },
-  fioExchanges: {
-    code: 'code',
   },
 }))
 
@@ -171,7 +174,7 @@ H2O,100`
 
       expect(result.validRows).toBe(0)
       expect(result.validationErrors).toHaveLength(1)
-      expect(result.validationErrors[0].field).toBe('exchange')
+      expect(result.validationErrors[0].field).toBe('priceList')
     })
   })
 

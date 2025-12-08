@@ -13,7 +13,7 @@ import {
   Tags,
 } from 'tsoa'
 import type { Currency } from '@kawakawa/types'
-import { db, priceLists, fioCommodities, fioLocations, fioExchanges } from '../db/index.js'
+import { db, prices, priceLists, fioCommodities, fioLocations } from '../db/index.js'
 import { eq, and } from 'drizzle-orm'
 import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 import {
@@ -23,36 +23,38 @@ import {
   type PriceSource,
 } from '../services/price-calculator.js'
 
-interface PriceListResponse {
+export interface PriceListResponse {
   id: number
-  exchangeCode: string
+  priceListCode: string
   commodityTicker: string
   commodityName: string | null
   locationId: string
   locationName: string | null
   price: string
-  currency: Currency
+  currency: Currency // Derived from price list
   source: PriceSource
   sourceReference: string | null
   createdAt: Date
   updatedAt: Date
+  // Backwards compatibility
+  exchangeCode: string
 }
 
 interface CreatePriceRequest {
-  exchangeCode: string
+  exchangeCode: string // Still use exchangeCode for backwards compat, maps to priceListCode
   commodityTicker: string
   locationId: string
   price: number
-  currency: Currency
   source?: PriceSource
   sourceReference?: string | null
+  // Note: currency is not provided - it comes from the price list
 }
 
 interface UpdatePriceRequest {
   price?: number
-  currency?: Currency
   source?: PriceSource
   sourceReference?: string | null
+  // Note: currency cannot be updated - it's determined by the price list
 }
 
 @Route('prices')
@@ -63,52 +65,51 @@ export class PriceListController extends Controller {
    * @param exchange Filter by exchange code (KAWA, CI1, etc.)
    * @param location Filter by location ID
    * @param commodity Filter by commodity ticker
-   * @param currency Filter by currency
    */
   @Get()
   public async getPrices(
     @Query() exchange?: string,
     @Query() location?: string,
-    @Query() commodity?: string,
-    @Query() currency?: Currency
+    @Query() commodity?: string
   ): Promise<PriceListResponse[]> {
     // Build dynamic where conditions
     const conditions = []
     if (exchange) {
-      conditions.push(eq(priceLists.exchangeCode, exchange.toUpperCase()))
+      conditions.push(eq(prices.priceListCode, exchange.toUpperCase()))
     }
     if (location) {
-      conditions.push(eq(priceLists.locationId, location.toUpperCase()))
+      conditions.push(eq(prices.locationId, location.toUpperCase()))
     }
     if (commodity) {
-      conditions.push(eq(priceLists.commodityTicker, commodity.toUpperCase()))
-    }
-    if (currency) {
-      conditions.push(eq(priceLists.currency, currency))
+      conditions.push(eq(prices.commodityTicker, commodity.toUpperCase()))
     }
 
     const results = await db
       .select({
-        id: priceLists.id,
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
+        id: prices.id,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
         commodityName: fioCommodities.name,
-        locationId: priceLists.locationId,
+        locationId: prices.locationId,
         locationName: fioLocations.name,
-        price: priceLists.price,
-        currency: priceLists.currency,
-        source: priceLists.source,
-        sourceReference: priceLists.sourceReference,
-        createdAt: priceLists.createdAt,
-        updatedAt: priceLists.updatedAt,
+        price: prices.price,
+        currency: priceLists.currency, // Currency from price list
+        source: prices.source,
+        sourceReference: prices.sourceReference,
+        createdAt: prices.createdAt,
+        updatedAt: prices.updatedAt,
       })
-      .from(priceLists)
-      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(priceLists.exchangeCode, priceLists.commodityTicker, priceLists.locationId)
+      .orderBy(prices.priceListCode, prices.commodityTicker, prices.locationId)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      exchangeCode: r.priceListCode, // Backwards compatibility
+    }))
   }
 
   /**
@@ -119,26 +120,30 @@ export class PriceListController extends Controller {
   public async getPricesByExchange(@Path() exchange: string): Promise<PriceListResponse[]> {
     const results = await db
       .select({
-        id: priceLists.id,
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
+        id: prices.id,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
         commodityName: fioCommodities.name,
-        locationId: priceLists.locationId,
+        locationId: prices.locationId,
         locationName: fioLocations.name,
-        price: priceLists.price,
+        price: prices.price,
         currency: priceLists.currency,
-        source: priceLists.source,
-        sourceReference: priceLists.sourceReference,
-        createdAt: priceLists.createdAt,
-        updatedAt: priceLists.updatedAt,
+        source: prices.source,
+        sourceReference: prices.sourceReference,
+        createdAt: prices.createdAt,
+        updatedAt: prices.updatedAt,
       })
-      .from(priceLists)
-      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
-      .where(eq(priceLists.exchangeCode, exchange.toUpperCase()))
-      .orderBy(priceLists.commodityTicker, priceLists.locationId)
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
+      .where(eq(prices.priceListCode, exchange.toUpperCase()))
+      .orderBy(prices.commodityTicker, prices.locationId)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      exchangeCode: r.priceListCode,
+    }))
   }
 
   /**
@@ -153,31 +158,35 @@ export class PriceListController extends Controller {
   ): Promise<PriceListResponse[]> {
     const results = await db
       .select({
-        id: priceLists.id,
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
+        id: prices.id,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
         commodityName: fioCommodities.name,
-        locationId: priceLists.locationId,
+        locationId: prices.locationId,
         locationName: fioLocations.name,
-        price: priceLists.price,
+        price: prices.price,
         currency: priceLists.currency,
-        source: priceLists.source,
-        sourceReference: priceLists.sourceReference,
-        createdAt: priceLists.createdAt,
-        updatedAt: priceLists.updatedAt,
+        source: prices.source,
+        sourceReference: prices.sourceReference,
+        createdAt: prices.createdAt,
+        updatedAt: prices.updatedAt,
       })
-      .from(priceLists)
-      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
       .where(
         and(
-          eq(priceLists.exchangeCode, exchange.toUpperCase()),
-          eq(priceLists.locationId, locationId.toUpperCase())
+          eq(prices.priceListCode, exchange.toUpperCase()),
+          eq(prices.locationId, locationId.toUpperCase())
         )
       )
-      .orderBy(priceLists.commodityTicker)
+      .orderBy(prices.commodityTicker)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      exchangeCode: r.priceListCode,
+    }))
   }
 
   /**
@@ -185,43 +194,39 @@ export class PriceListController extends Controller {
    * @param exchange The exchange code
    * @param locationId The location ID
    * @param ticker The commodity ticker
-   * @param currency Optional currency filter
    */
   @Get('{exchange}/{locationId}/{ticker}')
   public async getPrice(
     @Path() exchange: string,
     @Path() locationId: string,
-    @Path() ticker: string,
-    @Query() currency?: Currency
+    @Path() ticker: string
   ): Promise<PriceListResponse> {
-    const conditions = [
-      eq(priceLists.exchangeCode, exchange.toUpperCase()),
-      eq(priceLists.locationId, locationId.toUpperCase()),
-      eq(priceLists.commodityTicker, ticker.toUpperCase()),
-    ]
-    if (currency) {
-      conditions.push(eq(priceLists.currency, currency))
-    }
-
     const results = await db
       .select({
-        id: priceLists.id,
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
+        id: prices.id,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
         commodityName: fioCommodities.name,
-        locationId: priceLists.locationId,
+        locationId: prices.locationId,
         locationName: fioLocations.name,
-        price: priceLists.price,
+        price: prices.price,
         currency: priceLists.currency,
-        source: priceLists.source,
-        sourceReference: priceLists.sourceReference,
-        createdAt: priceLists.createdAt,
-        updatedAt: priceLists.updatedAt,
+        source: prices.source,
+        sourceReference: prices.sourceReference,
+        createdAt: prices.createdAt,
+        updatedAt: prices.updatedAt,
       })
-      .from(priceLists)
-      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
-      .where(and(...conditions))
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
+      .where(
+        and(
+          eq(prices.priceListCode, exchange.toUpperCase()),
+          eq(prices.locationId, locationId.toUpperCase()),
+          eq(prices.commodityTicker, ticker.toUpperCase())
+        )
+      )
       .limit(1)
 
     if (results.length === 0) {
@@ -230,7 +235,10 @@ export class PriceListController extends Controller {
       )
     }
 
-    return results[0]
+    return {
+      ...results[0],
+      exchangeCode: results[0].priceListCode,
+    }
   }
 
   /**
@@ -241,19 +249,19 @@ export class PriceListController extends Controller {
   @Security('jwt', ['prices.manage'])
   @SuccessResponse('201', 'Created')
   public async createPrice(@Body() body: CreatePriceRequest): Promise<PriceListResponse> {
-    const exchangeCode = body.exchangeCode.toUpperCase()
+    const priceListCode = body.exchangeCode.toUpperCase()
     const commodityTicker = body.commodityTicker.toUpperCase()
     const locationId = body.locationId.toUpperCase()
 
-    // Validate exchange exists
-    const exchangeExists = await db
-      .select({ code: fioExchanges.code })
-      .from(fioExchanges)
-      .where(eq(fioExchanges.code, exchangeCode))
+    // Validate price list exists
+    const priceListExists = await db
+      .select({ code: priceLists.code })
+      .from(priceLists)
+      .where(eq(priceLists.code, priceListCode))
       .limit(1)
 
-    if (exchangeExists.length === 0) {
-      throw BadRequest(`Exchange '${exchangeCode}' not found`)
+    if (priceListExists.length === 0) {
+      throw BadRequest(`Exchange '${priceListCode}' not found`)
     }
 
     // Validate commodity exists
@@ -278,33 +286,31 @@ export class PriceListController extends Controller {
       throw BadRequest(`Location '${locationId}' not found`)
     }
 
-    // Check if price already exists
+    // Check if price already exists (unique: priceListCode + commodityTicker + locationId)
     const existing = await db
-      .select({ id: priceLists.id })
-      .from(priceLists)
+      .select({ id: prices.id })
+      .from(prices)
       .where(
         and(
-          eq(priceLists.exchangeCode, exchangeCode),
-          eq(priceLists.commodityTicker, commodityTicker),
-          eq(priceLists.locationId, locationId),
-          eq(priceLists.currency, body.currency)
+          eq(prices.priceListCode, priceListCode),
+          eq(prices.commodityTicker, commodityTicker),
+          eq(prices.locationId, locationId)
         )
       )
       .limit(1)
 
     if (existing.length > 0) {
       throw Conflict(
-        `Price for ${commodityTicker} at ${locationId} on ${exchangeCode} (${body.currency}) already exists`
+        `Price for ${commodityTicker} at ${locationId} on ${priceListCode} already exists`
       )
     }
 
     // Insert the price
-    await db.insert(priceLists).values({
-      exchangeCode,
+    await db.insert(prices).values({
+      priceListCode,
       commodityTicker,
       locationId,
       price: body.price.toFixed(2),
-      currency: body.currency,
       source: body.source ?? 'manual',
       sourceReference: body.sourceReference ?? null,
     })
@@ -312,7 +318,7 @@ export class PriceListController extends Controller {
     this.setStatus(201)
 
     // Fetch and return the created price
-    return this.getPrice(exchangeCode, locationId, commodityTicker, body.currency)
+    return this.getPrice(priceListCode, locationId, commodityTicker)
   }
 
   /**
@@ -329,14 +335,13 @@ export class PriceListController extends Controller {
     // Check if price exists
     const existing = await db
       .select({
-        id: priceLists.id,
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
-        locationId: priceLists.locationId,
-        currency: priceLists.currency,
+        id: prices.id,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
+        locationId: prices.locationId,
       })
-      .from(priceLists)
-      .where(eq(priceLists.id, id))
+      .from(prices)
+      .where(eq(prices.id, id))
       .limit(1)
 
     if (existing.length === 0) {
@@ -346,7 +351,6 @@ export class PriceListController extends Controller {
     // Build update object
     const updateData: Partial<{
       price: string
-      currency: Currency
       source: PriceSource
       sourceReference: string | null
       updatedAt: Date
@@ -355,20 +359,14 @@ export class PriceListController extends Controller {
     }
 
     if (body.price !== undefined) updateData.price = body.price.toFixed(2)
-    if (body.currency !== undefined) updateData.currency = body.currency
     if (body.source !== undefined) updateData.source = body.source
     if (body.sourceReference !== undefined) updateData.sourceReference = body.sourceReference
 
-    await db.update(priceLists).set(updateData).where(eq(priceLists.id, id))
+    await db.update(prices).set(updateData).where(eq(prices.id, id))
 
     // Fetch and return updated price
     const record = existing[0]
-    return this.getPrice(
-      record.exchangeCode,
-      record.locationId,
-      record.commodityTicker,
-      body.currency ?? record.currency
-    )
+    return this.getPrice(record.priceListCode, record.locationId, record.commodityTicker)
   }
 
   /**
@@ -381,16 +379,16 @@ export class PriceListController extends Controller {
   public async deletePrice(@Path() id: number): Promise<void> {
     // Check if price exists
     const existing = await db
-      .select({ id: priceLists.id })
-      .from(priceLists)
-      .where(eq(priceLists.id, id))
+      .select({ id: prices.id })
+      .from(prices)
+      .where(eq(prices.id, id))
       .limit(1)
 
     if (existing.length === 0) {
       throw NotFound(`Price with ID ${id} not found`)
     }
 
-    await db.delete(priceLists).where(eq(priceLists.id, id))
+    await db.delete(prices).where(eq(prices.id, id))
     this.setStatus(204)
   }
 
@@ -399,16 +397,30 @@ export class PriceListController extends Controller {
    * @param exchange The exchange code (KAWA, CI1, etc.)
    * @param locationId The location ID
    * @param ticker The commodity ticker
-   * @param currency The currency
    */
   @Get('effective/{exchange}/{locationId}/{ticker}')
   public async getEffectivePrice(
     @Path() exchange: string,
     @Path() locationId: string,
-    @Path() ticker: string,
-    @Query() currency: Currency
+    @Path() ticker: string
   ): Promise<EffectivePrice> {
-    const result = await calculateEffectivePrice(exchange, ticker, locationId, currency)
+    // Get currency from price list
+    const priceList = await db
+      .select({ currency: priceLists.currency })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    const result = await calculateEffectivePrice(
+      exchange,
+      ticker,
+      locationId,
+      priceList[0].currency
+    )
 
     if (result === null) {
       throw NotFound(
@@ -423,54 +435,59 @@ export class PriceListController extends Controller {
    * Get all effective prices for an exchange and location
    * @param exchange The exchange code
    * @param locationId The location ID
-   * @param currency The currency
    */
   @Get('effective/{exchange}/{locationId}')
   public async getEffectivePrices(
     @Path() exchange: string,
-    @Path() locationId: string,
-    @Query() currency: Currency
+    @Path() locationId: string
   ): Promise<EffectivePrice[]> {
-    return calculateEffectivePrices(exchange, locationId, currency)
+    // Get currency from price list
+    const priceList = await db
+      .select({ currency: priceLists.currency })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    return calculateEffectivePrices(exchange, locationId, priceList[0].currency)
   }
 
   /**
    * Export base prices as CSV for an exchange
    * @param exchange The exchange code (KAWA, CI1, etc.)
    * @param location Optional location filter
-   * @param currency Optional currency filter
    */
   @Get('export/{exchange}')
   public async exportBasePrices(
     @Path() exchange: string,
-    @Query() location?: string,
-    @Query() currency?: Currency
+    @Query() location?: string
   ): Promise<string> {
-    const conditions = [eq(priceLists.exchangeCode, exchange.toUpperCase())]
+    const conditions = [eq(prices.priceListCode, exchange.toUpperCase())]
     if (location) {
-      conditions.push(eq(priceLists.locationId, location.toUpperCase()))
-    }
-    if (currency) {
-      conditions.push(eq(priceLists.currency, currency))
+      conditions.push(eq(prices.locationId, location.toUpperCase()))
     }
 
     const results = await db
       .select({
-        exchangeCode: priceLists.exchangeCode,
-        commodityTicker: priceLists.commodityTicker,
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
         commodityName: fioCommodities.name,
-        locationId: priceLists.locationId,
+        locationId: prices.locationId,
         locationName: fioLocations.name,
-        price: priceLists.price,
+        price: prices.price,
         currency: priceLists.currency,
-        source: priceLists.source,
-        updatedAt: priceLists.updatedAt,
+        source: prices.source,
+        updatedAt: prices.updatedAt,
       })
-      .from(priceLists)
-      .leftJoin(fioCommodities, eq(priceLists.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(priceLists.locationId, fioLocations.naturalId))
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
       .where(and(...conditions))
-      .orderBy(priceLists.commodityTicker, priceLists.locationId)
+      .orderBy(prices.commodityTicker, prices.locationId)
 
     // Build CSV
     const headers = [
@@ -511,15 +528,24 @@ export class PriceListController extends Controller {
    * Export effective prices (with adjustments applied) as CSV for an exchange
    * @param exchange The exchange code (KAWA, CI1, etc.)
    * @param locationId The location ID
-   * @param currency The currency
    */
   @Get('export/{exchange}/{locationId}/effective')
   public async exportEffectivePrices(
     @Path() exchange: string,
-    @Path() locationId: string,
-    @Query() currency: Currency
+    @Path() locationId: string
   ): Promise<string> {
-    const results = await calculateEffectivePrices(exchange, locationId, currency)
+    // Get currency from price list
+    const priceList = await db
+      .select({ currency: priceLists.currency })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    const results = await calculateEffectivePrices(exchange, locationId, priceList[0].currency)
 
     // Build CSV
     const headers = [

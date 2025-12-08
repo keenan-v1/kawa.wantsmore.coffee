@@ -64,7 +64,7 @@ interface SyncPricesResponse {
 
 @Route('prices/sync/fio')
 @Tags('Pricing')
-export class FioPriceSyncController extends Controller {
+export class PriceSyncFioController extends Controller {
   /**
    * Get sync status for all FIO exchanges
    * Returns last sync time and price count for each exchange

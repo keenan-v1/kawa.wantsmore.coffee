@@ -29,7 +29,7 @@ import { discordService, DISCORD_SETTINGS_KEYS } from '../services/discordServic
 
 @Route('admin/discord')
 @Tags('Admin Discord')
-@Security('jwt', ['administrator'])
+@Security('jwt', ['admin.manage_users'])
 export class AdminDiscordController extends Controller {
   /**
    * Get current Discord settings

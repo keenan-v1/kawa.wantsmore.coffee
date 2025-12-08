@@ -1,9 +1,10 @@
 import { Request } from 'express'
-import { eq } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { verifyToken, generateToken, JwtPayload } from '../utils/jwt.js'
 import { getCachedRoles, setCachedRoles } from '../utils/roleCache.js'
-import { db, userRoles } from '../db/index.js'
+import { db, userRoles, rolePermissions } from '../db/index.js'
 import { setContextValue } from '../utils/requestContext.js'
+import { Unauthorized, Forbidden } from '../utils/errors.js'
 
 /**
  * Check if two role arrays have the same elements (order independent)
@@ -37,6 +38,33 @@ async function getCurrentRoles(userId: number): Promise<string[]> {
   return roleIds
 }
 
+/**
+ * Check if any of the user's roles have the required permissions
+ * Returns true if the user has all required permissions granted (allowed=true)
+ */
+async function hasPermissions(roles: string[], requiredPermissions: string[]): Promise<boolean> {
+  if (requiredPermissions.length === 0) return true
+  if (roles.length === 0) return false
+
+  // Query the role_permissions table for the required permissions and user's roles
+  const grantedPermissions = await db
+    .select({ permissionId: rolePermissions.permissionId })
+    .from(rolePermissions)
+    .where(
+      and(
+        inArray(rolePermissions.roleId, roles),
+        inArray(rolePermissions.permissionId, requiredPermissions),
+        eq(rolePermissions.allowed, true)
+      )
+    )
+
+  // Create a set of granted permissions
+  const grantedSet = new Set(grantedPermissions.map(p => p.permissionId))
+
+  // Check if all required permissions are granted
+  return requiredPermissions.every(p => grantedSet.has(p))
+}
+
 export async function expressAuthentication(
   request: Request,
   securityName: string,
@@ -46,7 +74,7 @@ export async function expressAuthentication(
     const token = request.headers.authorization?.split(' ')[1]
 
     if (!token) {
-      return Promise.reject(new Error('No token provided'))
+      return Promise.reject(Unauthorized('No token provided'))
     }
 
     try {
@@ -69,19 +97,19 @@ export async function expressAuthentication(
         setContextValue('refreshedToken', generateToken(payload))
       }
 
-      // Check scopes (required roles) if specified
+      // Check scopes (required permissions) if specified
       if (scopes && scopes.length > 0) {
-        const hasRequiredRoles = scopes.every(scope => payload.roles.includes(scope))
-        if (!hasRequiredRoles) {
-          return Promise.reject(new Error('Insufficient permissions'))
+        const hasRequiredPermissions = await hasPermissions(payload.roles, scopes)
+        if (!hasRequiredPermissions) {
+          return Promise.reject(Forbidden('Insufficient permissions'))
         }
       }
 
       return Promise.resolve(payload)
     } catch {
-      return Promise.reject(new Error('Invalid or expired token'))
+      return Promise.reject(Unauthorized('Invalid or expired token'))
     }
   }
 
-  return Promise.reject(new Error('Unknown security type'))
+  return Promise.reject(Unauthorized('Unknown security type'))
 }

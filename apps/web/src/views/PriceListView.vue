@@ -14,7 +14,7 @@
 
     <!-- Exchange Tabs -->
     <v-card class="mb-4">
-      <v-tabs v-model="selectedExchange" color="primary" slider-color="primary">
+      <v-tabs v-model="selectedExchange" slider-color="primary">
         <v-tab v-for="exchange in exchanges" :key="exchange.code" :value="exchange.code">
           {{ exchange.code }}
           <v-chip v-if="exchange.locationId" size="x-small" class="ml-2" variant="tonal">
@@ -110,6 +110,28 @@
                     @click="exportEffectivePrices"
                   >
                     <v-list-item-title>Effective Prices (CSV)</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+              <v-menu v-if="canImportPrices && !isFioExchange">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" variant="outlined" size="small">
+                    <v-icon start>mdi-upload</v-icon>
+                    Import
+                  </v-btn>
+                </template>
+                <v-list density="compact">
+                  <v-list-item @click="csvImportDialog = true">
+                    <template #prepend>
+                      <v-icon>mdi-file-delimited</v-icon>
+                    </template>
+                    <v-list-item-title>From CSV File</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item @click="googleSheetsImportDialog = true">
+                    <template #prepend>
+                      <v-icon>mdi-google-spreadsheet</v-icon>
+                    </template>
+                    <v-list-item-title>From Google Sheets</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-menu>
@@ -342,6 +364,20 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- CSV Import Dialog -->
+    <PriceImportDialog
+      v-model="csvImportDialog"
+      :exchange-code="selectedExchange"
+      @imported="handleImportComplete"
+    />
+
+    <!-- Google Sheets Import Dialog -->
+    <GoogleSheetsImportDialog
+      v-model="googleSheetsImportDialog"
+      :exchange-code="selectedExchange"
+      @imported="handleImportComplete"
+    />
   </v-container>
 </template>
 
@@ -354,11 +390,14 @@ import {
   type PriceListResponse,
   type FioExchangeResponse,
   type ExchangeSyncStatus,
+  type CsvImportResult,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
+import PriceImportDialog from '../components/PriceImportDialog.vue'
+import GoogleSheetsImportDialog from '../components/GoogleSheetsImportDialog.vue'
 
 const userStore = useUserStore()
 
@@ -392,6 +431,8 @@ const filters = ref<{
 // Dialogs
 const priceDialog = ref(false)
 const deleteDialog = ref(false)
+const csvImportDialog = ref(false)
+const googleSheetsImportDialog = ref(false)
 const editingPrice = ref<PriceListResponse | null>(null)
 const deletingPrice = ref<PriceListResponse | null>(null)
 const priceFormRef = ref()
@@ -420,6 +461,7 @@ const syncStatus = computed(() => {
 
 const canManagePrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_MANAGE))
 const canSyncFio = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_SYNC_FIO))
+const canImportPrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_IMPORT))
 
 const headers = computed(() => {
   const base = [
@@ -719,6 +761,17 @@ const confirmDelete = async () => {
     showSnackbar(error instanceof Error ? error.message : 'Failed to delete price', 'error')
   } finally {
     deleting.value = false
+  }
+}
+
+// Import result handler
+const handleImportComplete = async (result: CsvImportResult) => {
+  const total = result.imported + result.updated
+  if (total > 0) {
+    showSnackbar(`Imported ${result.imported} new and updated ${result.updated} prices`)
+    await loadPrices()
+  } else if (result.skipped > 0) {
+    showSnackbar(`Import completed with ${result.skipped} skipped rows`, 'error')
   }
 }
 

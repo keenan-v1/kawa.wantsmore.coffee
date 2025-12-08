@@ -1,8 +1,8 @@
-// Sync exchange prices from FIO API to price_lists table
+// Sync exchange prices from FIO API to prices table
 // Fetches market prices for all commodities across all FIO exchanges (CI1, NC1, IC1, AI1)
 
 import { eq } from 'drizzle-orm'
-import { db, priceLists, fioExchanges, fioCommodities } from '../../db/index.js'
+import { db, prices, priceLists, fioCommodities } from '../../db/index.js'
 import { fioClient } from './client.js'
 import { parseCsvTyped } from './csv-parser.js'
 import { createLogger } from '../../utils/logger.js'
@@ -32,12 +32,14 @@ interface FioCsvPrice {
  * Result of syncing a single exchange
  */
 export interface FioExchangeSyncResult {
-  exchangeCode: string
+  priceListCode: string
   locationId: string | null
   currency: Currency
   pricesUpdated: number
   pricesSkipped: number // Unknown tickers or null prices
   syncedAt: Date
+  // Backwards compatibility
+  exchangeCode: string
 }
 
 /**
@@ -52,28 +54,28 @@ export interface FioExchangesSyncResult {
 }
 
 /**
- * FIO exchange info from database
+ * FIO price list info from database
  */
-interface FioExchangeInfo {
+interface FioPriceListInfo {
   code: string
-  locationId: string | null
+  defaultLocationId: string | null
   currency: Currency
 }
 
 /**
- * Get all FIO exchanges from database (excludes KAWA which is internal)
+ * Get all FIO price lists from database (type='fio')
  */
-async function getFioExchanges(): Promise<FioExchangeInfo[]> {
-  const exchanges = await db
+async function getFioPriceLists(): Promise<FioPriceListInfo[]> {
+  const results = await db
     .select({
-      code: fioExchanges.code,
-      locationId: fioExchanges.locationId,
-      currency: fioExchanges.currency,
+      code: priceLists.code,
+      defaultLocationId: priceLists.defaultLocationId,
+      currency: priceLists.currency,
     })
-    .from(fioExchanges)
+    .from(priceLists)
+    .where(eq(priceLists.type, 'fio'))
 
-  // Filter out KAWA - it's our internal exchange, not a FIO exchange
-  return exchanges.filter(ex => ex.code !== 'KAWA') as FioExchangeInfo[]
+  return results as FioPriceListInfo[]
 }
 
 /**
@@ -107,11 +109,11 @@ function getPriceValue(priceData: FioCsvPrice, priceField: FioPriceField): numbe
 /**
  * Sync exchange prices from FIO API
  *
- * @param exchangeCode - Optional: specific exchange to sync (CI1, NC1, etc.). If null, syncs all FIO exchanges.
+ * @param priceListCode - Optional: specific price list to sync (CI1, NC1, etc.). If null, syncs all FIO price lists.
  * @param priceField - Which FIO price field to use. Defaults to 'PriceAverage'.
  */
 export async function syncFioExchangePrices(
-  exchangeCode?: string,
+  priceListCode?: string,
   priceField: FioPriceField = 'PriceAverage'
 ): Promise<FioExchangesSyncResult> {
   const result: FioExchangesSyncResult = {
@@ -123,19 +125,19 @@ export async function syncFioExchangePrices(
   }
 
   try {
-    // Get FIO exchanges from database
-    let exchanges = await getFioExchanges()
+    // Get FIO price lists from database
+    let fioPriceLists = await getFioPriceLists()
 
-    // Filter to specific exchange if provided
-    if (exchangeCode) {
-      exchanges = exchanges.filter(ex => ex.code === exchangeCode)
-      if (exchanges.length === 0) {
-        result.errors.push(`Exchange code '${exchangeCode}' not found or is not a FIO exchange`)
+    // Filter to specific price list if provided
+    if (priceListCode) {
+      fioPriceLists = fioPriceLists.filter(pl => pl.code === priceListCode)
+      if (fioPriceLists.length === 0) {
+        result.errors.push(`Price list '${priceListCode}' not found or is not a FIO price list`)
         return result
       }
     }
 
-    log.info({ exchanges: exchanges.map(e => e.code), priceField }, 'Starting FIO price sync')
+    log.info({ priceLists: fioPriceLists.map(e => e.code), priceField }, 'Starting FIO price sync')
 
     // Get valid tickers for validation
     const validTickers = await getValidTickers()
@@ -158,27 +160,28 @@ export async function syncFioExchangePrices(
       pricesByExchange.set(price.ExchangeCode, existing)
     }
 
-    // Process each exchange
+    // Process each price list
     const syncedAt = new Date()
-    for (const exchange of exchanges) {
-      const exchangePrices = pricesByExchange.get(exchange.code) || []
+    for (const priceList of fioPriceLists) {
+      const exchangePrices = pricesByExchange.get(priceList.code) || []
       const exchangeResult: FioExchangeSyncResult = {
-        exchangeCode: exchange.code,
-        locationId: exchange.locationId,
-        currency: exchange.currency,
+        priceListCode: priceList.code,
+        locationId: priceList.defaultLocationId,
+        currency: priceList.currency,
         pricesUpdated: 0,
         pricesSkipped: 0,
         syncedAt,
+        exchangeCode: priceList.code,
       }
 
-      // If exchange has no location (shouldn't happen for FIO exchanges), skip
-      if (!exchange.locationId) {
-        result.errors.push(`Exchange ${exchange.code} has no location configured`)
+      // If price list has no default location (shouldn't happen for FIO price lists), skip
+      if (!priceList.defaultLocationId) {
+        result.errors.push(`Price list ${priceList.code} has no default location configured`)
         continue
       }
 
       log.info(
-        { exchange: exchange.code, priceCount: exchangePrices.length },
+        { priceList: priceList.code, priceCount: exchangePrices.length },
         'Processing exchange prices'
       )
 
@@ -199,25 +202,19 @@ export async function syncFioExchangePrices(
         }
 
         try {
-          // Upsert price into price_lists
+          // Upsert price into prices table
           await db
-            .insert(priceLists)
+            .insert(prices)
             .values({
-              exchangeCode: exchange.code,
+              priceListCode: priceList.code,
               commodityTicker: priceData.Ticker,
-              locationId: exchange.locationId,
+              locationId: priceList.defaultLocationId,
               price: price.toFixed(2),
-              currency: exchange.currency,
               source: 'fio_exchange',
               sourceReference: `FIO ${priceField} - ${syncedAt.toISOString()}`,
             })
             .onConflictDoUpdate({
-              target: [
-                priceLists.exchangeCode,
-                priceLists.commodityTicker,
-                priceLists.locationId,
-                priceLists.currency,
-              ],
+              target: [prices.priceListCode, prices.commodityTicker, prices.locationId],
               set: {
                 price: price.toFixed(2),
                 source: 'fio_exchange',
@@ -228,10 +225,10 @@ export async function syncFioExchangePrices(
 
           exchangeResult.pricesUpdated++
         } catch (error) {
-          const errorMsg = `Failed to upsert price for ${priceData.Ticker} on ${exchange.code}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          const errorMsg = `Failed to upsert price for ${priceData.Ticker} on ${priceList.code}: ${error instanceof Error ? error.message : 'Unknown error'}`
           result.errors.push(errorMsg)
           log.error(
-            { ticker: priceData.Ticker, exchange: exchange.code, err: error },
+            { ticker: priceData.Ticker, priceList: priceList.code, err: error },
             'Failed to upsert price'
           )
         }
@@ -243,11 +240,11 @@ export async function syncFioExchangePrices(
 
       log.info(
         {
-          exchange: exchange.code,
+          priceList: priceList.code,
           updated: exchangeResult.pricesUpdated,
           skipped: exchangeResult.pricesSkipped,
         },
-        'Completed exchange sync'
+        'Completed price list sync'
       )
     }
 
@@ -267,52 +264,55 @@ export async function syncFioExchangePrices(
 }
 
 /**
- * Get the last sync time for a specific exchange
+ * Get the last sync time for a specific price list
  */
-export async function getLastSyncTime(exchangeCode: string): Promise<Date | null> {
+export async function getLastSyncTime(priceListCode: string): Promise<Date | null> {
   const result = await db
-    .select({ updatedAt: priceLists.updatedAt })
-    .from(priceLists)
-    .where(eq(priceLists.exchangeCode, exchangeCode))
-    .orderBy(priceLists.updatedAt)
+    .select({ updatedAt: prices.updatedAt })
+    .from(prices)
+    .where(eq(prices.priceListCode, priceListCode))
+    .orderBy(prices.updatedAt)
     .limit(1)
 
   return result.length > 0 ? result[0].updatedAt : null
 }
 
 /**
- * Get sync status for all FIO exchanges
+ * Get sync status for all FIO price lists
  */
 export async function getFioExchangeSyncStatus(): Promise<
   {
-    exchangeCode: string
+    priceListCode: string
     locationId: string | null
     lastSyncedAt: Date | null
     priceCount: number
+    // Backwards compatibility
+    exchangeCode: string
   }[]
 > {
-  const exchanges = await getFioExchanges()
+  const fioPriceLists = await getFioPriceLists()
   const status = []
 
-  for (const exchange of exchanges) {
-    const prices = await db
-      .select({ count: priceLists.id, updatedAt: priceLists.updatedAt })
-      .from(priceLists)
-      .where(eq(priceLists.exchangeCode, exchange.code))
+  for (const priceList of fioPriceLists) {
+    const priceRecords = await db
+      .select({ id: prices.id, updatedAt: prices.updatedAt })
+      .from(prices)
+      .where(eq(prices.priceListCode, priceList.code))
 
     // Get the most recent update time
     let lastSyncedAt: Date | null = null
-    for (const p of prices) {
+    for (const p of priceRecords) {
       if (p.updatedAt && (!lastSyncedAt || p.updatedAt > lastSyncedAt)) {
         lastSyncedAt = p.updatedAt
       }
     }
 
     status.push({
-      exchangeCode: exchange.code,
-      locationId: exchange.locationId,
+      priceListCode: priceList.code,
+      locationId: priceList.defaultLocationId,
       lastSyncedAt,
-      priceCount: prices.length,
+      priceCount: priceRecords.length,
+      exchangeCode: priceList.code,
     })
   }
 

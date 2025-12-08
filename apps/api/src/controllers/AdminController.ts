@@ -118,7 +118,7 @@ interface SetRolePermissionRequest {
 
 @Route('admin')
 @Tags('Admin')
-@Security('jwt', ['administrator'])
+@Security('jwt', ['admin.manage_users'])
 export class AdminController extends Controller {
   /**
    * List all users with pagination and optional search

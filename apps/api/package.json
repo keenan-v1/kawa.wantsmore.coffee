@@ -32,7 +32,9 @@
     "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts",
     "admin:password": "tsx --env-file-if-exists=.env src/scripts/admin-password.ts",
     "admin:add-role": "tsx --env-file-if-exists=.env src/scripts/admin-add-role.ts",
-    "admin:rm-role": "tsx --env-file-if-exists=.env src/scripts/admin-rm-role.ts"
+    "admin:rm-role": "tsx --env-file-if-exists=.env src/scripts/admin-rm-role.ts",
+    "db:drop": "tsx --env-file-if-exists=.env src/scripts/drop-all-tables.ts",
+    "db:mock-data": "tsx --env-file-if-exists=.env src/scripts/load-mock-data.ts"
   },
   "dependencies": {
     "@kawakawa/types": "workspace:*",
@@ -41,6 +43,7 @@
     "drizzle-orm": "^0.44.7",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "postgres": "^3.4.7",

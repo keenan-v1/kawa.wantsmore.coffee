@@ -90,6 +90,38 @@
                     </v-col>
                   </v-row>
 
+                  <!-- Price Suggestion -->
+                  <div v-if="suggestedPrice || loadingSuggestedPrice" class="price-suggestion mb-3">
+                    <div class="d-flex align-center text-caption">
+                      <v-progress-circular
+                        v-if="loadingSuggestedPrice"
+                        indeterminate
+                        size="14"
+                        width="2"
+                        class="mr-2"
+                      />
+                      <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
+                      <template v-if="suggestedPrice">
+                        <span class="text-medium-emphasis">KAWA list price:</span>
+                        <span class="font-weight-medium ml-1">
+                          {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
+                        </span>
+                        <v-btn
+                          variant="text"
+                          size="x-small"
+                          color="primary"
+                          class="ml-2"
+                          @click="useSuggestedPrice"
+                        >
+                          Use
+                        </v-btn>
+                      </template>
+                      <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
+                        Loading suggested price...
+                      </span>
+                    </div>
+                  </div>
+
                   <!-- Order Type -->
                   <v-select
                     v-model="buyForm.orderType"
@@ -162,6 +194,38 @@
                       <v-select v-model="sellForm.currency" :items="currencies" label="Currency" />
                     </v-col>
                   </v-row>
+
+                  <!-- Price Suggestion -->
+                  <div v-if="suggestedPrice || loadingSuggestedPrice" class="price-suggestion mb-3">
+                    <div class="d-flex align-center text-caption">
+                      <v-progress-circular
+                        v-if="loadingSuggestedPrice"
+                        indeterminate
+                        size="14"
+                        width="2"
+                        class="mr-2"
+                      />
+                      <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
+                      <template v-if="suggestedPrice">
+                        <span class="text-medium-emphasis">KAWA list price:</span>
+                        <span class="font-weight-medium ml-1">
+                          {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
+                        </span>
+                        <v-btn
+                          variant="text"
+                          size="x-small"
+                          color="primary"
+                          class="ml-2"
+                          @click="useSuggestedPrice"
+                        >
+                          Use
+                        </v-btn>
+                      </template>
+                      <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
+                        Loading suggested price...
+                      </span>
+                    </div>
+                  </div>
 
                   <!-- Limit Mode -->
                   <v-select
@@ -434,6 +498,7 @@ import {
   type FioInventoryItem,
   type MarketListing,
   type MarketBuyRequest,
+  type EffectivePrice,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
@@ -485,6 +550,10 @@ const errorMessage = ref('')
 const loadingCommodities = ref(false)
 const loadingLocations = ref(false)
 const loadingMatchingOrders = ref(false)
+const loadingSuggestedPrice = ref(false)
+
+// Price suggestion
+const suggestedPrice = ref<EffectivePrice | null>(null)
 
 // Constants
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
@@ -711,6 +780,43 @@ const loadMatchingOrders = async () => {
   }
 }
 
+// Load suggested price from KAWA price list
+const loadSuggestedPrice = async () => {
+  const commodity = currentCommodity.value
+  const location = currentLocation.value
+  const currency = currentCurrency.value
+
+  if (!commodity || !location || !currency) {
+    suggestedPrice.value = null
+    return
+  }
+
+  try {
+    loadingSuggestedPrice.value = true
+    // Fetch effective prices from KAWA exchange for this location/currency
+    const prices = await api.prices.getEffective('KAWA', location, currency)
+    // Find the price for the selected commodity
+    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
+    suggestedPrice.value = price ?? null
+  } catch {
+    // Silently fail - price suggestion is optional
+    suggestedPrice.value = null
+  } finally {
+    loadingSuggestedPrice.value = false
+  }
+}
+
+// Apply suggested price to the form
+const useSuggestedPrice = () => {
+  if (!suggestedPrice.value) return
+
+  if (activeTab.value === 'buy') {
+    buyForm.value.price = suggestedPrice.value.finalPrice
+  } else {
+    sellForm.value.price = suggestedPrice.value.finalPrice
+  }
+}
+
 const loadCommodities = async () => {
   try {
     loadingCommodities.value = true
@@ -773,6 +879,7 @@ const clearForm = () => {
   reservationExpirations.value = {}
   expirationMenus.value = {}
   expandedOrders.value = {}
+  suggestedPrice.value = null
   if (activeTab.value === 'buy') {
     resetBuyForm()
   } else {
@@ -788,6 +895,7 @@ const close = () => {
   reservationExpirations.value = {}
   expirationMenus.value = {}
   expandedOrders.value = {}
+  suggestedPrice.value = null
   resetBuyForm()
   resetSellForm()
 }
@@ -918,6 +1026,15 @@ watch(
   { immediate: false }
 )
 
+// Watch for commodity/location/currency changes to load suggested price
+watch(
+  [currentCommodity, currentLocation, currentCurrency],
+  () => {
+    loadSuggestedPrice()
+  },
+  { immediate: false }
+)
+
 // Watch for tab changes to sync form values
 watch(activeTab, (newTab, oldTab) => {
   if (newTab !== oldTab) {
@@ -935,6 +1052,7 @@ watch(dialog, open => {
     reservationExpirations.value = {}
     expirationMenus.value = {}
     expandedOrders.value = {}
+    suggestedPrice.value = null
     resetBuyForm()
     resetSellForm()
     if (commodities.value.length === 0) {
@@ -943,9 +1061,10 @@ watch(dialog, open => {
     if (locations.value.length === 0) {
       loadLocations()
     }
-    // Load matching orders if we have inventory item
+    // Load matching orders and suggested price if we have inventory item
     if (props.inventoryItem) {
       loadMatchingOrders()
+      loadSuggestedPrice()
     }
   }
 })

@@ -299,6 +299,166 @@ interface FioExchangeResponse {
   createdAt: string
 }
 
+// CSV Import types
+interface CsvFieldMapping {
+  ticker: string | number
+  location?: string | number
+  price: string | number
+  currency?: string | number
+}
+
+interface CsvRowError {
+  rowNumber: number
+  field: string
+  value: string
+  message: string
+}
+
+interface ParsedPriceRow {
+  rowNumber: number
+  ticker: string
+  location: string
+  price: number
+  currency: Currency
+  raw: Record<string, string>
+}
+
+interface CsvImportResult {
+  imported: number
+  updated: number
+  skipped: number
+  errors: CsvRowError[]
+}
+
+interface CsvPreviewResult {
+  headers: string[]
+  sampleRows: ParsedPriceRow[]
+  parseErrors: CsvRowError[]
+  validationErrors: CsvRowError[]
+  delimiter: string
+  totalRows: number
+  validRows: number
+}
+
+interface CsvImportRequest {
+  exchangeCode: string
+  mapping: CsvFieldMapping
+  locationDefault?: string
+  currencyDefault?: Currency
+  delimiter?: string
+  hasHeader?: boolean
+}
+
+interface GoogleSheetsImportRequest {
+  url: string
+  exchangeCode: string
+  fieldMapping: CsvFieldMapping
+  locationDefault?: string | null
+  currencyDefault?: Currency | null
+}
+
+// Admin Price Settings types
+type FioPriceField = 'PriceAverage' | 'MMBuy' | 'MMSell' | 'Ask' | 'Bid'
+
+interface PriceSettingsResponse {
+  fioBaseUrl: string
+  fioPriceField: FioPriceField
+  hasGoogleSheetsApiKey: boolean
+  kawaSheetUrl: string | null
+  kawaSheetGid: number | null
+}
+
+interface UpdateFioSettingsRequest {
+  baseUrl?: string
+  priceField?: FioPriceField
+}
+
+interface UpdateGoogleSettingsRequest {
+  apiKey?: string
+}
+
+interface UpdateKawaSheetRequest {
+  url?: string
+  gid?: number | null
+}
+
+// Price List types
+type PriceListType = 'fio' | 'custom'
+
+interface PriceListDefinition {
+  code: string
+  name: string
+  description: string | null
+  type: PriceListType
+  currency: Currency
+  defaultLocationId: string | null
+  defaultLocationName: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  priceCount?: number
+  importConfigCount?: number
+}
+
+interface CreatePriceListRequest {
+  code: string
+  name: string
+  description?: string | null
+  type: PriceListType
+  currency: Currency
+  defaultLocationId?: string | null
+  isActive?: boolean
+}
+
+interface UpdatePriceListRequest {
+  name?: string
+  description?: string | null
+  currency?: Currency
+  defaultLocationId?: string | null
+  isActive?: boolean
+}
+
+// Import Config types
+type ImportSourceType = 'csv' | 'google_sheets'
+type ImportFormat = 'flat' | 'pivot'
+
+interface ImportConfigResponse {
+  id: number
+  priceListCode: string
+  name: string
+  sourceType: ImportSourceType
+  format: ImportFormat
+  sheetsUrl: string | null
+  sheetGid: number | null
+  config: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreateImportConfigRequest {
+  priceListCode: string
+  name: string
+  sourceType: ImportSourceType
+  format: ImportFormat
+  sheetsUrl?: string | null
+  sheetGid?: number | null
+  config?: Record<string, unknown> | null
+}
+
+interface UpdateImportConfigRequest {
+  name?: string
+  sheetsUrl?: string | null
+  sheetGid?: number | null
+  config?: Record<string, unknown> | null
+}
+
+interface PivotImportResult {
+  imported: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
 // FIO Price Sync types
 interface ExchangeSyncStatus {
   exchangeCode: string
@@ -2627,6 +2787,559 @@ const realApi = {
 
     return response.json()
   },
+
+  // CSV Import methods
+  previewCsvImport: async (file: File, config: CsvImportRequest): Promise<CsvPreviewResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('config', JSON.stringify(config))
+
+    const response = await fetchWithLogging('/api/prices/import/csv/preview', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('jwt')}`,
+      },
+      body: formData,
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview CSV: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  importCsv: async (file: File, config: CsvImportRequest): Promise<CsvImportResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('config', JSON.stringify(config))
+
+    const response = await fetchWithLogging('/api/prices/import/csv', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('jwt')}`,
+      },
+      body: formData,
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to import CSV: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Google Sheets Import methods
+  previewGoogleSheetsImport: async (
+    request: GoogleSheetsImportRequest
+  ): Promise<CsvPreviewResult> => {
+    const response = await fetchWithLogging('/api/prices/import/google-sheets/preview', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview Google Sheets: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  importGoogleSheets: async (request: GoogleSheetsImportRequest): Promise<CsvImportResult> => {
+    const response = await fetchWithLogging('/api/prices/import/google-sheets', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(
+        error.message || `Failed to import from Google Sheets: ${response.statusText}`
+      )
+    }
+
+    return response.json()
+  },
+
+  // Price Lists methods
+  getPriceLists: async (): Promise<PriceListDefinition[]> => {
+    const response = await fetchWithLogging('/api/price-lists', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to get price lists: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPriceList: async (code: string): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      throw new Error(`Failed to get price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPriceList: async (request: CreatePriceListRequest): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging('/api/price-lists', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 409) {
+        throw new Error(`Price list '${request.code}' already exists`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to create price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePriceList: async (
+    code: string,
+    request: UpdatePriceListRequest
+  ): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to update price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePriceList: async (code: string): Promise<void> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to delete price list: ${response.statusText}`)
+    }
+  },
+
+  // Import Configs methods
+  getImportConfigs: async (): Promise<ImportConfigResponse[]> => {
+    const response = await fetchWithLogging('/api/prices/import/configs', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to get import configs: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getImportConfig: async (id: number): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      throw new Error(`Failed to get import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createImportConfig: async (request: CreateImportConfigRequest): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging('/api/prices/import/configs', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to create import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateImportConfig: async (
+    id: number,
+    request: UpdateImportConfigRequest
+  ): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to update import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteImportConfig: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to delete import config: ${response.statusText}`)
+    }
+  },
+
+  syncImportConfig: async (id: number): Promise<CsvImportResult | PivotImportResult> => {
+    const response = await fetchWithLogging(`/api/prices/import/configs/${id}/sync`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to sync import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  previewImportConfig: async (id: number): Promise<CsvPreviewResult | PivotImportResult> => {
+    const response = await fetchWithLogging(`/api/prices/import/configs/${id}/preview`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Admin Price Settings methods
+  getPriceSettings: async (): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get price settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateFioSettings: async (request: UpdateFioSettingsRequest): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/fio', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid FIO settings')
+      }
+      throw new Error(`Failed to update FIO settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateGoogleSettings: async (
+    request: UpdateGoogleSettingsRequest
+  ): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/google', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to update Google settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateKawaSheetSettings: async (
+    request: UpdateKawaSheetRequest
+  ): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid KAWA sheet settings')
+      }
+      throw new Error(`Failed to update KAWA sheet settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  previewKawaSheet: async (): Promise<KawaSheetPreviewResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet/preview', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Failed to preview KAWA sheet')
+      }
+      throw new Error(`Failed to preview KAWA sheet: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  syncKawaSheet: async (request: KawaSheetSyncRequest): Promise<CsvImportResult> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet/sync', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Failed to sync KAWA sheet')
+      }
+      throw new Error(`Failed to sync KAWA sheet: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+}
+
+// Types for KAWA sheet preview and sync
+interface KawaSheetPreviewResponse {
+  headers: string[]
+  rows: string[][]
+}
+
+interface KawaSheetSyncRequest {
+  tickerColumn: string | number
+  priceColumn: string | number
+  locationColumn?: string | number
+  locationDefault?: string
+  currencyColumn?: string | number
+  currencyDefault?: 'ICA' | 'CIS' | 'AIC' | 'NCC'
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -2786,6 +3499,39 @@ export const api = {
     syncExchange: (exchangeCode: string, priceField?: string) =>
       realApi.syncFioPrices(exchangeCode, priceField),
   },
+  priceImport: {
+    previewCsv: (file: File, config: CsvImportRequest) => realApi.previewCsvImport(file, config),
+    importCsv: (file: File, config: CsvImportRequest) => realApi.importCsv(file, config),
+    previewGoogleSheets: (request: GoogleSheetsImportRequest) =>
+      realApi.previewGoogleSheetsImport(request),
+    importGoogleSheets: (request: GoogleSheetsImportRequest) => realApi.importGoogleSheets(request),
+  },
+  adminPriceSettings: {
+    get: () => realApi.getPriceSettings(),
+    updateFio: (request: UpdateFioSettingsRequest) => realApi.updateFioSettings(request),
+    updateGoogle: (request: UpdateGoogleSettingsRequest) => realApi.updateGoogleSettings(request),
+    updateKawaSheet: (request: UpdateKawaSheetRequest) => realApi.updateKawaSheetSettings(request),
+    previewKawaSheet: () => realApi.previewKawaSheet(),
+    syncKawaSheet: (request: KawaSheetSyncRequest) => realApi.syncKawaSheet(request),
+  },
+  priceLists: {
+    list: () => realApi.getPriceLists(),
+    get: (code: string) => realApi.getPriceList(code),
+    create: (request: CreatePriceListRequest) => realApi.createPriceList(request),
+    update: (code: string, request: UpdatePriceListRequest) =>
+      realApi.updatePriceList(code, request),
+    delete: (code: string) => realApi.deletePriceList(code),
+  },
+  importConfigs: {
+    list: () => realApi.getImportConfigs(),
+    get: (id: number) => realApi.getImportConfig(id),
+    create: (request: CreateImportConfigRequest) => realApi.createImportConfig(request),
+    update: (id: number, request: UpdateImportConfigRequest) =>
+      realApi.updateImportConfig(id, request),
+    delete: (id: number) => realApi.deleteImportConfig(id),
+    sync: (id: number) => realApi.syncImportConfig(id),
+    preview: (id: number) => realApi.previewImportConfig(id),
+  },
 }
 
 // Export types for use in components
@@ -2820,4 +3566,32 @@ export type {
   FioExchangeResponse,
   ExchangeSyncStatus,
   SyncPricesResponse,
+  // Import types
+  CsvFieldMapping,
+  CsvRowError,
+  ParsedPriceRow,
+  CsvImportResult,
+  CsvPreviewResult,
+  CsvImportRequest,
+  GoogleSheetsImportRequest,
+  // Admin Price Settings types
+  FioPriceField,
+  PriceSettingsResponse,
+  UpdateFioSettingsRequest,
+  UpdateGoogleSettingsRequest,
+  UpdateKawaSheetRequest,
+  // Price List types
+  PriceListType,
+  PriceListDefinition,
+  CreatePriceListRequest,
+  UpdatePriceListRequest,
+  // Import Config types
+  ImportSourceType,
+  ImportFormat,
+  ImportConfigResponse,
+  CreateImportConfigRequest,
+  UpdateImportConfigRequest,
+  PivotImportResult,
+  KawaSheetPreviewResponse,
+  KawaSheetSyncRequest,
 }

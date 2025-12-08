@@ -13,13 +13,12 @@ import {
   SuccessResponse,
   Tags,
 } from 'tsoa'
-import type { Currency } from '@kawakawa/types'
 import {
   db,
   priceAdjustments,
   fioCommodities,
   fioLocations,
-  fioExchanges,
+  priceLists,
   users,
 } from '../db/index.js'
 import { eq, and, or, isNull } from 'drizzle-orm'
@@ -29,12 +28,11 @@ import type { AdjustmentType } from '../services/price-calculator.js'
 
 interface PriceAdjustmentResponse {
   id: number
-  exchangeCode: string | null
+  priceListCode: string | null
   commodityTicker: string | null
   commodityName: string | null
   locationId: string | null
   locationName: string | null
-  currency: Currency | null
   adjustmentType: AdjustmentType
   adjustmentValue: string
   priority: number
@@ -46,13 +44,14 @@ interface PriceAdjustmentResponse {
   createdByUsername: string | null
   createdAt: Date
   updatedAt: Date
+  // Backwards compatibility
+  exchangeCode: string | null
 }
 
 interface CreatePriceAdjustmentRequest {
-  exchangeCode?: string | null
+  priceListCode?: string | null
   commodityTicker?: string | null
   locationId?: string | null
-  currency?: Currency | null
   adjustmentType: AdjustmentType
   adjustmentValue: number
   priority?: number
@@ -63,10 +62,9 @@ interface CreatePriceAdjustmentRequest {
 }
 
 interface UpdatePriceAdjustmentRequest {
-  exchangeCode?: string | null
+  priceListCode?: string | null
   commodityTicker?: string | null
   locationId?: string | null
-  currency?: Currency | null
   adjustmentType?: AdjustmentType
   adjustmentValue?: number
   priority?: number
@@ -81,23 +79,23 @@ interface UpdatePriceAdjustmentRequest {
 export class PriceAdjustmentsController extends Controller {
   /**
    * Get all price adjustments with optional filters
-   * @param exchange Filter by exchange code (exact match or NULL)
+   * @param priceList Filter by price list code (exact match or NULL)
    * @param location Filter by location ID (exact match or NULL)
    * @param activeOnly Only return active adjustments
    */
   @Get()
   public async getAdjustments(
-    @Query() exchange?: string,
+    @Query() priceList?: string,
     @Query() location?: string,
     @Query() activeOnly?: boolean
   ): Promise<PriceAdjustmentResponse[]> {
     const conditions = []
 
-    if (exchange) {
+    if (priceList) {
       conditions.push(
         or(
-          eq(priceAdjustments.exchangeCode, exchange.toUpperCase()),
-          isNull(priceAdjustments.exchangeCode)
+          eq(priceAdjustments.priceListCode, priceList.toUpperCase()),
+          isNull(priceAdjustments.priceListCode)
         )
       )
     }
@@ -118,12 +116,11 @@ export class PriceAdjustmentsController extends Controller {
     const results = await db
       .select({
         id: priceAdjustments.id,
-        exchangeCode: priceAdjustments.exchangeCode,
+        priceListCode: priceAdjustments.priceListCode,
         commodityTicker: priceAdjustments.commodityTicker,
         commodityName: fioCommodities.name,
         locationId: priceAdjustments.locationId,
         locationName: fioLocations.name,
-        currency: priceAdjustments.currency,
         adjustmentType: priceAdjustments.adjustmentType,
         adjustmentValue: priceAdjustments.adjustmentValue,
         priority: priceAdjustments.priority,
@@ -143,27 +140,30 @@ export class PriceAdjustmentsController extends Controller {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(priceAdjustments.priority, priceAdjustments.id)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      // Backwards compatibility
+      exchangeCode: r.priceListCode,
+    }))
   }
 
   /**
-   * Get adjustments that apply to a specific exchange
-   * @param exchange The exchange code
+   * Get adjustments that apply to a specific price list
+   * @param priceListCode The price list code
    */
-  @Get('exchange/{exchange}')
-  public async getAdjustmentsByExchange(
-    @Path() exchange: string
+  @Get('price-list/{priceListCode}')
+  public async getAdjustmentsByPriceList(
+    @Path() priceListCode: string
   ): Promise<PriceAdjustmentResponse[]> {
-    // Get adjustments that specifically target this exchange OR apply globally
+    // Get adjustments that specifically target this price list OR apply globally
     const results = await db
       .select({
         id: priceAdjustments.id,
-        exchangeCode: priceAdjustments.exchangeCode,
+        priceListCode: priceAdjustments.priceListCode,
         commodityTicker: priceAdjustments.commodityTicker,
         commodityName: fioCommodities.name,
         locationId: priceAdjustments.locationId,
         locationName: fioLocations.name,
-        currency: priceAdjustments.currency,
         adjustmentType: priceAdjustments.adjustmentType,
         adjustmentValue: priceAdjustments.adjustmentValue,
         priority: priceAdjustments.priority,
@@ -182,13 +182,16 @@ export class PriceAdjustmentsController extends Controller {
       .leftJoin(users, eq(priceAdjustments.createdByUserId, users.id))
       .where(
         or(
-          eq(priceAdjustments.exchangeCode, exchange.toUpperCase()),
-          isNull(priceAdjustments.exchangeCode)
+          eq(priceAdjustments.priceListCode, priceListCode.toUpperCase()),
+          isNull(priceAdjustments.priceListCode)
         )
       )
       .orderBy(priceAdjustments.priority, priceAdjustments.id)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      exchangeCode: r.priceListCode,
+    }))
   }
 
   /**
@@ -203,12 +206,11 @@ export class PriceAdjustmentsController extends Controller {
     const results = await db
       .select({
         id: priceAdjustments.id,
-        exchangeCode: priceAdjustments.exchangeCode,
+        priceListCode: priceAdjustments.priceListCode,
         commodityTicker: priceAdjustments.commodityTicker,
         commodityName: fioCommodities.name,
         locationId: priceAdjustments.locationId,
         locationName: fioLocations.name,
-        currency: priceAdjustments.currency,
         adjustmentType: priceAdjustments.adjustmentType,
         adjustmentValue: priceAdjustments.adjustmentValue,
         priority: priceAdjustments.priority,
@@ -233,7 +235,10 @@ export class PriceAdjustmentsController extends Controller {
       )
       .orderBy(priceAdjustments.priority, priceAdjustments.id)
 
-    return results
+    return results.map(r => ({
+      ...r,
+      exchangeCode: r.priceListCode,
+    }))
   }
 
   /**
@@ -245,12 +250,11 @@ export class PriceAdjustmentsController extends Controller {
     const results = await db
       .select({
         id: priceAdjustments.id,
-        exchangeCode: priceAdjustments.exchangeCode,
+        priceListCode: priceAdjustments.priceListCode,
         commodityTicker: priceAdjustments.commodityTicker,
         commodityName: fioCommodities.name,
         locationId: priceAdjustments.locationId,
         locationName: fioLocations.name,
-        currency: priceAdjustments.currency,
         adjustmentType: priceAdjustments.adjustmentType,
         adjustmentValue: priceAdjustments.adjustmentValue,
         priority: priceAdjustments.priority,
@@ -274,7 +278,10 @@ export class PriceAdjustmentsController extends Controller {
       throw NotFound(`Adjustment with ID ${id} not found`)
     }
 
-    return results[0]
+    return {
+      ...results[0],
+      exchangeCode: results[0].priceListCode,
+    }
   }
 
   /**
@@ -288,20 +295,20 @@ export class PriceAdjustmentsController extends Controller {
     @Body() body: CreatePriceAdjustmentRequest,
     @Request() request: AuthenticatedRequest
   ): Promise<PriceAdjustmentResponse> {
-    const exchangeCode = body.exchangeCode?.toUpperCase() ?? null
+    const priceListCode = body.priceListCode?.toUpperCase() ?? null
     const commodityTicker = body.commodityTicker?.toUpperCase() ?? null
     const locationId = body.locationId?.toUpperCase() ?? null
 
-    // Validate exchange if provided
-    if (exchangeCode) {
-      const exchangeExists = await db
-        .select({ code: fioExchanges.code })
-        .from(fioExchanges)
-        .where(eq(fioExchanges.code, exchangeCode))
+    // Validate price list if provided
+    if (priceListCode) {
+      const priceListExists = await db
+        .select({ code: priceLists.code })
+        .from(priceLists)
+        .where(eq(priceLists.code, priceListCode))
         .limit(1)
 
-      if (exchangeExists.length === 0) {
-        throw BadRequest(`Exchange '${exchangeCode}' not found`)
+      if (priceListExists.length === 0) {
+        throw BadRequest(`Price list '${priceListCode}' not found`)
       }
     }
 
@@ -335,10 +342,9 @@ export class PriceAdjustmentsController extends Controller {
     const [inserted] = await db
       .insert(priceAdjustments)
       .values({
-        exchangeCode,
+        priceListCode,
         commodityTicker,
         locationId,
-        currency: body.currency ?? null,
         adjustmentType: body.adjustmentType,
         adjustmentValue: body.adjustmentValue.toFixed(4),
         priority: body.priority ?? 0,
@@ -377,17 +383,17 @@ export class PriceAdjustmentsController extends Controller {
       throw NotFound(`Adjustment with ID ${id} not found`)
     }
 
-    // Validate exchange if being updated to a specific value
-    if (body.exchangeCode !== undefined && body.exchangeCode !== null) {
-      const exchangeCode = body.exchangeCode.toUpperCase()
-      const exchangeExists = await db
-        .select({ code: fioExchanges.code })
-        .from(fioExchanges)
-        .where(eq(fioExchanges.code, exchangeCode))
+    // Validate price list if being updated to a specific value
+    if (body.priceListCode !== undefined && body.priceListCode !== null) {
+      const priceListCode = body.priceListCode.toUpperCase()
+      const priceListExists = await db
+        .select({ code: priceLists.code })
+        .from(priceLists)
+        .where(eq(priceLists.code, priceListCode))
         .limit(1)
 
-      if (exchangeExists.length === 0) {
-        throw BadRequest(`Exchange '${exchangeCode}' not found`)
+      if (priceListExists.length === 0) {
+        throw BadRequest(`Price list '${priceListCode}' not found`)
       }
     }
 
@@ -421,10 +427,9 @@ export class PriceAdjustmentsController extends Controller {
 
     // Build update object
     const updateData: Partial<{
-      exchangeCode: string | null
+      priceListCode: string | null
       commodityTicker: string | null
       locationId: string | null
-      currency: Currency | null
       adjustmentType: AdjustmentType
       adjustmentValue: string
       priority: number
@@ -437,17 +442,14 @@ export class PriceAdjustmentsController extends Controller {
       updatedAt: new Date(),
     }
 
-    if (body.exchangeCode !== undefined) {
-      updateData.exchangeCode = body.exchangeCode?.toUpperCase() ?? null
+    if (body.priceListCode !== undefined) {
+      updateData.priceListCode = body.priceListCode?.toUpperCase() ?? null
     }
     if (body.commodityTicker !== undefined) {
       updateData.commodityTicker = body.commodityTicker?.toUpperCase() ?? null
     }
     if (body.locationId !== undefined) {
       updateData.locationId = body.locationId?.toUpperCase() ?? null
-    }
-    if (body.currency !== undefined) {
-      updateData.currency = body.currency
     }
     if (body.adjustmentType !== undefined) {
       updateData.adjustmentType = body.adjustmentType

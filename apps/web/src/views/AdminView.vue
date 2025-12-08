@@ -21,6 +21,7 @@
       <v-tab value="permissions">Permissions</v-tab>
       <v-tab value="roles">Roles</v-tab>
       <v-tab value="discord">Discord</v-tab>
+      <v-tab value="priceLists">Price Lists</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -657,6 +658,284 @@
           </v-col>
         </v-row>
       </v-tabs-window-item>
+
+      <!-- PRICE LISTS TAB -->
+      <v-tabs-window-item value="priceLists">
+        <v-row>
+          <v-col cols="12" lg="6">
+            <!-- FIO API Settings -->
+            <v-card class="mb-4">
+              <v-card-title>
+                <v-icon class="mr-2">mdi-api</v-icon>
+                FIO API Settings
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Configure the FIO REST API endpoint used for syncing exchange prices and other
+                  game data.
+                </v-alert>
+
+                <v-text-field
+                  v-model="priceSettingsForm.fioBaseUrl"
+                  label="FIO Base URL"
+                  placeholder="https://rest.fnar.net"
+                  hint="The base URL for the FIO REST API"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-select
+                  v-model="priceSettingsForm.fioPriceField"
+                  :items="fioPriceFieldOptions"
+                  label="Price Field"
+                  hint="Which FIO price field to use when syncing exchange prices"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingFioSettings"
+                  :disabled="!hasFioSettingsChanges"
+                  @click="saveFioSettings"
+                >
+                  Save FIO Settings
+                </v-btn>
+              </v-card-text>
+            </v-card>
+
+            <!-- Google Sheets API Settings -->
+            <v-card>
+              <v-card-title>
+                <v-icon class="mr-2">mdi-google-spreadsheet</v-icon>
+                Google Sheets API
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Configure Google Sheets API access for importing price data from spreadsheets.
+                </v-alert>
+
+                <v-text-field
+                  v-model="priceSettingsForm.googleApiKey"
+                  :type="showGoogleApiKey ? 'text' : 'password'"
+                  label="Google API Key"
+                  :placeholder="
+                    priceSettings?.hasGoogleSheetsApiKey
+                      ? '••••••••••••••••'
+                      : 'Enter Google API key'
+                  "
+                  :hint="
+                    priceSettings?.hasGoogleSheetsApiKey
+                      ? 'API key is configured (enter new value to change)'
+                      : 'API key with Google Sheets API access'
+                  "
+                  persistent-hint
+                  class="mb-4"
+                  :append-inner-icon="showGoogleApiKey ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="showGoogleApiKey = !showGoogleApiKey"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingGoogleSettings"
+                  :disabled="!priceSettingsForm.googleApiKey"
+                  @click="saveGoogleSettings"
+                >
+                  Save Google API Key
+                </v-btn>
+              </v-card-text>
+            </v-card>
+          </v-col>
+
+          <v-col cols="12" lg="6">
+            <!-- KAWA Sheet Configuration -->
+            <v-card>
+              <v-card-title>
+                <v-icon class="mr-2">mdi-file-table-outline</v-icon>
+                KAWA Price Sheet
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Configure the KAWA internal price sheet for automated imports. This sheet uses a
+                  custom pivot format with locations as columns and commodities as rows.
+                </v-alert>
+
+                <v-text-field
+                  v-model="priceSettingsForm.kawaSheetUrl"
+                  label="Google Sheets URL"
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  hint="Full URL to the KAWA price spreadsheet"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-text-field
+                  v-model.number="priceSettingsForm.kawaSheetGid"
+                  type="number"
+                  label="Sheet GID (Tab)"
+                  placeholder="0"
+                  hint="The GID of the specific sheet tab (found in URL after #gid=)"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <div class="d-flex gap-2">
+                  <v-btn
+                    color="primary"
+                    :loading="savingKawaSettings"
+                    :disabled="!hasKawaSettingsChanges"
+                    @click="saveKawaSettings"
+                  >
+                    Save Settings
+                  </v-btn>
+                  <v-btn
+                    color="secondary"
+                    variant="outlined"
+                    :loading="previewingKawaSheet"
+                    :disabled="!priceSettings?.kawaSheetUrl"
+                    @click="previewKawaSheet"
+                  >
+                    <v-icon start>mdi-eye</v-icon>
+                    Preview Sheet
+                  </v-btn>
+                </div>
+
+                <!-- KAWA Sheet Preview -->
+                <v-expand-transition>
+                  <div v-if="kawaSheetPreview" class="mt-4">
+                    <v-divider class="mb-4" />
+                    <h4 class="text-subtitle-1 font-weight-medium mb-2">Sheet Preview</h4>
+
+                    <v-alert
+                      v-if="kawaSheetPreview.headers.length === 0"
+                      type="warning"
+                      class="mb-4"
+                    >
+                      Sheet appears to be empty
+                    </v-alert>
+
+                    <div v-else class="mb-4">
+                      <div class="text-caption text-medium-emphasis mb-2">
+                        Headers: {{ kawaSheetPreview.headers.join(', ') }}
+                      </div>
+                      <v-table density="compact" class="sheet-preview-table">
+                        <thead>
+                          <tr>
+                            <th
+                              v-for="(h, i) in kawaSheetPreview.headers"
+                              :key="i"
+                              class="text-left"
+                            >
+                              {{ h || `Col ${i}` }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, ri) in kawaSheetPreview.rows.slice(0, 10)" :key="ri">
+                            <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                          </tr>
+                        </tbody>
+                      </v-table>
+                      <div
+                        v-if="kawaSheetPreview.rows.length > 10"
+                        class="text-caption text-medium-emphasis mt-1"
+                      >
+                        Showing 10 of {{ kawaSheetPreview.rows.length }} rows
+                      </div>
+                    </div>
+
+                    <h4 class="text-subtitle-1 font-weight-medium mb-2">Import Configuration</h4>
+                    <v-row>
+                      <v-col cols="6">
+                        <v-select
+                          v-model="kawaSyncConfig.tickerColumn"
+                          :items="kawaSheetColumnOptions"
+                          label="Ticker Column"
+                          hint="Column containing commodity tickers"
+                          persistent-hint
+                        />
+                      </v-col>
+                      <v-col cols="6">
+                        <v-select
+                          v-model="kawaSyncConfig.priceColumn"
+                          :items="kawaSheetColumnOptions"
+                          label="Price Column"
+                          hint="Column containing prices"
+                          persistent-hint
+                        />
+                      </v-col>
+                      <v-col cols="6">
+                        <v-text-field
+                          v-model="kawaSyncConfig.locationDefault"
+                          label="Default Location"
+                          placeholder="e.g., BEN"
+                          hint="Location for all imported prices"
+                          persistent-hint
+                        />
+                      </v-col>
+                      <v-col cols="6">
+                        <v-select
+                          v-model="kawaSyncConfig.currencyDefault"
+                          :items="['CIS', 'NCC', 'ICA', 'AIC']"
+                          label="Default Currency"
+                          hint="Currency for all imported prices"
+                          persistent-hint
+                        />
+                      </v-col>
+                    </v-row>
+
+                    <div class="d-flex gap-2 mt-4">
+                      <v-btn
+                        color="success"
+                        :loading="syncingKawaSheet"
+                        :disabled="!kawaSyncConfig.tickerColumn || !kawaSyncConfig.priceColumn"
+                        @click="syncKawaSheet"
+                      >
+                        <v-icon start>mdi-sync</v-icon>
+                        Sync Prices
+                      </v-btn>
+                      <v-btn variant="text" @click="kawaSheetPreview = null">Close Preview</v-btn>
+                    </div>
+
+                    <v-alert
+                      v-if="kawaSyncResult"
+                      :type="kawaSyncResult.errors.length > 0 ? 'warning' : 'success'"
+                      class="mt-4"
+                      closable
+                      @click:close="kawaSyncResult = null"
+                    >
+                      <template v-if="kawaSyncResult.imported > 0 || kawaSyncResult.updated > 0">
+                        Imported {{ kawaSyncResult.imported }} new prices, updated
+                        {{ kawaSyncResult.updated }} existing prices.
+                      </template>
+                      <template v-if="kawaSyncResult.skipped > 0">
+                        {{ kawaSyncResult.skipped }} rows skipped.
+                      </template>
+                      <div v-if="kawaSyncResult.errors.length > 0" class="mt-2">
+                        <strong>Errors:</strong>
+                        <ul class="ml-4 mt-1">
+                          <li
+                            v-for="(err, i) in kawaSyncResult.errors.slice(0, 5)"
+                            :key="i"
+                            class="text-body-2"
+                          >
+                            Row {{ err.rowNumber }}: {{ err.message }} ({{ err.field }}: "{{
+                              err.value
+                            }}")
+                          </li>
+                          <li v-if="kawaSyncResult.errors.length > 5" class="text-body-2">
+                            ... and {{ kawaSyncResult.errors.length - 5 }} more errors
+                          </li>
+                        </ul>
+                      </div>
+                    </v-alert>
+                  </div>
+                </v-expand-transition>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Edit User Dialog -->
@@ -952,6 +1231,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { Role } from '../types'
 import type { DiscordSettings, DiscordRoleMapping, DiscordRole } from '@kawakawa/types'
 import { api } from '../services/api'
+import type { PriceSettingsResponse, FioPriceField } from '../services/api'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -1113,6 +1393,51 @@ const deleteMappingDialog = ref(false)
 const deletingMapping = ref<DiscordRoleMapping | null>(null)
 const deletingMappingLoading = ref(false)
 
+// Price settings state
+const priceSettings = ref<PriceSettingsResponse | null>(null)
+const priceSettingsForm = ref({
+  fioBaseUrl: '',
+  fioPriceField: 'PriceAverage' as FioPriceField,
+  googleApiKey: '',
+  kawaSheetUrl: '',
+  kawaSheetGid: null as number | null,
+})
+const showGoogleApiKey = ref(false)
+const savingFioSettings = ref(false)
+const savingGoogleSettings = ref(false)
+const savingKawaSettings = ref(false)
+const previewingKawaSheet = ref(false)
+const syncingKawaSheet = ref(false)
+const kawaSheetPreview = ref<{ headers: string[]; rows: string[][] } | null>(null)
+const kawaSyncConfig = ref({
+  tickerColumn: '' as string,
+  priceColumn: '' as string,
+  locationDefault: 'BEN',
+  currencyDefault: 'CIS' as 'ICA' | 'CIS' | 'AIC' | 'NCC',
+})
+const kawaSyncResult = ref<{
+  imported: number
+  updated: number
+  skipped: number
+  errors: Array<{ rowNumber: number; field: string; value: string; message: string }>
+} | null>(null)
+
+const kawaSheetColumnOptions = computed(() => {
+  if (!kawaSheetPreview.value) return []
+  return kawaSheetPreview.value.headers.map((h, i) => ({
+    title: h || `Column ${i}`,
+    value: h || i.toString(),
+  }))
+})
+
+const fioPriceFieldOptions = [
+  { title: 'Price Average (30-day weighted)', value: 'PriceAverage' },
+  { title: 'Market Maker Buy', value: 'MMBuy' },
+  { title: 'Market Maker Sell', value: 'MMSell' },
+  { title: 'Ask (lowest sell)', value: 'Ask' },
+  { title: 'Bid (highest buy)', value: 'Bid' },
+]
+
 // Discord computed properties - OAuth and Bot settings
 const hasOAuthSettingsChanges = computed(() => {
   return (
@@ -1127,6 +1452,21 @@ const hasBotSettingsChanges = computed(() => {
     discordForm.value.botToken !== '' ||
     discordForm.value.guildId !== (discordSettings.value?.guildId || '') ||
     discordForm.value.autoApprovalEnabled !== (discordSettings.value?.autoApprovalEnabled || false)
+  )
+})
+
+// Price settings computed properties
+const hasFioSettingsChanges = computed(() => {
+  return (
+    priceSettingsForm.value.fioBaseUrl !== (priceSettings.value?.fioBaseUrl || '') ||
+    priceSettingsForm.value.fioPriceField !== (priceSettings.value?.fioPriceField || 'PriceAverage')
+  )
+})
+
+const hasKawaSettingsChanges = computed(() => {
+  return (
+    priceSettingsForm.value.kawaSheetUrl !== (priceSettings.value?.kawaSheetUrl || '') ||
+    priceSettingsForm.value.kawaSheetGid !== priceSettings.value?.kawaSheetGid
   )
 })
 
@@ -1800,6 +2140,125 @@ const deleteMapping = async () => {
   }
 }
 
+// Price settings functions
+const loadPriceSettings = async () => {
+  try {
+    priceSettings.value = await api.adminPriceSettings.get()
+    // Initialize form with current settings
+    priceSettingsForm.value.fioBaseUrl = priceSettings.value.fioBaseUrl || ''
+    priceSettingsForm.value.fioPriceField = priceSettings.value.fioPriceField || 'PriceAverage'
+    priceSettingsForm.value.kawaSheetUrl = priceSettings.value.kawaSheetUrl || ''
+    priceSettingsForm.value.kawaSheetGid = priceSettings.value.kawaSheetGid
+    // Don't populate API key - it should only be entered when changing
+    priceSettingsForm.value.googleApiKey = ''
+  } catch (error) {
+    console.error('Failed to load price settings', error)
+    showSnackbar('Failed to load price settings', 'error')
+  }
+}
+
+const saveFioSettings = async () => {
+  try {
+    savingFioSettings.value = true
+    priceSettings.value = await api.adminPriceSettings.updateFio({
+      baseUrl: priceSettingsForm.value.fioBaseUrl,
+      priceField: priceSettingsForm.value.fioPriceField,
+    })
+    showSnackbar('FIO settings saved successfully')
+  } catch (error) {
+    console.error('Failed to save FIO settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save FIO settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingFioSettings.value = false
+  }
+}
+
+const saveGoogleSettings = async () => {
+  try {
+    savingGoogleSettings.value = true
+    priceSettings.value = await api.adminPriceSettings.updateGoogle({
+      apiKey: priceSettingsForm.value.googleApiKey,
+    })
+    // Clear the API key field after save
+    priceSettingsForm.value.googleApiKey = ''
+    showSnackbar('Google API key saved successfully')
+  } catch (error) {
+    console.error('Failed to save Google settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save Google settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingGoogleSettings.value = false
+  }
+}
+
+const saveKawaSettings = async () => {
+  try {
+    savingKawaSettings.value = true
+    priceSettings.value = await api.adminPriceSettings.updateKawaSheet({
+      url: priceSettingsForm.value.kawaSheetUrl,
+      gid: priceSettingsForm.value.kawaSheetGid,
+    })
+    showSnackbar('KAWA sheet settings saved successfully')
+  } catch (error) {
+    console.error('Failed to save KAWA settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save KAWA settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingKawaSettings.value = false
+  }
+}
+
+const previewKawaSheet = async () => {
+  try {
+    previewingKawaSheet.value = true
+    kawaSyncResult.value = null
+    const result = await api.adminPriceSettings.previewKawaSheet()
+    kawaSheetPreview.value = result
+    // Auto-detect common column names
+    const headers = result.headers.map(h => h.toLowerCase())
+    const tickerIdx = headers.findIndex(h => h.includes('ticker') || h.includes('commodity'))
+    const priceIdx = headers.findIndex(h => h.includes('price'))
+    if (tickerIdx >= 0)
+      kawaSyncConfig.value.tickerColumn = result.headers[tickerIdx] || tickerIdx.toString()
+    if (priceIdx >= 0)
+      kawaSyncConfig.value.priceColumn = result.headers[priceIdx] || priceIdx.toString()
+  } catch (error) {
+    console.error('Failed to preview KAWA sheet', error)
+    const message = error instanceof Error ? error.message : 'Failed to preview KAWA sheet'
+    showSnackbar(message, 'error')
+  } finally {
+    previewingKawaSheet.value = false
+  }
+}
+
+const syncKawaSheet = async () => {
+  try {
+    syncingKawaSheet.value = true
+    const result = await api.adminPriceSettings.syncKawaSheet({
+      tickerColumn: kawaSyncConfig.value.tickerColumn,
+      priceColumn: kawaSyncConfig.value.priceColumn,
+      locationDefault: kawaSyncConfig.value.locationDefault || undefined,
+      currencyDefault: kawaSyncConfig.value.currencyDefault || undefined,
+    })
+    kawaSyncResult.value = result
+    if (result.errors.length === 0) {
+      showSnackbar(
+        `Synced ${result.imported} new, ${result.updated} updated prices from KAWA sheet`,
+        'success'
+      )
+    } else {
+      showSnackbar(`Sync completed with ${result.errors.length} errors`, 'error')
+    }
+  } catch (error) {
+    console.error('Failed to sync KAWA sheet', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync KAWA sheet'
+    showSnackbar(message, 'error')
+  } finally {
+    syncingKawaSheet.value = false
+  }
+}
+
 // Watch for tab changes to load data
 watch(activeTab, async newTab => {
   if (newTab === 'permissions') {
@@ -1819,6 +2278,11 @@ watch(activeTab, async newTab => {
     if (discordRoleMappings.value.length === 0) {
       await loadRoleMappings()
     }
+  } else if (newTab === 'priceLists') {
+    // Load price settings
+    if (!priceSettings.value) {
+      await loadPriceSettings()
+    }
   }
 })
 
@@ -1837,5 +2301,19 @@ onMounted(() => {
 
 .permission-matrix td:first-child {
   width: 1%;
+}
+
+.sheet-preview-table {
+  max-height: 400px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+.sheet-preview-table th,
+.sheet-preview-table td {
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

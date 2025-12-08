@@ -1,6 +1,6 @@
 # Kawakawa CX - Development Commands
 
-.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-studio fio-sync clean kill-dev
+.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-reset-mock db-drop db-mock-data db-studio fio-sync clean kill-dev
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -53,17 +53,29 @@ db-init: ## Initialize database (migrate, seed, sync FIO) - idempotent, producti
 	pnpm --filter @kawakawa/api db:migrate
 	pnpm --filter @kawakawa/api db:init
 
-db-init-dev: ## Initialize database for development (push schema, seed, sync FIO)
+db-init-dev: ## Initialize database for development (push schema, sync FIO, seed)
 	pnpm --filter @kawakawa/api db:push
-	pnpm --filter @kawakawa/api db:seed
 	pnpm --filter @kawakawa/api fio:sync
+	pnpm --filter @kawakawa/api db:seed
 
-db-reset: ## Reset database (WARNING: deletes all data)
-	docker compose down -v
-	docker compose up -d
-	@echo "Waiting for database to start..."
-	@sleep 3
-	$(MAKE) db-init-dev
+db-reset: ## Reset database with seed data only (WARNING: deletes all data)
+	pnpm --filter @kawakawa/api db:drop
+	pnpm --filter @kawakawa/api db:push --force
+	pnpm --filter @kawakawa/api fio:sync
+	pnpm --filter @kawakawa/api db:seed
+
+db-reset-mock: ## Reset database with mock data (WARNING: deletes all data)
+	pnpm --filter @kawakawa/api db:drop
+	pnpm --filter @kawakawa/api db:push --force
+	pnpm --filter @kawakawa/api fio:sync
+	pnpm --filter @kawakawa/api db:seed
+	pnpm --filter @kawakawa/api db:mock-data
+
+db-drop: ## Drop all database tables (WARNING: deletes all data)
+	pnpm --filter @kawakawa/api db:drop
+
+db-mock-data: ## Load mock data into database (requires seeded DB)
+	pnpm --filter @kawakawa/api db:mock-data
 
 db-studio: ## Open Drizzle Studio (visual database browser)
 	pnpm --filter @kawakawa/api db:studio

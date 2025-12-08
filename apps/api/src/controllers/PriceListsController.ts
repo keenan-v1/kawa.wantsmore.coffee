@@ -12,12 +12,20 @@ import {
   Tags,
 } from 'tsoa'
 import type { Currency } from '@kawakawa/types'
-import { db, priceLists, fioLocations } from '../db/index.js'
+import {
+  db,
+  priceLists,
+  prices,
+  priceAdjustments,
+  importConfigs,
+  fioLocations,
+} from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
-import type { PriceListType } from './PriceListsController.js'
 
-export interface FioExchangeResponse {
+export type PriceListType = 'fio' | 'custom'
+
+export interface PriceListDefinition {
   code: string
   name: string
   description: string | null
@@ -28,20 +36,21 @@ export interface FioExchangeResponse {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
-  // Backwards compatibility - alias for defaultLocationId
-  locationId: string | null
+  priceCount?: number
+  importConfigCount?: number
 }
 
-interface CreateFioExchangeRequest {
+interface CreatePriceListRequest {
   code: string
   name: string
   description?: string | null
-  type?: PriceListType // Defaults to 'custom'
+  type: PriceListType
   currency: Currency
   defaultLocationId?: string | null
+  isActive?: boolean
 }
 
-interface UpdateFioExchangeRequest {
+interface UpdatePriceListRequest {
   name?: string
   description?: string | null
   currency?: Currency
@@ -49,15 +58,14 @@ interface UpdateFioExchangeRequest {
   isActive?: boolean
 }
 
-@Route('fio-exchanges')
+@Route('price-lists')
 @Tags('Pricing')
-export class FioExchangesController extends Controller {
+export class PriceListsController extends Controller {
   /**
-   * Get all price lists (exchanges)
-   * Returns all exchange codes with their location mappings
+   * Get all price list definitions
    */
   @Get()
-  public async getFioExchanges(): Promise<FioExchangeResponse[]> {
+  public async getPriceLists(): Promise<PriceListDefinition[]> {
     const results = await db
       .select({
         code: priceLists.code,
@@ -75,29 +83,37 @@ export class FioExchangesController extends Controller {
       .leftJoin(fioLocations, eq(priceLists.defaultLocationId, fioLocations.naturalId))
       .orderBy(priceLists.code)
 
+    // Get counts for each price list
+    const priceCountsResult = await db.select({ priceListCode: prices.priceListCode }).from(prices)
+
+    const priceCounts = new Map<string, number>()
+    for (const row of priceCountsResult) {
+      priceCounts.set(row.priceListCode, (priceCounts.get(row.priceListCode) || 0) + 1)
+    }
+
+    const configCountsResult = await db
+      .select({ priceListCode: importConfigs.priceListCode })
+      .from(importConfigs)
+
+    const configCounts = new Map<string, number>()
+    for (const row of configCountsResult) {
+      configCounts.set(row.priceListCode, (configCounts.get(row.priceListCode) || 0) + 1)
+    }
+
     return results.map(r => ({
-      code: r.code,
-      name: r.name,
-      description: r.description,
-      type: r.type,
-      currency: r.currency,
-      defaultLocationId: r.defaultLocationId,
-      defaultLocationName: r.defaultLocationName,
-      isActive: r.isActive,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      // Backwards compatibility
-      locationId: r.defaultLocationId,
+      ...r,
+      priceCount: priceCounts.get(r.code) || 0,
+      importConfigCount: configCounts.get(r.code) || 0,
     }))
   }
 
   /**
-   * Get a specific price list by code
-   * @param code The exchange code (e.g., 'CI1', 'KAWA')
+   * Get a specific price list definition
+   * @param code The price list code
    */
   @Get('{code}')
-  public async getFioExchange(@Path() code: string): Promise<FioExchangeResponse> {
-    const result = await db
+  public async getPriceList(@Path() code: string): Promise<PriceListDefinition> {
+    const results = await db
       .select({
         code: priceLists.code,
         name: priceLists.name,
@@ -115,39 +131,40 @@ export class FioExchangesController extends Controller {
       .where(eq(priceLists.code, code.toUpperCase()))
       .limit(1)
 
-    if (result.length === 0) {
-      throw NotFound(`Exchange '${code}' not found`)
+    if (results.length === 0) {
+      throw NotFound(`Price list '${code.toUpperCase()}' not found`)
     }
 
-    const r = result[0]
+    // Get price count
+    const priceCountResult = await db
+      .select({ id: prices.id })
+      .from(prices)
+      .where(eq(prices.priceListCode, code.toUpperCase()))
+
+    // Get import config count
+    const configCountResult = await db
+      .select({ id: importConfigs.id })
+      .from(importConfigs)
+      .where(eq(importConfigs.priceListCode, code.toUpperCase()))
+
     return {
-      code: r.code,
-      name: r.name,
-      description: r.description,
-      type: r.type,
-      currency: r.currency,
-      defaultLocationId: r.defaultLocationId,
-      defaultLocationName: r.defaultLocationName,
-      isActive: r.isActive,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      locationId: r.defaultLocationId,
+      ...results[0],
+      priceCount: priceCountResult.length,
+      importConfigCount: configCountResult.length,
     }
   }
 
   /**
-   * Create a new price list (exchange)
+   * Create a new price list
    * @param body The price list data
    */
   @Post()
-  @Security('jwt', ['admin.manage_roles']) // Reusing admin permission for now
+  @Security('jwt', ['prices.manage'])
   @SuccessResponse('201', 'Created')
-  public async createFioExchange(
-    @Body() body: CreateFioExchangeRequest
-  ): Promise<FioExchangeResponse> {
+  public async createPriceList(@Body() body: CreatePriceListRequest): Promise<PriceListDefinition> {
     const code = body.code.toUpperCase()
 
-    // Check if price list already exists
+    // Check if code already exists
     const existing = await db
       .select({ code: priceLists.code })
       .from(priceLists)
@@ -155,50 +172,47 @@ export class FioExchangesController extends Controller {
       .limit(1)
 
     if (existing.length > 0) {
-      throw Conflict(`Exchange '${code}' already exists`)
+      throw Conflict(`Price list '${code}' already exists`)
     }
 
     // Validate location if provided
     if (body.defaultLocationId) {
-      const location = await db
+      const locationExists = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, body.defaultLocationId))
+        .where(eq(fioLocations.naturalId, body.defaultLocationId.toUpperCase()))
         .limit(1)
 
-      if (location.length === 0) {
+      if (locationExists.length === 0) {
         throw BadRequest(`Location '${body.defaultLocationId}' not found`)
       }
     }
 
-    // Insert the price list
     await db.insert(priceLists).values({
       code,
       name: body.name,
       description: body.description ?? null,
-      type: body.type ?? 'custom',
+      type: body.type,
       currency: body.currency,
-      defaultLocationId: body.defaultLocationId ?? null,
-      isActive: true,
+      defaultLocationId: body.defaultLocationId?.toUpperCase() ?? null,
+      isActive: body.isActive ?? true,
     })
 
     this.setStatus(201)
-
-    // Fetch and return the created price list with location name
-    return this.getFioExchange(code)
+    return this.getPriceList(code)
   }
 
   /**
    * Update an existing price list
-   * @param code The exchange code to update
+   * @param code The price list code
    * @param body The fields to update
    */
   @Put('{code}')
-  @Security('jwt', ['admin.manage_roles'])
-  public async updateFioExchange(
+  @Security('jwt', ['prices.manage'])
+  public async updatePriceList(
     @Path() code: string,
-    @Body() body: UpdateFioExchangeRequest
-  ): Promise<FioExchangeResponse> {
+    @Body() body: UpdatePriceListRequest
+  ): Promise<PriceListDefinition> {
     const upperCode = code.toUpperCase()
 
     // Check if price list exists
@@ -209,55 +223,52 @@ export class FioExchangesController extends Controller {
       .limit(1)
 
     if (existing.length === 0) {
-      throw NotFound(`Exchange '${code}' not found`)
+      throw NotFound(`Price list '${upperCode}' not found`)
     }
 
-    // Prevent modifying FIO exchanges (except isActive)
-    if (existing[0].type === 'fio') {
-      const allowedFields = ['isActive']
-      const requestedFields = Object.keys(body)
-      const disallowedFields = requestedFields.filter(f => !allowedFields.includes(f))
-      if (disallowedFields.length > 0) {
-        throw BadRequest(`Cannot modify FIO exchange fields: ${disallowedFields.join(', ')}`)
-      }
+    // Don't allow changing currency on FIO price lists (they have fixed currencies)
+    if (existing[0].type === 'fio' && body.currency !== undefined) {
+      throw BadRequest('Cannot change currency on FIO price lists')
     }
 
-    // Validate location if being updated
-    if (body.defaultLocationId !== undefined && body.defaultLocationId !== null) {
-      const location = await db
+    // Validate location if provided
+    if (body.defaultLocationId) {
+      const locationExists = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, body.defaultLocationId))
+        .where(eq(fioLocations.naturalId, body.defaultLocationId.toUpperCase()))
         .limit(1)
 
-      if (location.length === 0) {
+      if (locationExists.length === 0) {
         throw BadRequest(`Location '${body.defaultLocationId}' not found`)
       }
     }
 
     // Build update object
-    const updateData: Partial<typeof priceLists.$inferInsert> = {
+    const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
     }
+
     if (body.name !== undefined) updateData.name = body.name
     if (body.description !== undefined) updateData.description = body.description
-    if (body.defaultLocationId !== undefined) updateData.defaultLocationId = body.defaultLocationId
     if (body.currency !== undefined) updateData.currency = body.currency
+    if (body.defaultLocationId !== undefined)
+      updateData.defaultLocationId = body.defaultLocationId?.toUpperCase() ?? null
     if (body.isActive !== undefined) updateData.isActive = body.isActive
 
     await db.update(priceLists).set(updateData).where(eq(priceLists.code, upperCode))
 
-    return this.getFioExchange(upperCode)
+    return this.getPriceList(upperCode)
   }
 
   /**
-   * Delete a price list
-   * @param code The exchange code to delete
+   * Delete a price list and all associated data
+   * @param code The price list code
    */
   @Delete('{code}')
-  @Security('jwt', ['admin.manage_roles'])
+  @Security('jwt', ['prices.manage'])
   @SuccessResponse('204', 'Deleted')
-  public async deleteFioExchange(@Path() code: string): Promise<void> {
+  public async deletePriceList(@Path() code: string): Promise<void> {
     const upperCode = code.toUpperCase()
 
     // Check if price list exists
@@ -268,15 +279,25 @@ export class FioExchangesController extends Controller {
       .limit(1)
 
     if (existing.length === 0) {
-      throw NotFound(`Exchange '${code}' not found`)
+      throw NotFound(`Price list '${upperCode}' not found`)
     }
 
-    // Prevent deleting FIO exchanges
+    // Don't allow deleting FIO price lists (they're managed by the system)
     if (existing[0].type === 'fio') {
-      throw BadRequest(`Cannot delete FIO exchange '${upperCode}'`)
+      throw BadRequest('Cannot delete FIO price lists - they are system-managed')
     }
 
+    // Delete associated prices
+    await db.delete(prices).where(eq(prices.priceListCode, upperCode))
+
+    // Delete associated adjustments
+    await db.delete(priceAdjustments).where(eq(priceAdjustments.priceListCode, upperCode))
+
+    // Import configs are deleted by cascade (FK has onDelete: cascade)
+
+    // Delete the price list itself
     await db.delete(priceLists).where(eq(priceLists.code, upperCode))
+
     this.setStatus(204)
   }
 }

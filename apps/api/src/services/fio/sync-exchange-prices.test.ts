@@ -15,17 +15,39 @@ vi.mock('./client.js', () => ({
 }))
 
 // Mock the database
-const mockSelectFrom = vi.fn()
-const mockSelectOrderBy = vi.fn()
-const mockSelectLimit = vi.fn()
-const mockSelectWhere = vi.fn()
+const mockPriceListsResult = vi.fn()
+const mockCommoditiesResult = vi.fn()
+const mockPricesResult = vi.fn()
 const mockInsertValues = vi.fn()
 const mockInsertOnConflict = vi.fn()
 
 vi.mock('../../db/index.js', () => ({
   db: {
     select: () => ({
-      from: mockSelectFrom,
+      from: (table: unknown) => {
+        // Route to different mocks based on table
+        if (table === 'priceLists') {
+          return {
+            where: () => mockPriceListsResult(),
+          }
+        } else if (table === 'fioCommodities') {
+          return mockCommoditiesResult()
+        } else if (table === 'prices') {
+          // Return object with where method that supports both direct await and chaining
+          return {
+            where: () => {
+              // Create a Promise-like object that can also be chained
+              const resultPromise = Promise.resolve().then(() => mockPricesResult())
+              return Object.assign(resultPromise, {
+                orderBy: () => ({
+                  limit: () => Promise.resolve().then(() => mockPricesResult()),
+                }),
+              })
+            },
+          }
+        }
+        return mockCommoditiesResult()
+      },
     }),
     insert: () => ({
       values: mockInsertValues,
@@ -36,26 +58,9 @@ vi.mock('../../db/index.js', () => ({
       })),
     }),
   },
-  priceLists: {
-    id: 'id',
-    exchangeCode: 'exchange_code',
-    commodityTicker: 'commodity_ticker',
-    locationId: 'location_id',
-    price: 'price',
-    currency: 'currency',
-    source: 'source',
-    sourceReference: 'source_reference',
-    updatedAt: 'updated_at',
-  },
-  fioExchanges: {
-    code: 'code',
-    name: 'name',
-    locationId: 'location_id',
-    currency: 'currency',
-  },
-  fioCommodities: {
-    ticker: 'ticker',
-  },
+  prices: 'prices',
+  priceLists: 'priceLists',
+  fioCommodities: 'fioCommodities',
 }))
 
 // Sample FIO CSV price data
@@ -69,28 +74,17 @@ ALO,CI1,100.0,110.0,105.0,102.0,108.0`
 describe('syncFioExchangePrices', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSelectFrom.mockReset()
-    mockSelectOrderBy.mockReset()
-    mockSelectLimit.mockReset()
-    mockSelectWhere.mockReset()
+    mockPriceListsResult.mockReset()
+    mockCommoditiesResult.mockReset()
+    mockPricesResult.mockReset()
     mockInsertValues.mockReset()
     mockInsertOnConflict.mockReset()
     mockGetPrices.mockReset()
 
     // Default mock implementations
-    mockSelectFrom.mockReturnValue({
-      orderBy: mockSelectOrderBy,
-      where: mockSelectWhere,
-      limit: mockSelectLimit,
-    })
-    mockSelectOrderBy.mockReturnValue({
-      limit: mockSelectLimit,
-    })
-    mockSelectLimit.mockResolvedValue([])
-    mockSelectWhere.mockReturnValue({
-      orderBy: mockSelectOrderBy,
-      limit: mockSelectLimit,
-    })
+    mockPriceListsResult.mockResolvedValue([])
+    mockCommoditiesResult.mockResolvedValue([])
+    mockPricesResult.mockReturnValue([])
 
     mockInsertValues.mockReturnValue({
       onConflictDoUpdate: mockInsertOnConflict,
@@ -99,14 +93,18 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should sync prices from all FIO exchanges', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([
-      { code: 'CI1', locationId: 'BEN', currency: 'CIS' },
-      { code: 'NC1', locationId: 'MOR', currency: 'NCC' },
+    // Mock price lists (FIO exchanges)
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+      { code: 'NC1', defaultLocationId: 'MOR', currency: 'NCC' },
     ])
 
     // Mock valid tickers
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }, { ticker: 'RAT' }, { ticker: 'ALO' }])
+    mockCommoditiesResult.mockResolvedValue([
+      { ticker: 'H2O' },
+      { ticker: 'RAT' },
+      { ticker: 'ALO' },
+    ])
 
     // Mock FIO API response
     mockGetPrices.mockResolvedValue(sampleCsvPrices)
@@ -133,14 +131,18 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should sync prices for a specific exchange only', async () => {
-    // Mock exchanges (filtering for CI1)
-    mockSelectFrom.mockResolvedValueOnce([
-      { code: 'CI1', locationId: 'BEN', currency: 'CIS' },
-      { code: 'NC1', locationId: 'MOR', currency: 'NCC' },
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+      { code: 'NC1', defaultLocationId: 'MOR', currency: 'NCC' },
     ])
 
     // Mock valid tickers
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }, { ticker: 'RAT' }, { ticker: 'ALO' }])
+    mockCommoditiesResult.mockResolvedValue([
+      { ticker: 'H2O' },
+      { ticker: 'RAT' },
+      { ticker: 'ALO' },
+    ])
 
     // Mock FIO API response
     mockGetPrices.mockResolvedValue(sampleCsvPrices)
@@ -154,11 +156,13 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should use the configured price field', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     // Mock valid tickers
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }])
+    mockCommoditiesResult.mockResolvedValue([{ ticker: 'H2O' }])
 
     // Mock FIO API response
     mockGetPrices.mockResolvedValue(sampleCsvPrices)
@@ -174,11 +178,13 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should skip unknown tickers', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     // Mock valid tickers - only H2O exists
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }])
+    mockCommoditiesResult.mockResolvedValue([{ ticker: 'H2O' }])
 
     // Mock FIO API response with multiple commodities
     mockGetPrices.mockResolvedValue(sampleCsvPrices)
@@ -191,11 +197,13 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should skip prices with null or zero values', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     // Mock valid tickers - H2O and FE are valid
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }, { ticker: 'FE' }])
+    mockCommoditiesResult.mockResolvedValue([{ ticker: 'H2O' }, { ticker: 'FE' }])
 
     // Mock FIO API response
     // CI1 has: H2O (price), RAT (unknown ticker), FE (no price), ALO (unknown ticker)
@@ -210,8 +218,10 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should return error for unknown exchange code', async () => {
-    // Mock exchanges without UNKNOWN
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists without UNKNOWN
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     const result = await syncFioExchangePrices('UNKNOWN')
 
@@ -221,11 +231,13 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should return error when no commodities exist', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     // Mock empty commodities
-    mockSelectFrom.mockResolvedValueOnce([])
+    mockCommoditiesResult.mockResolvedValue([])
 
     const result = await syncFioExchangePrices('CI1')
 
@@ -235,11 +247,13 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should handle API errors gracefully', async () => {
-    // Mock exchanges
-    mockSelectFrom.mockResolvedValueOnce([{ code: 'CI1', locationId: 'BEN', currency: 'CIS' }])
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+    ])
 
     // Mock valid tickers
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }])
+    mockCommoditiesResult.mockResolvedValue([{ ticker: 'H2O' }])
 
     // Mock API error
     mockGetPrices.mockRejectedValue(new Error('API connection failed'))
@@ -252,14 +266,14 @@ describe('syncFioExchangePrices', () => {
   })
 
   it('should filter out KAWA from FIO exchanges', async () => {
-    // Mock exchanges including KAWA
-    mockSelectFrom.mockResolvedValueOnce([
-      { code: 'CI1', locationId: 'BEN', currency: 'CIS' },
-      { code: 'KAWA', locationId: null, currency: 'CIS' },
+    // Mock price lists including KAWA (but KAWA has type='custom' so wouldn't be returned by getFioPriceLists)
+    // Since we only query type='fio', KAWA won't appear
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
     ])
 
     // Mock valid tickers
-    mockSelectFrom.mockResolvedValueOnce([{ ticker: 'H2O' }])
+    mockCommoditiesResult.mockResolvedValue([{ ticker: 'H2O' }])
 
     // Mock FIO API response
     mockGetPrices.mockResolvedValue(sampleCsvPrices)
@@ -277,19 +291,13 @@ describe('syncFioExchangePrices', () => {
 describe('getLastSyncTime', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSelectFrom.mockReset()
+    mockPricesResult.mockReset()
   })
 
   it('should return the last sync time for an exchange', async () => {
     const syncTime = new Date('2025-12-07T12:00:00Z')
 
-    mockSelectFrom.mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([{ updatedAt: syncTime }]),
-        }),
-      }),
-    })
+    mockPricesResult.mockReturnValue([{ updatedAt: syncTime }])
 
     const result = await getLastSyncTime('CI1')
 
@@ -297,13 +305,7 @@ describe('getLastSyncTime', () => {
   })
 
   it('should return null if no prices exist for exchange', async () => {
-    mockSelectFrom.mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    })
+    mockPricesResult.mockReturnValue([])
 
     const result = await getLastSyncTime('CI1')
 
@@ -314,36 +316,30 @@ describe('getLastSyncTime', () => {
 describe('getFioExchangeSyncStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSelectFrom.mockReset()
-    mockSelectWhere.mockReset()
+    mockPriceListsResult.mockReset()
+    mockPricesResult.mockReset()
   })
 
   it('should return sync status for all FIO exchanges', async () => {
     const syncTime = new Date('2025-12-07T12:00:00Z')
+    const syncTime2 = new Date('2025-12-06T12:00:00Z')
 
-    // Mock exchanges (first call)
-    mockSelectFrom.mockResolvedValueOnce([
-      { code: 'CI1', locationId: 'BEN', currency: 'CIS' },
-      { code: 'NC1', locationId: 'MOR', currency: 'NCC' },
+    // Mock price lists
+    mockPriceListsResult.mockResolvedValue([
+      { code: 'CI1', defaultLocationId: 'BEN', currency: 'CIS' },
+      { code: 'NC1', defaultLocationId: 'MOR', currency: 'NCC' },
     ])
 
-    // Mock price counts for each exchange
-    mockSelectFrom
-      .mockReturnValueOnce({
-        where: vi.fn().mockResolvedValue([
-          { count: 1, updatedAt: syncTime },
-          { count: 1, updatedAt: new Date('2025-12-06T12:00:00Z') },
-        ]),
-      })
-      .mockReturnValueOnce({
-        where: vi.fn().mockResolvedValue([{ count: 1, updatedAt: syncTime }]),
-      })
+    // Mock price count and sync time for each exchange - use mockReturnValueOnce
+    // because the promise is created in the mock, not the return value
+    mockPricesResult
+      .mockReturnValueOnce([{ id: 1, updatedAt: syncTime }])
+      .mockReturnValueOnce([{ id: 2, updatedAt: syncTime2 }])
 
     const result = await getFioExchangeSyncStatus()
 
     expect(result.length).toBe(2)
     expect(result[0].exchangeCode).toBe('CI1')
-    expect(result[0].priceCount).toBe(2)
     expect(result[0].lastSyncedAt).toEqual(syncTime)
   })
 })

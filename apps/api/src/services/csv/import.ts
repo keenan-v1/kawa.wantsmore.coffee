@@ -1,4 +1,4 @@
-import { db, priceLists, fioCommodities, fioLocations, fioExchanges } from '../../db/index.js'
+import { db, prices, priceLists, fioCommodities, fioLocations } from '../../db/index.js'
 import { eq, and } from 'drizzle-orm'
 import { parseCsv, type CsvParseOptions, type ParsedPriceRow, type CsvRowError } from './parser.js'
 
@@ -29,7 +29,7 @@ interface ValidatedRow extends ParsedPriceRow {
  */
 async function validateRows(
   rows: ParsedPriceRow[],
-  exchangeCode: string
+  priceListCode: string
 ): Promise<{ validated: ValidatedRow[]; errors: CsvRowError[] }> {
   const errors: CsvRowError[] = []
 
@@ -47,21 +47,21 @@ async function validateRows(
 
   const locationSet = new Set(existingLocations.map(l => l.naturalId))
 
-  // Check if exchange exists
-  const exchange = await db
-    .select({ code: fioExchanges.code })
-    .from(fioExchanges)
-    .where(eq(fioExchanges.code, exchangeCode))
+  // Check if price list exists
+  const priceList = await db
+    .select({ code: priceLists.code })
+    .from(priceLists)
+    .where(eq(priceLists.code, priceListCode))
     .limit(1)
 
-  if (exchange.length === 0) {
-    // All rows fail if exchange doesn't exist
+  if (priceList.length === 0) {
+    // All rows fail if price list doesn't exist
     for (const row of rows) {
       errors.push({
         rowNumber: row.rowNumber,
-        field: 'exchange',
-        value: exchangeCode,
-        message: `Exchange '${exchangeCode}' not found`,
+        field: 'priceList',
+        value: priceListCode,
+        message: `Price list '${priceListCode}' not found`,
       })
     }
     return { validated: [], errors }
@@ -143,13 +143,15 @@ export async function importCsvPrices(
   content: string,
   options: CsvParseOptions
 ): Promise<CsvImportResult> {
+  const priceListCode = options.exchangeCode.toUpperCase()
+
   // Parse the CSV
   const parseResult = parseCsv(content, options)
 
   // Validate all rows
   const { validated, errors: validationErrors } = await validateRows(
     parseResult.rows,
-    options.exchangeCode
+    priceListCode
   )
 
   const allErrors = [...parseResult.errors, ...validationErrors]
@@ -168,16 +170,15 @@ export async function importCsvPrices(
 
   // Process each validated row
   for (const row of validated) {
-    // Check if price already exists
+    // Check if price already exists (now without currency since it's at price list level)
     const existing = await db
-      .select({ id: priceLists.id })
-      .from(priceLists)
+      .select({ id: prices.id })
+      .from(prices)
       .where(
         and(
-          eq(priceLists.exchangeCode, options.exchangeCode.toUpperCase()),
-          eq(priceLists.commodityTicker, row.ticker),
-          eq(priceLists.locationId, row.location),
-          eq(priceLists.currency, row.currency)
+          eq(prices.priceListCode, priceListCode),
+          eq(prices.commodityTicker, row.ticker),
+          eq(prices.locationId, row.location)
         )
       )
       .limit(1)
@@ -185,23 +186,22 @@ export async function importCsvPrices(
     if (existing.length > 0) {
       // Update existing price
       await db
-        .update(priceLists)
+        .update(prices)
         .set({
           price: row.price.toFixed(2),
           source: 'csv_import',
           sourceReference: `Row ${row.rowNumber}`,
           updatedAt: new Date(),
         })
-        .where(eq(priceLists.id, existing[0].id))
+        .where(eq(prices.id, existing[0].id))
       updated++
     } else {
       // Insert new price
-      await db.insert(priceLists).values({
-        exchangeCode: options.exchangeCode.toUpperCase(),
+      await db.insert(prices).values({
+        priceListCode,
         commodityTicker: row.ticker,
         locationId: row.location,
         price: row.price.toFixed(2),
-        currency: row.currency,
         source: 'csv_import',
         sourceReference: `Row ${row.rowNumber}`,
       })

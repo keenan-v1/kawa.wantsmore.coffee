@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { FioPriceSyncController } from './FioPriceSyncController.js'
+import { PriceSyncFioController } from './PriceSyncFioController.js'
 
 // Mock the FIO sync service
 const mockSyncFioExchangePrices = vi.fn()
@@ -11,12 +11,12 @@ vi.mock('../services/fio/index.js', () => ({
   getFioExchangeSyncStatus: () => mockGetFioExchangeSyncStatus(),
 }))
 
-describe('FioPriceSyncController', () => {
-  let controller: FioPriceSyncController
+describe('PriceSyncFioController', () => {
+  let controller: PriceSyncFioController
 
   beforeEach(() => {
     vi.clearAllMocks()
-    controller = new FioPriceSyncController()
+    controller = new PriceSyncFioController()
   })
 
   describe('getSyncStatus', () => {

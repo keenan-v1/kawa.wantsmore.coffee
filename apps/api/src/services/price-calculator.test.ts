@@ -6,21 +6,26 @@ vi.mock('../db/index.js', () => ({
   db: {
     select: vi.fn(),
   },
-  priceLists: {
-    exchangeCode: 'exchangeCode',
+  prices: {
+    priceListCode: 'priceListCode',
     commodityTicker: 'commodityTicker',
     locationId: 'locationId',
     price: 'price',
-    currency: 'currency',
     source: 'source',
     sourceReference: 'sourceReference',
   },
+  priceLists: {
+    code: 'code',
+    name: 'name',
+    type: 'type',
+    currency: 'currency',
+    defaultLocationId: 'defaultLocationId',
+  },
   priceAdjustments: {
     id: 'id',
-    exchangeCode: 'exchangeCode',
+    priceListCode: 'priceListCode',
     commodityTicker: 'commodityTicker',
     locationId: 'locationId',
-    currency: 'currency',
     adjustmentType: 'adjustmentType',
     adjustmentValue: 'adjustmentValue',
     priority: 'priority',
@@ -48,6 +53,7 @@ describe('price-calculator', () => {
     it('should return null when no base price exists', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([]),
@@ -62,11 +68,12 @@ describe('price-calculator', () => {
     it('should return base price when no adjustments apply', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -101,11 +108,12 @@ describe('price-calculator', () => {
     it('should apply percentage adjustment correctly', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -125,7 +133,7 @@ describe('price-calculator', () => {
         orderBy: vi.fn().mockResolvedValue([
           {
             id: 1,
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: null,
             locationId: null,
             currency: null,
@@ -153,6 +161,7 @@ describe('price-calculator', () => {
     it('should apply fixed adjustment correctly', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
@@ -205,11 +214,12 @@ describe('price-calculator', () => {
     it('should apply multiple adjustments in priority order', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -229,7 +239,7 @@ describe('price-calculator', () => {
         orderBy: vi.fn().mockResolvedValue([
           {
             id: 1,
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: null,
             locationId: null,
             currency: null,
@@ -271,11 +281,12 @@ describe('price-calculator', () => {
     it('should apply negative percentage adjustment (discount)', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'UV-351a',
@@ -295,7 +306,7 @@ describe('price-calculator', () => {
         orderBy: vi.fn().mockResolvedValue([
           {
             id: 1,
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             locationId: 'UV-351a',
             currency: null,
@@ -322,11 +333,12 @@ describe('price-calculator', () => {
     it('should handle case insensitive input', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -361,6 +373,7 @@ describe('price-calculator', () => {
     it('should return empty array when no base prices exist', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockResolvedValue([]),
@@ -376,11 +389,12 @@ describe('price-calculator', () => {
     it('should calculate effective prices for multiple commodities', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -391,7 +405,7 @@ describe('price-calculator', () => {
             sourceReference: null,
           },
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'RAT',
             commodityName: 'Rations',
             locationId: 'BEN',
@@ -410,7 +424,7 @@ describe('price-calculator', () => {
         orderBy: vi.fn().mockResolvedValue([
           {
             id: 1,
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: null, // Applies to all commodities
             locationId: null,
             currency: null,
@@ -440,11 +454,12 @@ describe('price-calculator', () => {
     it('should apply commodity-specific adjustments only to matching commodities', async () => {
       const mockBasePriceSelect = {
         from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockResolvedValue([
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O',
             commodityName: 'Water',
             locationId: 'BEN',
@@ -455,7 +470,7 @@ describe('price-calculator', () => {
             sourceReference: null,
           },
           {
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'RAT',
             commodityName: 'Rations',
             locationId: 'BEN',
@@ -474,7 +489,7 @@ describe('price-calculator', () => {
         orderBy: vi.fn().mockResolvedValue([
           {
             id: 1,
-            exchangeCode: 'KAWA',
+            priceListCode: 'KAWA',
             commodityTicker: 'H2O', // Only applies to H2O
             locationId: null,
             currency: null,

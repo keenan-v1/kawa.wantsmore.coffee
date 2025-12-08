@@ -8,6 +8,7 @@ import {
   fioUserStorage,
   users,
   orderReservations,
+  prices,
   priceLists,
 } from '../db/index.js'
 import { eq, inArray, sql, and } from 'drizzle-orm'
@@ -263,13 +264,14 @@ export class MarketController extends Controller {
       for (const key of uniqueKeys) {
         const [ticker, loc, curr] = key.split(':')
         const refPrice = await db
-          .select({ price: priceLists.price })
-          .from(priceLists)
+          .select({ price: prices.price })
+          .from(prices)
+          .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
           .where(
             and(
-              eq(priceLists.exchangeCode, refExchange),
-              eq(priceLists.commodityTicker, ticker),
-              eq(priceLists.locationId, loc),
+              eq(prices.priceListCode, refExchange),
+              eq(prices.commodityTicker, ticker),
+              eq(prices.locationId, loc),
               eq(priceLists.currency, curr as Currency)
             )
           )
@@ -466,13 +468,14 @@ export class MarketController extends Controller {
       for (const key of uniqueKeys) {
         const [ticker, loc, curr] = key.split(':')
         const refPrice = await db
-          .select({ price: priceLists.price })
-          .from(priceLists)
+          .select({ price: prices.price })
+          .from(prices)
+          .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
           .where(
             and(
-              eq(priceLists.exchangeCode, refExchange),
-              eq(priceLists.commodityTicker, ticker),
-              eq(priceLists.locationId, loc),
+              eq(prices.priceListCode, refExchange),
+              eq(prices.commodityTicker, ticker),
+              eq(prices.locationId, loc),
               eq(priceLists.currency, curr as Currency)
             )
           )
