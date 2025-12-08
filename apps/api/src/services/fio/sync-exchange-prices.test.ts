@@ -63,13 +63,13 @@ vi.mock('../../db/index.js', () => ({
   fioCommodities: 'fioCommodities',
 }))
 
-// Sample FIO CSV price data
-const sampleCsvPrices = `Ticker,ExchangeCode,MMBuy,MMSell,PriceAverage,Ask,Bid
-H2O,CI1,10.5,12.0,11.25,11.0,11.5
-RAT,CI1,50.0,55.0,52.5,51.0,54.0
-H2O,NC1,11.0,13.0,12.0,11.5,12.5
-FE,CI1,,,,
-ALO,CI1,100.0,110.0,105.0,102.0,108.0`
+// Sample FIO CSV price data - FIO uses a PIVOT format with columns per exchange
+// Format: Ticker,MMBuy,MMSell,{EXCHANGE}-Average,{EXCHANGE}-AskPrice,{EXCHANGE}-BidPrice,...
+const sampleCsvPrices = `Ticker,MMBuy,MMSell,CI1-Average,CI1-AskPrice,CI1-BidPrice,NC1-Average,NC1-AskPrice,NC1-BidPrice
+H2O,10.5,12.0,11.25,11.0,11.5,12.0,11.5,12.5
+RAT,50.0,55.0,52.5,51.0,54.0,,,
+ALO,100.0,110.0,105.0,102.0,108.0,,,
+FE,,,,,,,,,`
 
 describe('syncFioExchangePrices', () => {
   beforeEach(() => {
@@ -120,14 +120,14 @@ describe('syncFioExchangePrices', () => {
     expect(ci1Result!.pricesUpdated).toBe(3)
     expect(ci1Result!.pricesSkipped).toBe(1) // FE has no price
 
-    // NC1 should have 1 price (H2O)
+    // NC1 should have 1 price (H2O only - RAT, ALO, FE have no NC1 prices)
     const nc1Result = result.exchanges.find(e => e.exchangeCode === 'NC1')
     expect(nc1Result).toBeDefined()
     expect(nc1Result!.pricesUpdated).toBe(1)
-    expect(nc1Result!.pricesSkipped).toBe(0)
+    expect(nc1Result!.pricesSkipped).toBe(3) // RAT, ALO, FE have no NC1 data
 
     expect(result.totalUpdated).toBe(4)
-    expect(result.totalSkipped).toBe(1)
+    expect(result.totalSkipped).toBe(4) // 1 skipped on CI1 + 3 skipped on NC1
   })
 
   it('should sync prices for a specific exchange only', async () => {
@@ -152,6 +152,8 @@ describe('syncFioExchangePrices', () => {
     expect(result.success).toBe(true)
     expect(result.exchanges.length).toBe(1)
     expect(result.exchanges[0].exchangeCode).toBe('CI1')
+    expect(result.exchanges[0].pricesUpdated).toBe(3) // H2O, RAT, ALO
+    expect(result.exchanges[0].pricesSkipped).toBe(1) // FE has no price
     expect(result.totalUpdated).toBe(3)
   })
 

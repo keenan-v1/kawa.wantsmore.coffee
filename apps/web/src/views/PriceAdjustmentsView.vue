@@ -94,8 +94,8 @@
       >
         <template #item.scope="{ item }">
           <div>
-            <v-chip v-if="item.exchangeCode" size="x-small" class="mr-1">
-              {{ item.exchangeCode }}
+            <v-chip v-if="item.priceListCode" size="x-small" class="mr-1">
+              {{ item.priceListCode }}
             </v-chip>
             <v-chip v-else size="x-small" color="grey" class="mr-1">All Exchanges</v-chip>
           </div>
@@ -207,7 +207,7 @@
             <v-row>
               <v-col cols="12" sm="6">
                 <v-select
-                  v-model="adjustmentForm.exchangeCode"
+                  v-model="adjustmentForm.priceListCode"
                   :items="exchangeOptionsWithNull"
                   item-title="label"
                   item-value="value"
@@ -398,7 +398,7 @@ const deletingAdjustment = ref<PriceAdjustmentResponse | null>(null)
 const adjustmentFormRef = ref()
 
 const adjustmentForm = ref({
-  exchangeCode: null as string | null,
+  priceListCode: null as string | null,
   commodityTicker: null as string | null,
   locationId: null as string | null,
   currency: null as Currency | null,
@@ -490,7 +490,7 @@ const filteredAdjustments = computed(() => {
 
   if (filters.value.exchange) {
     result = result.filter(
-      a => a.exchangeCode === filters.value.exchange || a.exchangeCode === null
+      a => a.priceListCode === filters.value.exchange || a.priceListCode === null
     )
   }
   if (filters.value.location) {
@@ -505,7 +505,7 @@ const filteredAdjustments = computed(() => {
     result = result.filter(
       a =>
         (a.description?.toLowerCase().includes(searchLower) ?? false) ||
-        (a.exchangeCode?.toLowerCase().includes(searchLower) ?? false) ||
+        (a.priceListCode?.toLowerCase().includes(searchLower) ?? false) ||
         (a.commodityTicker?.toLowerCase().includes(searchLower) ?? false) ||
         (a.locationId?.toLowerCase().includes(searchLower) ?? false)
     )
@@ -546,7 +546,7 @@ const loadAdjustments = async () => {
 const openCreateDialog = () => {
   editingAdjustment.value = null
   adjustmentForm.value = {
-    exchangeCode: null,
+    priceListCode: null,
     commodityTicker: null,
     locationId: null,
     currency: null,
@@ -564,7 +564,7 @@ const openCreateDialog = () => {
 const openEditDialog = (adjustment: PriceAdjustmentResponse) => {
   editingAdjustment.value = adjustment
   adjustmentForm.value = {
-    exchangeCode: adjustment.exchangeCode,
+    priceListCode: adjustment.priceListCode,
     commodityTicker: adjustment.commodityTicker,
     locationId: adjustment.locationId,
     currency: adjustment.currency,
@@ -591,10 +591,9 @@ const saveAdjustment = async () => {
     saving.value = true
 
     const data = {
-      exchangeCode: adjustmentForm.value.exchangeCode || null,
+      priceListCode: adjustmentForm.value.priceListCode || null,
       commodityTicker: adjustmentForm.value.commodityTicker || null,
       locationId: adjustmentForm.value.locationId || null,
-      currency: adjustmentForm.value.currency || null,
       adjustmentType: adjustmentForm.value.adjustmentType,
       adjustmentValue: adjustmentForm.value.adjustmentValue,
       priority: adjustmentForm.value.priority,

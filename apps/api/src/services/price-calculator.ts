@@ -34,6 +34,9 @@ export interface EffectivePrice {
   finalPrice: number
   // Backwards compatibility
   exchangeCode: string
+  // Fallback information
+  isFallback?: boolean // True if price came from default location
+  requestedLocationId?: string // Original requested location (when isFallback is true)
 }
 
 /**
@@ -48,7 +51,7 @@ export async function calculateEffectivePrice(
 ): Promise<EffectivePrice | null> {
   const priceListCode = exchange.toUpperCase()
   const commodityTicker = ticker.toUpperCase()
-  const location = locationId.toUpperCase()
+  const location = locationId // Location IDs are case-sensitive (e.g., KW-020c)
 
   // Get the base price from prices table, joined with priceLists for currency
   const basePriceResult = await db
@@ -184,7 +187,7 @@ export async function calculateEffectivePrices(
   currency: Currency
 ): Promise<EffectivePrice[]> {
   const priceListCode = exchange.toUpperCase()
-  const location = locationId.toUpperCase()
+  const location = locationId // Location IDs are case-sensitive (e.g., KW-020c)
 
   // Get all base prices for this price list/location/currency
   const basePriceResults = await db

@@ -78,7 +78,7 @@ export class PriceListController extends Controller {
       conditions.push(eq(prices.priceListCode, exchange.toUpperCase()))
     }
     if (location) {
-      conditions.push(eq(prices.locationId, location.toUpperCase()))
+      conditions.push(eq(prices.locationId, location)) // Location IDs are case-sensitive
     }
     if (commodity) {
       conditions.push(eq(prices.commodityTicker, commodity.toUpperCase()))
@@ -111,6 +111,280 @@ export class PriceListController extends Controller {
       exchangeCode: r.priceListCode, // Backwards compatibility
     }))
   }
+
+  // ============================================================
+  // ROUTES WITH LITERAL PREFIXES (must come before wildcard routes)
+  // ============================================================
+
+  /**
+   * Get effective price (base + adjustments) for a specific commodity
+   * @param exchange The exchange code (KAWA, CI1, etc.)
+   * @param locationId The location ID
+   * @param ticker The commodity ticker
+   * @param fallback Falls back to default location when price not found (default: true)
+   */
+  @Get('effective/{exchange}/{locationId}/{ticker}')
+  public async getEffectivePrice(
+    @Path() exchange: string,
+    @Path() locationId: string,
+    @Path() ticker: string,
+    @Query() fallback?: boolean
+  ): Promise<EffectivePrice> {
+    // Default fallback to true
+    const useFallback = fallback !== false
+
+    // Get currency and default location from price list
+    const priceList = await db
+      .select({
+        currency: priceLists.currency,
+        defaultLocationId: priceLists.defaultLocationId,
+      })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    // First try the requested location
+    let result = await calculateEffectivePrice(exchange, ticker, locationId, priceList[0].currency)
+
+    // If no result and fallback is enabled, try default location
+    if (
+      result === null &&
+      useFallback &&
+      priceList[0].defaultLocationId &&
+      priceList[0].defaultLocationId !== locationId
+    ) {
+      result = await calculateEffectivePrice(
+        exchange,
+        ticker,
+        priceList[0].defaultLocationId,
+        priceList[0].currency
+      )
+
+      // Mark result as fallback with the original requested location
+      if (result) {
+        result = {
+          ...result,
+          isFallback: true,
+          requestedLocationId: locationId,
+        }
+      }
+    }
+
+    if (result === null) {
+      throw NotFound(
+        `Price for ${ticker.toUpperCase()} at ${locationId} on ${exchange.toUpperCase()} not found`
+      )
+    }
+
+    return result
+  }
+
+  /**
+   * Get all effective prices for an exchange and location
+   * @param exchange The exchange code
+   * @param locationId The location ID
+   * @param commodity Optional commodity ticker to filter results
+   * @param fallback Falls back to default location when no prices found (default: true)
+   */
+  @Get('effective/{exchange}/{locationId}')
+  public async getEffectivePrices(
+    @Path() exchange: string,
+    @Path() locationId: string,
+    @Query() commodity?: string,
+    @Query() fallback?: boolean
+  ): Promise<EffectivePrice[]> {
+    // Default fallback to true
+    const useFallback = fallback !== false
+
+    // Get currency and default location from price list
+    const priceList = await db
+      .select({
+        currency: priceLists.currency,
+        defaultLocationId: priceLists.defaultLocationId,
+      })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    // First try the requested location
+    let results = await calculateEffectivePrices(exchange, locationId, priceList[0].currency)
+
+    // Filter by commodity if specified
+    if (commodity) {
+      const upperCommodity = commodity.toUpperCase()
+      results = results.filter(r => r.commodityTicker === upperCommodity)
+    }
+
+    // If no results and fallback is enabled, try default location
+    if (
+      results.length === 0 &&
+      useFallback &&
+      priceList[0].defaultLocationId &&
+      priceList[0].defaultLocationId !== locationId
+    ) {
+      results = await calculateEffectivePrices(
+        exchange,
+        priceList[0].defaultLocationId,
+        priceList[0].currency
+      )
+
+      // Filter by commodity if specified
+      if (commodity) {
+        const upperCommodity = commodity.toUpperCase()
+        results = results.filter(r => r.commodityTicker === upperCommodity)
+      }
+
+      // Mark all results as fallback with the original requested location
+      results = results.map(price => ({
+        ...price,
+        isFallback: true,
+        requestedLocationId: locationId,
+      }))
+    }
+
+    return results
+  }
+
+  /**
+   * Export base prices as CSV for an exchange
+   * @param exchange The exchange code (KAWA, CI1, etc.)
+   * @param location Optional location filter
+   */
+  @Get('export/{exchange}')
+  public async exportBasePrices(
+    @Path() exchange: string,
+    @Query() location?: string
+  ): Promise<string> {
+    const conditions = [eq(prices.priceListCode, exchange.toUpperCase())]
+    if (location) {
+      conditions.push(eq(prices.locationId, location)) // Location IDs are case-sensitive
+    }
+
+    const results = await db
+      .select({
+        priceListCode: prices.priceListCode,
+        commodityTicker: prices.commodityTicker,
+        commodityName: fioCommodities.name,
+        locationId: prices.locationId,
+        locationName: fioLocations.name,
+        price: prices.price,
+        currency: priceLists.currency,
+        source: prices.source,
+        updatedAt: prices.updatedAt,
+      })
+      .from(prices)
+      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
+      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
+      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
+      .where(and(...conditions))
+      .orderBy(prices.commodityTicker, prices.locationId)
+
+    // Build CSV
+    const headers = [
+      'Ticker',
+      'Name',
+      'Location',
+      'LocationName',
+      'Price',
+      'Currency',
+      'Source',
+      'UpdatedAt',
+    ]
+    const rows = results.map(r => [
+      r.commodityTicker,
+      r.commodityName ?? '',
+      r.locationId,
+      r.locationName ?? '',
+      r.price,
+      r.currency,
+      r.source,
+      r.updatedAt?.toISOString() ?? '',
+    ])
+
+    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
+      '\n'
+    )
+
+    this.setHeader('Content-Type', 'text/csv')
+    this.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exchange.toUpperCase()}-base-prices.csv"`
+    )
+
+    return csv
+  }
+
+  /**
+   * Export effective prices (with adjustments applied) as CSV for an exchange
+   * @param exchange The exchange code (KAWA, CI1, etc.)
+   * @param locationId The location ID
+   */
+  @Get('export/{exchange}/{locationId}/effective')
+  public async exportEffectivePrices(
+    @Path() exchange: string,
+    @Path() locationId: string
+  ): Promise<string> {
+    // Get currency from price list
+    const priceList = await db
+      .select({ currency: priceLists.currency })
+      .from(priceLists)
+      .where(eq(priceLists.code, exchange.toUpperCase()))
+      .limit(1)
+
+    if (priceList.length === 0) {
+      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
+    }
+
+    const results = await calculateEffectivePrices(exchange, locationId, priceList[0].currency)
+
+    // Build CSV
+    const headers = [
+      'Ticker',
+      'Name',
+      'Location',
+      'LocationName',
+      'BasePrice',
+      'FinalPrice',
+      'Currency',
+      'AdjustmentCount',
+      'Source',
+    ]
+    const rows = results.map(r => [
+      r.commodityTicker,
+      r.commodityName ?? '',
+      r.locationId,
+      r.locationName ?? '',
+      r.basePrice.toFixed(2),
+      r.finalPrice.toFixed(2),
+      r.currency,
+      r.adjustments.length.toString(),
+      r.source,
+    ])
+
+    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
+      '\n'
+    )
+
+    this.setHeader('Content-Type', 'text/csv')
+    this.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exchange.toUpperCase()}-${locationId}-effective-prices.csv"`
+    )
+
+    return csv
+  }
+
+  // ============================================================
+  // WILDCARD ROUTES (must come after literal prefix routes)
+  // ============================================================
 
   /**
    * Get prices for a specific exchange
@@ -178,7 +452,7 @@ export class PriceListController extends Controller {
       .where(
         and(
           eq(prices.priceListCode, exchange.toUpperCase()),
-          eq(prices.locationId, locationId.toUpperCase())
+          eq(prices.locationId, locationId) // Location IDs are case-sensitive
         )
       )
       .orderBy(prices.commodityTicker)
@@ -223,7 +497,7 @@ export class PriceListController extends Controller {
       .where(
         and(
           eq(prices.priceListCode, exchange.toUpperCase()),
-          eq(prices.locationId, locationId.toUpperCase()),
+          eq(prices.locationId, locationId), // Location IDs are case-sensitive
           eq(prices.commodityTicker, ticker.toUpperCase())
         )
       )
@@ -231,7 +505,7 @@ export class PriceListController extends Controller {
 
     if (results.length === 0) {
       throw NotFound(
-        `Price for ${ticker.toUpperCase()} at ${locationId.toUpperCase()} on ${exchange.toUpperCase()} not found`
+        `Price for ${ticker.toUpperCase()} at ${locationId} on ${exchange.toUpperCase()} not found`
       )
     }
 
@@ -251,7 +525,7 @@ export class PriceListController extends Controller {
   public async createPrice(@Body() body: CreatePriceRequest): Promise<PriceListResponse> {
     const priceListCode = body.exchangeCode.toUpperCase()
     const commodityTicker = body.commodityTicker.toUpperCase()
-    const locationId = body.locationId.toUpperCase()
+    const locationId = body.locationId // Location IDs are case-sensitive
 
     // Validate price list exists
     const priceListExists = await db
@@ -390,198 +664,6 @@ export class PriceListController extends Controller {
 
     await db.delete(prices).where(eq(prices.id, id))
     this.setStatus(204)
-  }
-
-  /**
-   * Get effective price (base + adjustments) for a specific commodity
-   * @param exchange The exchange code (KAWA, CI1, etc.)
-   * @param locationId The location ID
-   * @param ticker The commodity ticker
-   */
-  @Get('effective/{exchange}/{locationId}/{ticker}')
-  public async getEffectivePrice(
-    @Path() exchange: string,
-    @Path() locationId: string,
-    @Path() ticker: string
-  ): Promise<EffectivePrice> {
-    // Get currency from price list
-    const priceList = await db
-      .select({ currency: priceLists.currency })
-      .from(priceLists)
-      .where(eq(priceLists.code, exchange.toUpperCase()))
-      .limit(1)
-
-    if (priceList.length === 0) {
-      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
-    }
-
-    const result = await calculateEffectivePrice(
-      exchange,
-      ticker,
-      locationId,
-      priceList[0].currency
-    )
-
-    if (result === null) {
-      throw NotFound(
-        `Price for ${ticker.toUpperCase()} at ${locationId.toUpperCase()} on ${exchange.toUpperCase()} not found`
-      )
-    }
-
-    return result
-  }
-
-  /**
-   * Get all effective prices for an exchange and location
-   * @param exchange The exchange code
-   * @param locationId The location ID
-   */
-  @Get('effective/{exchange}/{locationId}')
-  public async getEffectivePrices(
-    @Path() exchange: string,
-    @Path() locationId: string
-  ): Promise<EffectivePrice[]> {
-    // Get currency from price list
-    const priceList = await db
-      .select({ currency: priceLists.currency })
-      .from(priceLists)
-      .where(eq(priceLists.code, exchange.toUpperCase()))
-      .limit(1)
-
-    if (priceList.length === 0) {
-      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
-    }
-
-    return calculateEffectivePrices(exchange, locationId, priceList[0].currency)
-  }
-
-  /**
-   * Export base prices as CSV for an exchange
-   * @param exchange The exchange code (KAWA, CI1, etc.)
-   * @param location Optional location filter
-   */
-  @Get('export/{exchange}')
-  public async exportBasePrices(
-    @Path() exchange: string,
-    @Query() location?: string
-  ): Promise<string> {
-    const conditions = [eq(prices.priceListCode, exchange.toUpperCase())]
-    if (location) {
-      conditions.push(eq(prices.locationId, location.toUpperCase()))
-    }
-
-    const results = await db
-      .select({
-        priceListCode: prices.priceListCode,
-        commodityTicker: prices.commodityTicker,
-        commodityName: fioCommodities.name,
-        locationId: prices.locationId,
-        locationName: fioLocations.name,
-        price: prices.price,
-        currency: priceLists.currency,
-        source: prices.source,
-        updatedAt: prices.updatedAt,
-      })
-      .from(prices)
-      .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
-      .leftJoin(fioCommodities, eq(prices.commodityTicker, fioCommodities.ticker))
-      .leftJoin(fioLocations, eq(prices.locationId, fioLocations.naturalId))
-      .where(and(...conditions))
-      .orderBy(prices.commodityTicker, prices.locationId)
-
-    // Build CSV
-    const headers = [
-      'Ticker',
-      'Name',
-      'Location',
-      'LocationName',
-      'Price',
-      'Currency',
-      'Source',
-      'UpdatedAt',
-    ]
-    const rows = results.map(r => [
-      r.commodityTicker,
-      r.commodityName ?? '',
-      r.locationId,
-      r.locationName ?? '',
-      r.price,
-      r.currency,
-      r.source,
-      r.updatedAt?.toISOString() ?? '',
-    ])
-
-    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
-      '\n'
-    )
-
-    this.setHeader('Content-Type', 'text/csv')
-    this.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${exchange.toUpperCase()}-base-prices.csv"`
-    )
-
-    return csv
-  }
-
-  /**
-   * Export effective prices (with adjustments applied) as CSV for an exchange
-   * @param exchange The exchange code (KAWA, CI1, etc.)
-   * @param locationId The location ID
-   */
-  @Get('export/{exchange}/{locationId}/effective')
-  public async exportEffectivePrices(
-    @Path() exchange: string,
-    @Path() locationId: string
-  ): Promise<string> {
-    // Get currency from price list
-    const priceList = await db
-      .select({ currency: priceLists.currency })
-      .from(priceLists)
-      .where(eq(priceLists.code, exchange.toUpperCase()))
-      .limit(1)
-
-    if (priceList.length === 0) {
-      throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
-    }
-
-    const results = await calculateEffectivePrices(exchange, locationId, priceList[0].currency)
-
-    // Build CSV
-    const headers = [
-      'Ticker',
-      'Name',
-      'Location',
-      'LocationName',
-      'BasePrice',
-      'FinalPrice',
-      'Currency',
-      'AdjustmentCount',
-      'Source',
-    ]
-    const rows = results.map(r => [
-      r.commodityTicker,
-      r.commodityName ?? '',
-      r.locationId,
-      r.locationName ?? '',
-      r.basePrice.toFixed(2),
-      r.finalPrice.toFixed(2),
-      r.currency,
-      r.adjustments.length.toString(),
-      r.source,
-    ])
-
-    const csv = [headers.join(','), ...rows.map(row => row.map(escapeCsvField).join(','))].join(
-      '\n'
-    )
-
-    this.setHeader('Content-Type', 'text/csv')
-    this.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${exchange.toUpperCase()}-${locationId.toUpperCase()}-effective-prices.csv"`
-    )
-
-    return csv
   }
 }
 

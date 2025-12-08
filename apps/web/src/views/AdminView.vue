@@ -661,6 +661,195 @@
 
       <!-- PRICE LISTS TAB -->
       <v-tabs-window-item value="priceLists">
+        <!-- Price Lists Management -->
+        <v-card class="mb-4">
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-format-list-bulleted</v-icon>
+                Price Lists
+              </v-col>
+              <v-col cols="auto">
+                <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreatePriceListDialog">
+                  Add Price List
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <div v-if="loadingPriceLists" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-expansion-panels v-else-if="priceLists.length > 0" variant="accordion">
+              <v-expansion-panel v-for="priceList in priceLists" :key="priceList.code">
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center flex-grow-1">
+                    <v-chip
+                      :color="priceList.type === 'fio' ? 'blue' : 'green'"
+                      size="small"
+                      class="mr-3"
+                    >
+                      {{ priceList.type.toUpperCase() }}
+                    </v-chip>
+                    <div>
+                      <strong>{{ priceList.code }}</strong>
+                      <span class="text-medium-emphasis ml-2">{{ priceList.name }}</span>
+                    </div>
+                    <v-spacer />
+                    <div class="d-flex align-center ga-2 mr-4">
+                      <v-chip size="x-small" color="grey">
+                        {{ priceList.priceCount || 0 }} prices
+                      </v-chip>
+                      <v-chip size="x-small" color="grey">
+                        {{ priceList.importConfigCount || 0 }} imports
+                      </v-chip>
+                      <v-chip size="x-small" :color="priceList.isActive ? 'success' : 'error'">
+                        {{ priceList.isActive ? 'Active' : 'Inactive' }}
+                      </v-chip>
+                    </div>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <p v-if="priceList.description" class="text-body-2 text-medium-emphasis mb-2">
+                        {{ priceList.description }}
+                      </p>
+                      <div class="text-body-2">
+                        <strong>Currency:</strong> {{ priceList.currency }}<br />
+                        <strong>Default Location:</strong>
+                        {{ priceList.defaultLocationName || priceList.defaultLocationId || 'None' }}
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="6" class="text-md-right">
+                      <v-btn
+                        v-if="priceList.type === 'fio'"
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        class="mr-2"
+                        :loading="syncingFioPriceLists.has(priceList.code)"
+                        @click.stop="syncFioPriceList(priceList)"
+                      >
+                        <v-icon start>mdi-sync</v-icon>
+                        Sync from FIO
+                      </v-btn>
+                      <v-btn
+                        variant="outlined"
+                        size="small"
+                        class="mr-2"
+                        @click.stop="openEditPriceListDialog(priceList)"
+                      >
+                        <v-icon start>mdi-pencil</v-icon>
+                        Edit
+                      </v-btn>
+                      <v-btn
+                        v-if="priceList.type !== 'fio'"
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        @click.stop="confirmDeletePriceList(priceList)"
+                      >
+                        <v-icon start>mdi-delete</v-icon>
+                        Delete
+                      </v-btn>
+                    </v-col>
+                  </v-row>
+
+                  <!-- Import Configs for this price list -->
+                  <v-divider class="my-4" />
+                  <div class="d-flex align-center mb-2">
+                    <h4 class="text-subtitle-2">Import Configurations</h4>
+                    <v-spacer />
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="primary"
+                      @click.stop="openCreateImportConfigDialog(priceList.code)"
+                    >
+                      <v-icon start>mdi-plus</v-icon>
+                      Add Import
+                    </v-btn>
+                  </div>
+
+                  <v-table
+                    v-if="getImportConfigsForPriceList(priceList.code).length > 0"
+                    density="compact"
+                  >
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Format</th>
+                        <th class="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="config in getImportConfigsForPriceList(priceList.code)"
+                        :key="config.id"
+                      >
+                        <td>{{ config.name }}</td>
+                        <td>
+                          <v-chip size="x-small">{{ config.sourceType }}</v-chip>
+                        </td>
+                        <td>
+                          <v-chip
+                            size="x-small"
+                            :color="config.format === 'pivot' ? 'purple' : 'teal'"
+                          >
+                            {{ config.format }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right">
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            :loading="syncingConfigs.has(config.id)"
+                            :disabled="!config.sheetsUrl"
+                            @click.stop="syncImportConfig(config)"
+                          >
+                            <v-icon>mdi-sync</v-icon>
+                            <v-tooltip activator="parent" location="top">Sync Now</v-tooltip>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            @click.stop="openEditImportConfigDialog(config)"
+                          >
+                            <v-icon>mdi-pencil</v-icon>
+                            <v-tooltip activator="parent" location="top">Edit</v-tooltip>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            color="error"
+                            @click.stop="confirmDeleteImportConfig(config)"
+                          >
+                            <v-icon>mdi-delete</v-icon>
+                            <v-tooltip activator="parent" location="top">Delete</v-tooltip>
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                  <p v-else class="text-body-2 text-medium-emphasis">
+                    No import configurations. Add one to enable automated price imports.
+                  </p>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <v-alert v-else type="info" variant="tonal">
+              No price lists configured. Click "Add Price List" to create one.
+            </v-alert>
+          </v-card-text>
+        </v-card>
+
         <v-row>
           <v-col cols="12" lg="6">
             <!-- FIO API Settings -->
@@ -703,7 +892,9 @@
                 </v-btn>
               </v-card-text>
             </v-card>
+          </v-col>
 
+          <v-col cols="12" lg="6">
             <!-- Google Sheets API Settings -->
             <v-card>
               <v-card-title>
@@ -746,195 +937,109 @@
               </v-card-text>
             </v-card>
           </v-col>
-
-          <v-col cols="12" lg="6">
-            <!-- KAWA Sheet Configuration -->
-            <v-card>
-              <v-card-title>
-                <v-icon class="mr-2">mdi-file-table-outline</v-icon>
-                KAWA Price Sheet
-              </v-card-title>
-              <v-card-text>
-                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-                  Configure the KAWA internal price sheet for automated imports. This sheet uses a
-                  custom pivot format with locations as columns and commodities as rows.
-                </v-alert>
-
-                <v-text-field
-                  v-model="priceSettingsForm.kawaSheetUrl"
-                  label="Google Sheets URL"
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  hint="Full URL to the KAWA price spreadsheet"
-                  persistent-hint
-                  class="mb-4"
-                />
-
-                <v-text-field
-                  v-model.number="priceSettingsForm.kawaSheetGid"
-                  type="number"
-                  label="Sheet GID (Tab)"
-                  placeholder="0"
-                  hint="The GID of the specific sheet tab (found in URL after #gid=)"
-                  persistent-hint
-                  class="mb-4"
-                />
-
-                <div class="d-flex gap-2">
-                  <v-btn
-                    color="primary"
-                    :loading="savingKawaSettings"
-                    :disabled="!hasKawaSettingsChanges"
-                    @click="saveKawaSettings"
-                  >
-                    Save Settings
-                  </v-btn>
-                  <v-btn
-                    color="secondary"
-                    variant="outlined"
-                    :loading="previewingKawaSheet"
-                    :disabled="!priceSettings?.kawaSheetUrl"
-                    @click="previewKawaSheet"
-                  >
-                    <v-icon start>mdi-eye</v-icon>
-                    Preview Sheet
-                  </v-btn>
-                </div>
-
-                <!-- KAWA Sheet Preview -->
-                <v-expand-transition>
-                  <div v-if="kawaSheetPreview" class="mt-4">
-                    <v-divider class="mb-4" />
-                    <h4 class="text-subtitle-1 font-weight-medium mb-2">Sheet Preview</h4>
-
-                    <v-alert
-                      v-if="kawaSheetPreview.headers.length === 0"
-                      type="warning"
-                      class="mb-4"
-                    >
-                      Sheet appears to be empty
-                    </v-alert>
-
-                    <div v-else class="mb-4">
-                      <div class="text-caption text-medium-emphasis mb-2">
-                        Headers: {{ kawaSheetPreview.headers.join(', ') }}
-                      </div>
-                      <v-table density="compact" class="sheet-preview-table">
-                        <thead>
-                          <tr>
-                            <th
-                              v-for="(h, i) in kawaSheetPreview.headers"
-                              :key="i"
-                              class="text-left"
-                            >
-                              {{ h || `Col ${i}` }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="(row, ri) in kawaSheetPreview.rows.slice(0, 10)" :key="ri">
-                            <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
-                          </tr>
-                        </tbody>
-                      </v-table>
-                      <div
-                        v-if="kawaSheetPreview.rows.length > 10"
-                        class="text-caption text-medium-emphasis mt-1"
-                      >
-                        Showing 10 of {{ kawaSheetPreview.rows.length }} rows
-                      </div>
-                    </div>
-
-                    <h4 class="text-subtitle-1 font-weight-medium mb-2">Import Configuration</h4>
-                    <v-row>
-                      <v-col cols="6">
-                        <v-select
-                          v-model="kawaSyncConfig.tickerColumn"
-                          :items="kawaSheetColumnOptions"
-                          label="Ticker Column"
-                          hint="Column containing commodity tickers"
-                          persistent-hint
-                        />
-                      </v-col>
-                      <v-col cols="6">
-                        <v-select
-                          v-model="kawaSyncConfig.priceColumn"
-                          :items="kawaSheetColumnOptions"
-                          label="Price Column"
-                          hint="Column containing prices"
-                          persistent-hint
-                        />
-                      </v-col>
-                      <v-col cols="6">
-                        <v-text-field
-                          v-model="kawaSyncConfig.locationDefault"
-                          label="Default Location"
-                          placeholder="e.g., BEN"
-                          hint="Location for all imported prices"
-                          persistent-hint
-                        />
-                      </v-col>
-                      <v-col cols="6">
-                        <v-select
-                          v-model="kawaSyncConfig.currencyDefault"
-                          :items="['CIS', 'NCC', 'ICA', 'AIC']"
-                          label="Default Currency"
-                          hint="Currency for all imported prices"
-                          persistent-hint
-                        />
-                      </v-col>
-                    </v-row>
-
-                    <div class="d-flex gap-2 mt-4">
-                      <v-btn
-                        color="success"
-                        :loading="syncingKawaSheet"
-                        :disabled="!kawaSyncConfig.tickerColumn || !kawaSyncConfig.priceColumn"
-                        @click="syncKawaSheet"
-                      >
-                        <v-icon start>mdi-sync</v-icon>
-                        Sync Prices
-                      </v-btn>
-                      <v-btn variant="text" @click="kawaSheetPreview = null">Close Preview</v-btn>
-                    </div>
-
-                    <v-alert
-                      v-if="kawaSyncResult"
-                      :type="kawaSyncResult.errors.length > 0 ? 'warning' : 'success'"
-                      class="mt-4"
-                      closable
-                      @click:close="kawaSyncResult = null"
-                    >
-                      <template v-if="kawaSyncResult.imported > 0 || kawaSyncResult.updated > 0">
-                        Imported {{ kawaSyncResult.imported }} new prices, updated
-                        {{ kawaSyncResult.updated }} existing prices.
-                      </template>
-                      <template v-if="kawaSyncResult.skipped > 0">
-                        {{ kawaSyncResult.skipped }} rows skipped.
-                      </template>
-                      <div v-if="kawaSyncResult.errors.length > 0" class="mt-2">
-                        <strong>Errors:</strong>
-                        <ul class="ml-4 mt-1">
-                          <li
-                            v-for="(err, i) in kawaSyncResult.errors.slice(0, 5)"
-                            :key="i"
-                            class="text-body-2"
-                          >
-                            Row {{ err.rowNumber }}: {{ err.message }} ({{ err.field }}: "{{
-                              err.value
-                            }}")
-                          </li>
-                          <li v-if="kawaSyncResult.errors.length > 5" class="text-body-2">
-                            ... and {{ kawaSyncResult.errors.length - 5 }} more errors
-                          </li>
-                        </ul>
-                      </div>
-                    </v-alert>
-                  </div>
-                </v-expand-transition>
-              </v-card-text>
-            </v-card>
-          </v-col>
         </v-row>
+
+        <!-- Price Adjustments Management -->
+        <v-card class="mt-4">
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-tune</v-icon>
+                Price Adjustments
+              </v-col>
+              <v-col cols="auto">
+                <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateAdjustmentDialog">
+                  Add Adjustment
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+              Price adjustments allow you to apply percentage or fixed value changes to prices. They
+              can be scoped to specific price lists, commodities, or locations. Global adjustments
+              (no filters) apply to all prices.
+            </v-alert>
+
+            <div v-if="loadingAdjustments" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-table v-else-if="priceAdjustments.length > 0" density="compact">
+              <thead>
+                <tr>
+                  <th>Scope</th>
+                  <th>Type</th>
+                  <th>Value</th>
+                  <th>Priority</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="adjustment in priceAdjustments" :key="adjustment.id">
+                  <td>
+                    <span class="text-body-2">{{ getAdjustmentScope(adjustment) }}</span>
+                  </td>
+                  <td>
+                    <v-chip
+                      size="x-small"
+                      :color="adjustment.adjustmentType === 'percentage' ? 'blue' : 'purple'"
+                    >
+                      {{ adjustment.adjustmentType }}
+                    </v-chip>
+                  </td>
+                  <td>
+                    <span
+                      :class="
+                        parseFloat(adjustment.adjustmentValue) >= 0 ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ formatAdjustmentValue(adjustment) }}
+                    </span>
+                  </td>
+                  <td>{{ adjustment.priority }}</td>
+                  <td>
+                    <span class="text-body-2 text-medium-emphasis">
+                      {{ adjustment.description || '-' }}
+                    </span>
+                  </td>
+                  <td>
+                    <v-chip size="x-small" :color="adjustment.isActive ? 'success' : 'error'">
+                      {{ adjustment.isActive ? 'Active' : 'Inactive' }}
+                    </v-chip>
+                  </td>
+                  <td class="text-right">
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      @click="openEditAdjustmentDialog(adjustment)"
+                    >
+                      <v-icon>mdi-pencil</v-icon>
+                      <v-tooltip activator="parent" location="top">Edit</v-tooltip>
+                    </v-btn>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="error"
+                      @click="confirmDeleteAdjustment(adjustment)"
+                    >
+                      <v-icon>mdi-delete</v-icon>
+                      <v-tooltip activator="parent" location="top">Delete</v-tooltip>
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+
+            <v-alert v-else type="info" variant="tonal">
+              No price adjustments configured. Click "Add Adjustment" to create one.
+            </v-alert>
+          </v-card-text>
+        </v-card>
       </v-tabs-window-item>
     </v-tabs-window>
 
@@ -1223,6 +1328,206 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Price List Dialog -->
+    <PriceListDialog
+      v-model="priceListDialog"
+      :price-list="editingPriceList"
+      @saved="onPriceListSaved"
+    />
+
+    <!-- Import Config Dialog -->
+    <ImportConfigDialog
+      v-model="importConfigDialog"
+      :config="editingImportConfig"
+      :price-list-code="newImportConfigPriceList"
+      @saved="onImportConfigSaved"
+    />
+
+    <!-- Delete Price List Confirmation Dialog -->
+    <v-dialog v-model="deletePriceListDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Price List</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This will permanently delete the price list and all associated prices.
+          </v-alert>
+          Are you sure you want to delete <strong>{{ deletingPriceList?.code }}</strong> ({{
+            deletingPriceList?.name
+          }})?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deletePriceListDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingPriceListLoading" @click="deletePriceListConfirm">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Import Config Confirmation Dialog -->
+    <v-dialog v-model="deleteImportConfigDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Import Configuration</v-card-title>
+        <v-card-text>
+          Are you sure you want to delete the import configuration
+          <strong>{{ deletingImportConfig?.name }}</strong
+          >?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteImportConfigDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            :loading="deletingImportConfigLoading"
+            @click="deleteImportConfigConfirm"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Create/Edit Price Adjustment Dialog -->
+    <v-dialog v-model="adjustmentDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ editingAdjustment ? 'Edit Price Adjustment' : 'Create Price Adjustment' }}
+        </v-card-title>
+        <v-card-text>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="adjustmentForm.priceListCode"
+                :items="[
+                  { title: 'All Price Lists', value: null },
+                  ...priceLists.map(pl => ({ title: `${pl.code} - ${pl.name}`, value: pl.code })),
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Price List"
+                hint="Leave empty to apply to all price lists"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="adjustmentForm.commodityTicker"
+                label="Commodity Ticker"
+                hint="e.g., DW, RAT, H2O (leave empty for all)"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="adjustmentForm.locationId"
+                label="Location ID"
+                hint="e.g., BEN, MON (leave empty for all)"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="adjustmentForm.priority"
+                type="number"
+                label="Priority"
+                hint="Higher priority adjustments applied first"
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="adjustmentForm.adjustmentType"
+                :items="[
+                  { title: 'Percentage (%)', value: 'percentage' },
+                  { title: 'Fixed Amount', value: 'fixed' },
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Adjustment Type"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="adjustmentForm.adjustmentValue"
+                type="number"
+                step="0.01"
+                label="Value"
+                :hint="
+                  adjustmentForm.adjustmentType === 'percentage'
+                    ? 'e.g., 10 for +10%, -5 for -5%'
+                    : 'Fixed amount to add/subtract'
+                "
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
+
+          <v-text-field
+            v-model="adjustmentForm.description"
+            label="Description"
+            hint="Optional note explaining this adjustment"
+            persistent-hint
+            class="mt-4"
+          />
+
+          <v-switch
+            v-model="adjustmentForm.isActive"
+            label="Active"
+            color="success"
+            hint="Inactive adjustments are not applied to prices"
+            persistent-hint
+            class="mt-4"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="adjustmentDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingAdjustment" @click="saveAdjustment">
+            {{ editingAdjustment ? 'Update' : 'Create' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Price Adjustment Confirmation Dialog -->
+    <v-dialog v-model="deleteAdjustmentDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Price Adjustment</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This will permanently delete this price adjustment.
+          </v-alert>
+          Are you sure you want to delete this adjustment?
+          <div v-if="deletingAdjustment" class="mt-2">
+            <strong>{{ getAdjustmentScope(deletingAdjustment) }}</strong>
+            <br />
+            {{ formatAdjustmentValue(deletingAdjustment) }}
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteAdjustmentDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            :loading="deletingAdjustmentLoading"
+            @click="deleteAdjustmentConfirm"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -1231,7 +1536,18 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { Role } from '../types'
 import type { DiscordSettings, DiscordRoleMapping, DiscordRole } from '@kawakawa/types'
 import { api } from '../services/api'
-import type { PriceSettingsResponse, FioPriceField } from '../services/api'
+import type {
+  PriceSettingsResponse,
+  FioPriceField,
+  PriceListDefinition,
+  ImportConfigResponse,
+  PriceAdjustmentResponse,
+  CreatePriceAdjustmentRequest,
+  UpdatePriceAdjustmentRequest,
+  AdjustmentType,
+} from '../services/api'
+import PriceListDialog from '../components/PriceListDialog.vue'
+import ImportConfigDialog from '../components/ImportConfigDialog.vue'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -1399,36 +1715,51 @@ const priceSettingsForm = ref({
   fioBaseUrl: '',
   fioPriceField: 'PriceAverage' as FioPriceField,
   googleApiKey: '',
-  kawaSheetUrl: '',
-  kawaSheetGid: null as number | null,
 })
 const showGoogleApiKey = ref(false)
 const savingFioSettings = ref(false)
 const savingGoogleSettings = ref(false)
-const savingKawaSettings = ref(false)
-const previewingKawaSheet = ref(false)
-const syncingKawaSheet = ref(false)
-const kawaSheetPreview = ref<{ headers: string[]; rows: string[][] } | null>(null)
-const kawaSyncConfig = ref({
-  tickerColumn: '' as string,
-  priceColumn: '' as string,
-  locationDefault: 'BEN',
-  currencyDefault: 'CIS' as 'ICA' | 'CIS' | 'AIC' | 'NCC',
-})
-const kawaSyncResult = ref<{
-  imported: number
-  updated: number
-  skipped: number
-  errors: Array<{ rowNumber: number; field: string; value: string; message: string }>
-} | null>(null)
 
-const kawaSheetColumnOptions = computed(() => {
-  if (!kawaSheetPreview.value) return []
-  return kawaSheetPreview.value.headers.map((h, i) => ({
-    title: h || `Column ${i}`,
-    value: h || i.toString(),
-  }))
+// Price Lists management state
+const priceLists = ref<PriceListDefinition[]>([])
+const loadingPriceLists = ref(false)
+const priceListDialog = ref(false)
+const editingPriceList = ref<PriceListDefinition | null>(null)
+const deletingPriceList = ref<PriceListDefinition | null>(null)
+const deletePriceListDialog = ref(false)
+const deletingPriceListLoading = ref(false)
+
+// Import Configs management state
+const importConfigs = ref<ImportConfigResponse[]>([])
+const loadingImportConfigs = ref(false)
+const importConfigDialog = ref(false)
+const editingImportConfig = ref<ImportConfigResponse | null>(null)
+const newImportConfigPriceList = ref<string | null>(null)
+const syncingConfigs = ref<Set<number>>(new Set())
+const syncingFioPriceLists = ref<Set<string>>(new Set())
+const deleteImportConfigDialog = ref(false)
+const deletingImportConfig = ref<ImportConfigResponse | null>(null)
+const deletingImportConfigLoading = ref(false)
+
+// Price Adjustments management state
+const priceAdjustments = ref<PriceAdjustmentResponse[]>([])
+const loadingAdjustments = ref(false)
+const adjustmentDialog = ref(false)
+const editingAdjustment = ref<PriceAdjustmentResponse | null>(null)
+const adjustmentForm = ref({
+  priceListCode: null as string | null,
+  commodityTicker: null as string | null,
+  locationId: null as string | null,
+  adjustmentType: 'percentage' as AdjustmentType,
+  adjustmentValue: 0,
+  priority: 0,
+  description: null as string | null,
+  isActive: true,
 })
+const savingAdjustment = ref(false)
+const deleteAdjustmentDialog = ref(false)
+const deletingAdjustment = ref<PriceAdjustmentResponse | null>(null)
+const deletingAdjustmentLoading = ref(false)
 
 const fioPriceFieldOptions = [
   { title: 'Price Average (30-day weighted)', value: 'PriceAverage' },
@@ -1460,13 +1791,6 @@ const hasFioSettingsChanges = computed(() => {
   return (
     priceSettingsForm.value.fioBaseUrl !== (priceSettings.value?.fioBaseUrl || '') ||
     priceSettingsForm.value.fioPriceField !== (priceSettings.value?.fioPriceField || 'PriceAverage')
-  )
-})
-
-const hasKawaSettingsChanges = computed(() => {
-  return (
-    priceSettingsForm.value.kawaSheetUrl !== (priceSettings.value?.kawaSheetUrl || '') ||
-    priceSettingsForm.value.kawaSheetGid !== priceSettings.value?.kawaSheetGid
   )
 })
 
@@ -2147,8 +2471,6 @@ const loadPriceSettings = async () => {
     // Initialize form with current settings
     priceSettingsForm.value.fioBaseUrl = priceSettings.value.fioBaseUrl || ''
     priceSettingsForm.value.fioPriceField = priceSettings.value.fioPriceField || 'PriceAverage'
-    priceSettingsForm.value.kawaSheetUrl = priceSettings.value.kawaSheetUrl || ''
-    priceSettingsForm.value.kawaSheetGid = priceSettings.value.kawaSheetGid
     // Don't populate API key - it should only be entered when changing
     priceSettingsForm.value.googleApiKey = ''
   } catch (error) {
@@ -2192,71 +2514,289 @@ const saveGoogleSettings = async () => {
   }
 }
 
-const saveKawaSettings = async () => {
+// Price Lists management functions
+const loadPriceLists = async () => {
   try {
-    savingKawaSettings.value = true
-    priceSettings.value = await api.adminPriceSettings.updateKawaSheet({
-      url: priceSettingsForm.value.kawaSheetUrl,
-      gid: priceSettingsForm.value.kawaSheetGid,
-    })
-    showSnackbar('KAWA sheet settings saved successfully')
+    loadingPriceLists.value = true
+    priceLists.value = await api.priceLists.list()
   } catch (error) {
-    console.error('Failed to save KAWA settings', error)
-    const message = error instanceof Error ? error.message : 'Failed to save KAWA settings'
-    showSnackbar(message, 'error')
+    console.error('Failed to load price lists', error)
+    showSnackbar('Failed to load price lists', 'error')
   } finally {
-    savingKawaSettings.value = false
+    loadingPriceLists.value = false
   }
 }
 
-const previewKawaSheet = async () => {
+const openCreatePriceListDialog = () => {
+  editingPriceList.value = null
+  priceListDialog.value = true
+}
+
+const openEditPriceListDialog = (priceList: PriceListDefinition) => {
+  editingPriceList.value = priceList
+  priceListDialog.value = true
+}
+
+const onPriceListSaved = async () => {
+  await loadPriceLists()
+  showSnackbar('Price list saved successfully')
+}
+
+const confirmDeletePriceList = (priceList: PriceListDefinition) => {
+  deletingPriceList.value = priceList
+  deletePriceListDialog.value = true
+}
+
+const deletePriceListConfirm = async () => {
+  if (!deletingPriceList.value) return
+
   try {
-    previewingKawaSheet.value = true
-    kawaSyncResult.value = null
-    const result = await api.adminPriceSettings.previewKawaSheet()
-    kawaSheetPreview.value = result
-    // Auto-detect common column names
-    const headers = result.headers.map(h => h.toLowerCase())
-    const tickerIdx = headers.findIndex(h => h.includes('ticker') || h.includes('commodity'))
-    const priceIdx = headers.findIndex(h => h.includes('price'))
-    if (tickerIdx >= 0)
-      kawaSyncConfig.value.tickerColumn = result.headers[tickerIdx] || tickerIdx.toString()
-    if (priceIdx >= 0)
-      kawaSyncConfig.value.priceColumn = result.headers[priceIdx] || priceIdx.toString()
+    deletingPriceListLoading.value = true
+    await api.priceLists.delete(deletingPriceList.value.code)
+    showSnackbar('Price list deleted successfully')
+    deletePriceListDialog.value = false
+    await loadPriceLists()
   } catch (error) {
-    console.error('Failed to preview KAWA sheet', error)
-    const message = error instanceof Error ? error.message : 'Failed to preview KAWA sheet'
+    console.error('Failed to delete price list', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete price list'
     showSnackbar(message, 'error')
   } finally {
-    previewingKawaSheet.value = false
+    deletingPriceListLoading.value = false
+    deletingPriceList.value = null
   }
 }
 
-const syncKawaSheet = async () => {
+// Import Configs management functions
+const loadImportConfigs = async () => {
   try {
-    syncingKawaSheet.value = true
-    const result = await api.adminPriceSettings.syncKawaSheet({
-      tickerColumn: kawaSyncConfig.value.tickerColumn,
-      priceColumn: kawaSyncConfig.value.priceColumn,
-      locationDefault: kawaSyncConfig.value.locationDefault || undefined,
-      currencyDefault: kawaSyncConfig.value.currencyDefault || undefined,
-    })
-    kawaSyncResult.value = result
-    if (result.errors.length === 0) {
-      showSnackbar(
-        `Synced ${result.imported} new, ${result.updated} updated prices from KAWA sheet`,
-        'success'
-      )
+    loadingImportConfigs.value = true
+    const configs = await api.importConfigs.list()
+    console.log('Loaded import configs:', configs)
+    importConfigs.value = configs
+  } catch (error) {
+    console.error('Failed to load import configs', error)
+    showSnackbar('Failed to load import configs', 'error')
+  } finally {
+    loadingImportConfigs.value = false
+  }
+}
+
+const openCreateImportConfigDialog = (priceListCode?: string) => {
+  editingImportConfig.value = null
+  newImportConfigPriceList.value = priceListCode || null
+  importConfigDialog.value = true
+}
+
+const openEditImportConfigDialog = (config: ImportConfigResponse) => {
+  editingImportConfig.value = config
+  newImportConfigPriceList.value = null
+  importConfigDialog.value = true
+}
+
+const onImportConfigSaved = async () => {
+  await loadImportConfigs()
+  await loadPriceLists() // Refresh counts
+  showSnackbar('Import configuration saved successfully')
+}
+
+const confirmDeleteImportConfig = (config: ImportConfigResponse) => {
+  deletingImportConfig.value = config
+  deleteImportConfigDialog.value = true
+}
+
+const deleteImportConfigConfirm = async () => {
+  if (!deletingImportConfig.value) return
+
+  try {
+    deletingImportConfigLoading.value = true
+    await api.importConfigs.delete(deletingImportConfig.value.id)
+    showSnackbar('Import configuration deleted successfully')
+    deleteImportConfigDialog.value = false
+    await loadImportConfigs()
+    await loadPriceLists() // Refresh counts
+  } catch (error) {
+    console.error('Failed to delete import config', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete import config'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingImportConfigLoading.value = false
+    deletingImportConfig.value = null
+  }
+}
+
+const syncImportConfig = async (config: ImportConfigResponse) => {
+  try {
+    syncingConfigs.value.add(config.id)
+    const result = await api.importConfigs.sync(config.id)
+    showSnackbar(
+      `Synced ${result.imported} new, ${result.updated} updated prices`,
+      result.errors.length > 0 ? 'error' : 'success'
+    )
+    await loadPriceLists() // Refresh price counts
+  } catch (error) {
+    console.error('Failed to sync import config', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync import config'
+    showSnackbar(message, 'error')
+  } finally {
+    syncingConfigs.value.delete(config.id)
+  }
+}
+
+const getImportConfigsForPriceList = (priceListCode: string) => {
+  return importConfigs.value.filter(c => c.priceListCode === priceListCode)
+}
+
+const syncFioPriceList = async (priceList: PriceListDefinition) => {
+  try {
+    syncingFioPriceLists.value.add(priceList.code)
+    const result = await api.fioPriceSync.syncExchange(priceList.code)
+    if (result.success) {
+      showSnackbar(`Synced ${result.totalUpdated} prices for ${priceList.code}`)
     } else {
-      showSnackbar(`Sync completed with ${result.errors.length} errors`, 'error')
+      showSnackbar(
+        result.errors.length > 0 ? result.errors[0] : 'Sync completed with errors',
+        'error'
+      )
     }
+    await loadPriceLists() // Refresh price counts
   } catch (error) {
-    console.error('Failed to sync KAWA sheet', error)
-    const message = error instanceof Error ? error.message : 'Failed to sync KAWA sheet'
+    console.error('Failed to sync FIO prices', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync FIO prices'
     showSnackbar(message, 'error')
   } finally {
-    syncingKawaSheet.value = false
+    syncingFioPriceLists.value.delete(priceList.code)
   }
+}
+
+// Price Adjustments management functions
+const loadPriceAdjustments = async () => {
+  try {
+    loadingAdjustments.value = true
+    priceAdjustments.value = await api.priceAdjustments.list()
+  } catch (error) {
+    console.error('Failed to load price adjustments', error)
+    showSnackbar('Failed to load price adjustments', 'error')
+  } finally {
+    loadingAdjustments.value = false
+  }
+}
+
+const openCreateAdjustmentDialog = () => {
+  editingAdjustment.value = null
+  adjustmentForm.value = {
+    priceListCode: null,
+    commodityTicker: null,
+    locationId: null,
+    adjustmentType: 'percentage',
+    adjustmentValue: 0,
+    priority: 0,
+    description: null,
+    isActive: true,
+  }
+  adjustmentDialog.value = true
+}
+
+const openEditAdjustmentDialog = (adjustment: PriceAdjustmentResponse) => {
+  editingAdjustment.value = adjustment
+  adjustmentForm.value = {
+    priceListCode: adjustment.priceListCode,
+    commodityTicker: adjustment.commodityTicker,
+    locationId: adjustment.locationId,
+    adjustmentType: adjustment.adjustmentType as AdjustmentType,
+    adjustmentValue: parseFloat(adjustment.adjustmentValue),
+    priority: adjustment.priority,
+    description: adjustment.description,
+    isActive: adjustment.isActive,
+  }
+  adjustmentDialog.value = true
+}
+
+const saveAdjustment = async () => {
+  try {
+    savingAdjustment.value = true
+    if (editingAdjustment.value) {
+      const updateData: UpdatePriceAdjustmentRequest = {
+        priceListCode: adjustmentForm.value.priceListCode,
+        commodityTicker: adjustmentForm.value.commodityTicker,
+        locationId: adjustmentForm.value.locationId,
+        adjustmentType: adjustmentForm.value.adjustmentType,
+        adjustmentValue: adjustmentForm.value.adjustmentValue,
+        priority: adjustmentForm.value.priority,
+        description: adjustmentForm.value.description,
+        isActive: adjustmentForm.value.isActive,
+      }
+      await api.priceAdjustments.update(editingAdjustment.value.id, updateData)
+      showSnackbar('Adjustment updated successfully')
+    } else {
+      const createData: CreatePriceAdjustmentRequest = {
+        priceListCode: adjustmentForm.value.priceListCode,
+        commodityTicker: adjustmentForm.value.commodityTicker,
+        locationId: adjustmentForm.value.locationId,
+        adjustmentType: adjustmentForm.value.adjustmentType,
+        adjustmentValue: adjustmentForm.value.adjustmentValue,
+        priority: adjustmentForm.value.priority,
+        description: adjustmentForm.value.description,
+        isActive: adjustmentForm.value.isActive,
+      }
+      await api.priceAdjustments.create(createData)
+      showSnackbar('Adjustment created successfully')
+    }
+    adjustmentDialog.value = false
+    await loadPriceAdjustments()
+  } catch (error) {
+    console.error('Failed to save adjustment', error)
+    const message = error instanceof Error ? error.message : 'Failed to save adjustment'
+    showSnackbar(message, 'error')
+  } finally {
+    savingAdjustment.value = false
+  }
+}
+
+const confirmDeleteAdjustment = (adjustment: PriceAdjustmentResponse) => {
+  deletingAdjustment.value = adjustment
+  deleteAdjustmentDialog.value = true
+}
+
+const deleteAdjustmentConfirm = async () => {
+  if (!deletingAdjustment.value) return
+  try {
+    deletingAdjustmentLoading.value = true
+    await api.priceAdjustments.delete(deletingAdjustment.value.id)
+    showSnackbar('Adjustment deleted successfully')
+    deleteAdjustmentDialog.value = false
+    await loadPriceAdjustments()
+  } catch (error) {
+    console.error('Failed to delete adjustment', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete adjustment'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingAdjustmentLoading.value = false
+    deletingAdjustment.value = null
+  }
+}
+
+const formatAdjustmentValue = (adjustment: PriceAdjustmentResponse) => {
+  const value = parseFloat(adjustment.adjustmentValue)
+  if (adjustment.adjustmentType === 'percentage') {
+    return `${value >= 0 ? '+' : ''}${value}%`
+  }
+  return `${value >= 0 ? '+' : ''}${value}`
+}
+
+const getAdjustmentScope = (adjustment: PriceAdjustmentResponse) => {
+  const parts = []
+  if (adjustment.priceListCode) {
+    parts.push(adjustment.priceListCode)
+  } else {
+    parts.push('All price lists')
+  }
+  if (adjustment.commodityTicker) {
+    parts.push(adjustment.commodityName || adjustment.commodityTicker)
+  }
+  if (adjustment.locationId) {
+    parts.push(adjustment.locationName || adjustment.locationId)
+  }
+  return parts.join(' / ')
 }
 
 // Watch for tab changes to load data
@@ -2279,10 +2819,12 @@ watch(activeTab, async newTab => {
       await loadRoleMappings()
     }
   } else if (newTab === 'priceLists') {
-    // Load price settings
+    // Load price settings, price lists, import configs, and adjustments
     if (!priceSettings.value) {
       await loadPriceSettings()
     }
+    // Always load all data together
+    await Promise.all([loadPriceLists(), loadImportConfigs(), loadPriceAdjustments()])
   }
 })
 

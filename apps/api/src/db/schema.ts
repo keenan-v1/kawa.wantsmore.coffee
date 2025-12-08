@@ -71,7 +71,7 @@ export const priceListTypeEnum = pgEnum('price_list_type', ['fio', 'custom'])
 
 export const importSourceTypeEnum = pgEnum('import_source_type', ['csv', 'google_sheets'])
 
-export const importFormatEnum = pgEnum('import_format', ['flat', 'pivot'])
+export const importFormatEnum = pgEnum('import_format', ['flat', 'pivot', 'kawa'])
 
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(

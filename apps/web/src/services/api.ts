@@ -235,6 +235,9 @@ interface EffectivePrice {
   sourceReference: string | null
   adjustments: AppliedAdjustment[]
   finalPrice: number
+  // Fallback information - indicates if price came from default location
+  isFallback?: boolean
+  requestedLocationId?: string // Original location when isFallback is true
 }
 
 // Price Adjustments types
@@ -242,7 +245,7 @@ type AdjustmentType = 'percentage' | 'fixed'
 
 interface PriceAdjustmentResponse {
   id: number
-  exchangeCode: string | null
+  priceListCode: string | null
   commodityTicker: string | null
   commodityName: string | null
   locationId: string | null
@@ -262,10 +265,9 @@ interface PriceAdjustmentResponse {
 }
 
 interface CreatePriceAdjustmentRequest {
-  exchangeCode?: string | null
+  priceListCode?: string | null
   commodityTicker?: string | null
   locationId?: string | null
-  currency?: Currency | null
   adjustmentType: AdjustmentType
   adjustmentValue: number
   priority?: number
@@ -276,10 +278,9 @@ interface CreatePriceAdjustmentRequest {
 }
 
 interface UpdatePriceAdjustmentRequest {
-  exchangeCode?: string | null
+  priceListCode?: string | null
   commodityTicker?: string | null
   locationId?: string | null
-  currency?: Currency | null
   adjustmentType?: AdjustmentType
   adjustmentValue?: number
   priority?: number
@@ -420,7 +421,7 @@ interface UpdatePriceListRequest {
 
 // Import Config types
 type ImportSourceType = 'csv' | 'google_sheets'
-type ImportFormat = 'flat' | 'pivot'
+type ImportFormat = 'flat' | 'pivot' | 'kawa'
 
 interface ImportConfigResponse {
   id: number
@@ -2592,9 +2593,17 @@ const realApi = {
   getEffectivePrices: async (
     exchange: string,
     locationId: string,
-    currency: Currency
+    currency: Currency,
+    options?: { commodity?: string; fallback?: boolean }
   ): Promise<EffectivePrice[]> => {
     const params = new URLSearchParams({ currency })
+    if (options?.commodity) {
+      params.set('commodity', options.commodity)
+    }
+    // Fallback defaults to true on backend, only send if explicitly false
+    if (options?.fallback === false) {
+      params.set('fallback', 'false')
+    }
     const response = await fetchWithLogging(
       `/api/prices/effective/${exchange}/${locationId}?${params}`,
       {
@@ -2794,7 +2803,7 @@ const realApi = {
     formData.append('file', file)
     formData.append('config', JSON.stringify(config))
 
-    const response = await fetchWithLogging('/api/prices/import/csv/preview', {
+    const response = await fetchWithLogging('/api/import-configs/csv/preview', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${localStorage.getItem('jwt')}`,
@@ -2820,7 +2829,7 @@ const realApi = {
     formData.append('file', file)
     formData.append('config', JSON.stringify(config))
 
-    const response = await fetchWithLogging('/api/prices/import/csv', {
+    const response = await fetchWithLogging('/api/import-configs/csv', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${localStorage.getItem('jwt')}`,
@@ -2845,7 +2854,7 @@ const realApi = {
   previewGoogleSheetsImport: async (
     request: GoogleSheetsImportRequest
   ): Promise<CsvPreviewResult> => {
-    const response = await fetchWithLogging('/api/prices/import/google-sheets/preview', {
+    const response = await fetchWithLogging('/api/import-configs/google-sheets/preview', {
       method: 'POST',
       headers: {
         ...getAuthHeaders(),
@@ -2868,7 +2877,7 @@ const realApi = {
   },
 
   importGoogleSheets: async (request: GoogleSheetsImportRequest): Promise<CsvImportResult> => {
-    const response = await fetchWithLogging('/api/prices/import/google-sheets', {
+    const response = await fetchWithLogging('/api/import-configs/google-sheets', {
       method: 'POST',
       headers: {
         ...getAuthHeaders(),
@@ -3006,7 +3015,7 @@ const realApi = {
 
   // Import Configs methods
   getImportConfigs: async (): Promise<ImportConfigResponse[]> => {
-    const response = await fetchWithLogging('/api/prices/import/configs', {
+    const response = await fetchWithLogging('/api/import-configs', {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -3024,7 +3033,7 @@ const realApi = {
   },
 
   getImportConfig: async (id: number): Promise<ImportConfigResponse> => {
-    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -3042,7 +3051,7 @@ const realApi = {
   },
 
   createImportConfig: async (request: CreateImportConfigRequest): Promise<ImportConfigResponse> => {
-    const response = await fetchWithLogging('/api/prices/import/configs', {
+    const response = await fetchWithLogging('/api/import-configs', {
       method: 'POST',
       headers: {
         ...getAuthHeaders(),
@@ -3068,7 +3077,7 @@ const realApi = {
     id: number,
     request: UpdateImportConfigRequest
   ): Promise<ImportConfigResponse> => {
-    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
       method: 'PUT',
       headers: {
         ...getAuthHeaders(),
@@ -3094,7 +3103,7 @@ const realApi = {
   },
 
   deleteImportConfig: async (id: number): Promise<void> => {
-    const response = await fetchWithLogging(`/api/prices/import/configs/${id}`, {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     })
@@ -3114,7 +3123,7 @@ const realApi = {
   },
 
   syncImportConfig: async (id: number): Promise<CsvImportResult | PivotImportResult> => {
-    const response = await fetchWithLogging(`/api/prices/import/configs/${id}/sync`, {
+    const response = await fetchWithLogging(`/api/import-configs/${id}/sync`, {
       method: 'POST',
       headers: getAuthHeaders(),
     })
@@ -3136,7 +3145,7 @@ const realApi = {
   },
 
   previewImportConfig: async (id: number): Promise<CsvPreviewResult | PivotImportResult> => {
-    const response = await fetchWithLogging(`/api/prices/import/configs/${id}/preview`, {
+    const response = await fetchWithLogging(`/api/import-configs/${id}/preview`, {
       method: 'POST',
       headers: getAuthHeaders(),
     })

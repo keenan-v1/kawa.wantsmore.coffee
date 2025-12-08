@@ -1,5 +1,5 @@
 {
-  "id": "c1114fba-8f34-4b68-89f1-be37313bddfb",
+  "id": "8769f592-c7f5-4097-b3ef-6fcb89cf3841",
   "prevId": "bc1f5d97-04bf-4219-b35a-732e90774d2a",
   "version": "7",
   "dialect": "postgresql",
@@ -2290,7 +2290,8 @@
       "schema": "public",
       "values": [
         "flat",
-        "pivot"
+        "pivot",
+        "kawa"
       ]
     },
     "public.import_source_type": {

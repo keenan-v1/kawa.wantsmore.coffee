@@ -1,5 +1,5 @@
 CREATE TYPE "public"."adjustment_type" AS ENUM('percentage', 'fixed');--> statement-breakpoint
-CREATE TYPE "public"."import_format" AS ENUM('flat', 'pivot');--> statement-breakpoint
+CREATE TYPE "public"."import_format" AS ENUM('flat', 'pivot', 'kawa');--> statement-breakpoint
 CREATE TYPE "public"."import_source_type" AS ENUM('csv', 'google_sheets');--> statement-breakpoint
 CREATE TYPE "public"."price_list_type" AS ENUM('fio', 'custom');--> statement-breakpoint
 CREATE TYPE "public"."price_source" AS ENUM('manual', 'csv_import', 'google_sheets', 'fio_exchange');--> statement-breakpoint

@@ -28,7 +28,7 @@ import {
 import type { CsvFieldMapping } from '../services/csv/parser.js'
 
 export type ImportSourceType = 'csv' | 'google_sheets'
-export type ImportFormat = 'flat' | 'pivot'
+export type ImportFormat = 'flat' | 'pivot' | 'kawa'
 
 interface ImportConfigResponse {
   id: number
@@ -41,8 +41,6 @@ interface ImportConfigResponse {
   config: Record<string, unknown> | null
   createdAt: Date
   updatedAt: Date
-  // Backwards compatibility
-  exchangeCode: string
 }
 
 interface CreateImportConfigRequest {
@@ -80,7 +78,7 @@ interface PivotImportResult {
   errors: string[]
 }
 
-@Route('prices/import/configs')
+@Route('import-configs')
 @Tags('Pricing')
 export class ImportConfigsController extends Controller {
   /**
@@ -108,7 +106,6 @@ export class ImportConfigsController extends Controller {
     return results.map(r => ({
       ...r,
       config: r.config as Record<string, unknown> | null,
-      exchangeCode: r.priceListCode,
     }))
   }
 
@@ -144,7 +141,6 @@ export class ImportConfigsController extends Controller {
     return {
       ...r,
       config: r.config as Record<string, unknown> | null,
-      exchangeCode: r.priceListCode,
     }
   }
 
@@ -282,6 +278,11 @@ export class ImportConfigsController extends Controller {
     // For pivot format, use pivot import
     if (config.format === 'pivot') {
       return this.syncPivotConfig(config)
+    }
+
+    // For kawa format, use kawa import (2-row per commodity format)
+    if (config.format === 'kawa') {
+      return this.syncKawaConfig(config)
     }
 
     // For flat format, use standard CSV import
@@ -473,6 +474,253 @@ export class ImportConfigsController extends Controller {
   }
 
   /**
+   * Sync a KAWA format config (2-row per commodity format)
+   * Row 1: Contains metadata including ticker in column B, location names/IDs in columns D+
+   * Row 2: Contains prices corresponding to each location column
+   */
+  private async syncKawaConfig(config: ImportConfigResponse): Promise<PivotImportResult> {
+    if (config.sourceType !== 'google_sheets' || !config.sheetsUrl) {
+      throw BadRequest('KAWA format requires Google Sheets source with URL')
+    }
+
+    const parsed = parseGoogleSheetsUrl(config.sheetsUrl)
+    if (!parsed) {
+      throw BadRequest('Invalid Google Sheets URL in configuration')
+    }
+
+    const fetchResult = await fetchSheetAsCsv(
+      parsed.spreadsheetId,
+      config.sheetGid ?? parsed.sheetGid
+    )
+
+    if (!fetchResult.success) {
+      throw BadRequest(fetchResult.error ?? 'Failed to fetch Google Sheet')
+    }
+
+    return this.parseKawaFormat(fetchResult.content!, config.priceListCode, config.sheetsUrl, true)
+  }
+
+  /**
+   * Parse KAWA format CSV content
+   *
+   * KAWA format structure:
+   * - Row 0: Date header (ignored)
+   * - Row 1: Column labels (Category, Ticker, Material, Low-price Source Planet, ...) - ignored
+   * - Row 2+: Data in pairs:
+   *   - Info row: Category, Ticker, Material, Source, Location1, Location2, Location3, ...
+   *   - Price row: empty, empty, empty, price1, price2, price3, ...
+   *
+   * Key: Location names are IN the commodity's info row (columns E+), NOT in header.
+   * Each commodity can have different locations.
+   *
+   * @param csvContent The raw CSV content
+   * @param priceListCode The target price list code
+   * @param sourceReference Source reference for tracking
+   * @param writeToDb Whether to actually write to database (false for preview)
+   */
+  private async parseKawaFormat(
+    csvContent: string,
+    priceListCode: string,
+    sourceReference: string,
+    writeToDb: boolean
+  ): Promise<PivotImportResult> {
+    // Parse CSV properly handling quoted fields with commas
+    const lines = this.parseKawaCsvLines(csvContent)
+
+    if (lines.length < 4) {
+      throw BadRequest('Sheet must have at least header rows and data rows')
+    }
+
+    // Get all known locations
+    const locations = await db
+      .select({
+        naturalId: fioLocations.naturalId,
+        name: fioLocations.name,
+        systemName: fioLocations.systemName,
+      })
+      .from(fioLocations)
+
+    // Build lookup maps for locations (by name, naturalId, and systemName)
+    const locationLookup = new Map<string, string>()
+    for (const loc of locations) {
+      locationLookup.set(loc.name.toLowerCase(), loc.naturalId)
+      locationLookup.set(loc.naturalId.toLowerCase(), loc.naturalId)
+      locationLookup.set(loc.systemName.toLowerCase(), loc.naturalId)
+    }
+
+    // Get all known commodities
+    const commodities = await db.select({ ticker: fioCommodities.ticker }).from(fioCommodities)
+    const validTickers = new Set(commodities.map(c => c.ticker.toUpperCase()))
+
+    // Find where data starts (after header rows)
+    // Header row has "Ticker" in column B (index 1)
+    const headerRowIndex = lines.findIndex(row => row[1]?.toLowerCase() === 'ticker')
+    const dataStartIndex = headerRowIndex === -1 ? 2 : headerRowIndex + 1
+
+    // Column indices:
+    // 0 = Category, 1 = Ticker, 2 = Material
+    // 3+ = Location names (in info row) / Prices (in price row)
+    const TICKER_COL = 1
+    const LOCATION_START_COL = 3 // Locations start at column D (index 3)
+
+    // Parse data rows - each commodity spans 2 rows (info row, then price row)
+    const priceRecords: Array<{ ticker: string; locationId: string; price: number }> = []
+    const errors: string[] = []
+
+    for (let rowIdx = dataStartIndex; rowIdx < lines.length; rowIdx++) {
+      const infoRow = lines[rowIdx]
+      const ticker = infoRow[TICKER_COL]?.toUpperCase().trim()
+
+      // If we found a valid ticker in column B, this is an info row
+      if (ticker && validTickers.has(ticker)) {
+        // Get the price row (next row)
+        const priceRowIdx = rowIdx + 1
+        if (priceRowIdx >= lines.length) {
+          errors.push(`Row ${rowIdx + 1}: Ticker "${ticker}" found but no price row follows`)
+          continue
+        }
+
+        const priceRow = lines[priceRowIdx]
+
+        // Extract locations from the INFO row and prices from the PRICE row
+        // Both are in columns D+ (index 3+), aligned by column
+        for (let colIdx = LOCATION_START_COL; colIdx < infoRow.length; colIdx++) {
+          const locationName = infoRow[colIdx]?.trim()
+          if (!locationName) continue
+
+          // Look up the location
+          const locationId = locationLookup.get(locationName.toLowerCase())
+          if (!locationId) {
+            // Not a known location, skip silently (could be empty or invalid)
+            continue
+          }
+
+          // Get the price from the same column in the price row
+          const priceStr = priceRow[colIdx]?.trim()
+          if (!priceStr || priceStr === '-' || priceStr === '') continue
+
+          const price = parseFloat(priceStr.replace(/,/g, ''))
+          if (isNaN(price) || price <= 0) {
+            errors.push(
+              `Row ${priceRowIdx + 1}, col ${colIdx + 1}: Invalid price "${priceStr}" for ${ticker} at ${locationName}`
+            )
+            continue
+          }
+
+          priceRecords.push({ ticker, locationId, price })
+        }
+
+        // Skip the price row in next iteration
+        rowIdx++
+      }
+    }
+
+    if (priceRecords.length === 0 && errors.length === 0) {
+      throw BadRequest('No valid price data found. Check that location names match FIO data.')
+    }
+
+    if (!writeToDb) {
+      // Preview mode - just return counts
+      return {
+        imported: priceRecords.length,
+        updated: 0,
+        skipped: errors.length,
+        errors,
+      }
+    }
+
+    // Actually import the prices to the database
+    let imported = 0
+    let updated = 0
+
+    for (const record of priceRecords) {
+      // Check if price already exists
+      const existing = await db
+        .select({ id: prices.id })
+        .from(prices)
+        .where(
+          and(
+            eq(prices.priceListCode, priceListCode),
+            eq(prices.commodityTicker, record.ticker),
+            eq(prices.locationId, record.locationId)
+          )
+        )
+        .limit(1)
+
+      if (existing.length > 0) {
+        // Update existing price
+        await db
+          .update(prices)
+          .set({
+            price: record.price.toFixed(2),
+            source: 'google_sheets',
+            sourceReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(prices.id, existing[0].id))
+        updated++
+      } else {
+        // Insert new price
+        await db.insert(prices).values({
+          priceListCode,
+          commodityTicker: record.ticker,
+          locationId: record.locationId,
+          price: record.price.toFixed(2),
+          source: 'google_sheets',
+          sourceReference,
+        })
+        imported++
+      }
+    }
+
+    return {
+      imported,
+      updated,
+      skipped: errors.length,
+      errors,
+    }
+  }
+
+  /**
+   * Parse CSV content into rows, properly handling quoted fields
+   */
+  private parseKawaCsvLines(csvContent: string): string[][] {
+    const lines: string[][] = []
+    const rows = csvContent.split('\n')
+
+    for (const row of rows) {
+      if (!row.trim()) continue
+
+      const cells: string[] = []
+      let current = ''
+      let inQuotes = false
+
+      for (let i = 0; i < row.length; i++) {
+        const char = row[i]
+
+        if (char === '"') {
+          if (inQuotes && row[i + 1] === '"') {
+            // Escaped quote
+            current += '"'
+            i++
+          } else {
+            inQuotes = !inQuotes
+          }
+        } else if (char === ',' && !inQuotes) {
+          cells.push(current.trim())
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      cells.push(current.trim())
+      lines.push(cells)
+    }
+
+    return lines
+  }
+
+  /**
    * Preview a pivot config (parse data without importing)
    */
   private async previewPivotConfig(config: ImportConfigResponse): Promise<PivotImportResult> {
@@ -578,6 +826,32 @@ export class ImportConfigsController extends Controller {
   }
 
   /**
+   * Preview a KAWA config (parse data without importing)
+   */
+  private async previewKawaConfig(config: ImportConfigResponse): Promise<PivotImportResult> {
+    if (config.sourceType !== 'google_sheets' || !config.sheetsUrl) {
+      throw BadRequest('KAWA format requires Google Sheets source with URL')
+    }
+
+    const parsed = parseGoogleSheetsUrl(config.sheetsUrl)
+    if (!parsed) {
+      throw BadRequest('Invalid Google Sheets URL in configuration')
+    }
+
+    const fetchResult = await fetchSheetAsCsv(
+      parsed.spreadsheetId,
+      config.sheetGid ?? parsed.sheetGid
+    )
+
+    if (!fetchResult.success) {
+      throw BadRequest(fetchResult.error ?? 'Failed to fetch Google Sheet')
+    }
+
+    // Preview mode - don't write to database
+    return this.parseKawaFormat(fetchResult.content!, config.priceListCode, config.sheetsUrl, false)
+  }
+
+  /**
    * Preview a sync for a saved configuration (without importing)
    * @param id The configuration ID
    */
@@ -590,6 +864,11 @@ export class ImportConfigsController extends Controller {
     if (config.format === 'pivot') {
       // Use preview method that doesn't write to database
       return this.previewPivotConfig(config)
+    }
+
+    if (config.format === 'kawa') {
+      // Use preview method for KAWA format
+      return this.previewKawaConfig(config)
     }
 
     // For flat format
@@ -629,7 +908,7 @@ export class ImportConfigsController extends Controller {
   }
 }
 
-@Route('prices/import/google-sheets')
+@Route('import-configs/google-sheets')
 @Tags('Pricing')
 export class GoogleSheetsImportController extends Controller {
   /**

@@ -24,7 +24,7 @@ interface CsvImportRequest {
   hasHeader?: boolean
 }
 
-@Route('prices/import')
+@Route('import-configs')
 @Tags('Pricing')
 export class PriceImportController extends Controller {
   /**

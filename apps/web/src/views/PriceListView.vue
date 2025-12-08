@@ -5,6 +5,13 @@
       <v-btn variant="text" to="/prices/adjustments">
         <v-icon start>mdi-tune</v-icon>
         Adjustments
+        <v-badge
+          v-if="activeAdjustmentsCount > 0"
+          :content="activeAdjustmentsCount"
+          color="primary"
+          inline
+          class="ml-1"
+        />
       </v-btn>
     </div>
 
@@ -83,17 +90,6 @@
               </v-btn>
             </div>
             <div class="d-flex ga-2 flex-wrap">
-              <v-btn
-                v-if="isFioExchange && canSyncFio"
-                variant="outlined"
-                color="primary"
-                size="small"
-                :loading="syncing"
-                @click="syncFioPrices"
-              >
-                <v-icon start>mdi-sync</v-icon>
-                Sync FIO
-              </v-btn>
               <v-menu v-if="prices.length > 0">
                 <template #activator="{ props }">
                   <v-btn v-bind="props" variant="outlined" size="small">
@@ -113,28 +109,6 @@
                   </v-list-item>
                 </v-list>
               </v-menu>
-              <v-menu v-if="canImportPrices && !isFioExchange">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" variant="outlined" size="small">
-                    <v-icon start>mdi-upload</v-icon>
-                    Import
-                  </v-btn>
-                </template>
-                <v-list density="compact">
-                  <v-list-item @click="csvImportDialog = true">
-                    <template #prepend>
-                      <v-icon>mdi-file-delimited</v-icon>
-                    </template>
-                    <v-list-item-title>From CSV File</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item @click="googleSheetsImportDialog = true">
-                    <template #prepend>
-                      <v-icon>mdi-google-spreadsheet</v-icon>
-                    </template>
-                    <v-list-item-title>From Google Sheets</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
               <v-btn
                 v-if="canManagePrices && !isFioExchange"
                 color="primary"
@@ -149,21 +123,6 @@
         </v-row>
       </v-card-text>
     </v-card>
-
-    <!-- Sync Status (for FIO exchanges) -->
-    <v-alert
-      v-if="isFioExchange && syncStatus"
-      type="info"
-      variant="tonal"
-      density="compact"
-      class="mb-4"
-    >
-      <template #prepend>
-        <v-icon>mdi-information</v-icon>
-      </template>
-      Last synced: {{ syncStatus.lastSyncedAt ? formatDate(syncStatus.lastSyncedAt) : 'Never' }}
-      <span class="text-medium-emphasis ml-2">({{ syncStatus.priceCount }} prices)</span>
-    </v-alert>
 
     <!-- Price Table -->
     <v-card>
@@ -221,15 +180,26 @@
         </template>
 
         <template #item.price="{ item }">
-          <span class="font-weight-medium">
-            {{
-              parseFloat(item.price).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })
-            }}
-          </span>
-          <span class="text-caption text-medium-emphasis ml-1">{{ item.currency }}</span>
+          <div class="d-flex align-center justify-end">
+            <span class="font-weight-medium">
+              {{
+                parseFloat(item.price).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              }}
+            </span>
+            <span class="text-caption text-medium-emphasis ml-1">{{ item.currency }}</span>
+            <v-tooltip v-if="hasAdjustments(item)" location="left">
+              <template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1"> mdi-tune-variant </v-icon>
+              </template>
+              <div>
+                <strong>Adjustments applied:</strong>
+                <div>{{ getAdjustmentsSummary(item) }}</div>
+              </div>
+            </v-tooltip>
+          </div>
         </template>
 
         <template #item.source="{ item }">
@@ -364,20 +334,6 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-
-    <!-- CSV Import Dialog -->
-    <PriceImportDialog
-      v-model="csvImportDialog"
-      :exchange-code="selectedExchange"
-      @imported="handleImportComplete"
-    />
-
-    <!-- Google Sheets Import Dialog -->
-    <GoogleSheetsImportDialog
-      v-model="googleSheetsImportDialog"
-      :exchange-code="selectedExchange"
-      @imported="handleImportComplete"
-    />
   </v-container>
 </template>
 
@@ -389,21 +345,17 @@ import {
   api,
   type PriceListResponse,
   type FioExchangeResponse,
-  type ExchangeSyncStatus,
-  type CsvImportResult,
+  type PriceAdjustmentResponse,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
-import PriceImportDialog from '../components/PriceImportDialog.vue'
-import GoogleSheetsImportDialog from '../components/GoogleSheetsImportDialog.vue'
 
 const userStore = useUserStore()
 
 // State
 const loading = ref(false)
-const syncing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const search = ref('')
@@ -411,7 +363,7 @@ const search = ref('')
 const exchanges = ref<FioExchangeResponse[]>([])
 const selectedExchange = ref<string>('KAWA')
 const prices = ref<PriceListResponse[]>([])
-const syncStatuses = ref<ExchangeSyncStatus[]>([])
+const activeAdjustments = ref<PriceAdjustmentResponse[]>([])
 
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
@@ -431,8 +383,6 @@ const filters = ref<{
 // Dialogs
 const priceDialog = ref(false)
 const deleteDialog = ref(false)
-const csvImportDialog = ref(false)
-const googleSheetsImportDialog = ref(false)
 const editingPrice = ref<PriceListResponse | null>(null)
 const deletingPrice = ref<PriceListResponse | null>(null)
 const priceFormRef = ref()
@@ -455,13 +405,52 @@ const isFioExchange = computed(() => {
   return selectedExchange.value !== 'KAWA'
 })
 
-const syncStatus = computed(() => {
-  return syncStatuses.value.find(s => s.exchangeCode === selectedExchange.value)
+const canManagePrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_MANAGE))
+
+// Adjustments for current exchange
+const adjustmentsForExchange = computed(() => {
+  return activeAdjustments.value.filter(
+    adj =>
+      adj.isActive && (adj.priceListCode === null || adj.priceListCode === selectedExchange.value)
+  )
 })
 
-const canManagePrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_MANAGE))
-const canSyncFio = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_SYNC_FIO))
-const canImportPrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_IMPORT))
+const activeAdjustmentsCount = computed(() => adjustmentsForExchange.value.length)
+
+// Check if a price has any matching adjustments
+const hasAdjustments = (price: PriceListResponse): boolean => {
+  return adjustmentsForExchange.value.some(adj => {
+    // Check commodity match
+    if (adj.commodityTicker && adj.commodityTicker !== price.commodityTicker) {
+      return false
+    }
+    // Check location match
+    if (adj.locationId && adj.locationId !== price.locationId) {
+      return false
+    }
+    return true
+  })
+}
+
+// Get adjustments summary for a price
+const getAdjustmentsSummary = (price: PriceListResponse): string => {
+  const matching = adjustmentsForExchange.value.filter(adj => {
+    if (adj.commodityTicker && adj.commodityTicker !== price.commodityTicker) return false
+    if (adj.locationId && adj.locationId !== price.locationId) return false
+    return true
+  })
+
+  if (matching.length === 0) return ''
+
+  return matching
+    .map(adj => {
+      const value = parseFloat(adj.adjustmentValue)
+      const prefix = value >= 0 ? '+' : ''
+      const suffix = adj.adjustmentType === 'percentage' ? '%' : ''
+      return `${prefix}${value}${suffix}${adj.description ? ` (${adj.description})` : ''}`
+    })
+    .join(', ')
+}
 
 const headers = computed(() => {
   const base = [
@@ -641,30 +630,12 @@ const loadPrices = async () => {
   }
 }
 
-const loadSyncStatus = async () => {
+const loadAdjustments = async () => {
   try {
-    syncStatuses.value = await api.fioPriceSync.getStatus()
+    // Load all active adjustments
+    activeAdjustments.value = await api.priceAdjustments.list(undefined, undefined, true)
   } catch (error) {
-    console.error('Failed to load sync status:', error)
-  }
-}
-
-const syncFioPrices = async () => {
-  try {
-    syncing.value = true
-    const result = await api.fioPriceSync.syncExchange(selectedExchange.value)
-    if (result.success) {
-      showSnackbar(`Synced ${result.totalUpdated} prices`)
-      await loadPrices()
-      await loadSyncStatus()
-    } else {
-      showSnackbar(result.errors.join(', ') || 'Sync failed', 'error')
-    }
-  } catch (error) {
-    console.error('Failed to sync prices:', error)
-    showSnackbar(error instanceof Error ? error.message : 'Failed to sync prices', 'error')
-  } finally {
-    syncing.value = false
+    console.error('Failed to load adjustments:', error)
   }
 }
 
@@ -764,17 +735,6 @@ const confirmDelete = async () => {
   }
 }
 
-// Import result handler
-const handleImportComplete = async (result: CsvImportResult) => {
-  const total = result.imported + result.updated
-  if (total > 0) {
-    showSnackbar(`Imported ${result.imported} new and updated ${result.updated} prices`)
-    await loadPrices()
-  } else if (result.skipped > 0) {
-    showSnackbar(`Import completed with ${result.skipped} skipped rows`, 'error')
-  }
-}
-
 // Watch for exchange changes
 watch(selectedExchange, () => {
   loadPrices()
@@ -783,8 +743,7 @@ watch(selectedExchange, () => {
 // Initialize
 onMounted(async () => {
   await loadExchanges()
-  await loadPrices()
-  await loadSyncStatus()
+  await Promise.all([loadPrices(), loadAdjustments()])
 })
 </script>
 

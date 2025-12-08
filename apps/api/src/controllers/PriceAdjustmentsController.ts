@@ -21,7 +21,7 @@ import {
   priceLists,
   users,
 } from '../db/index.js'
-import { eq, and, or, isNull } from 'drizzle-orm'
+import { eq, and, or, isNull, ilike } from 'drizzle-orm'
 import { NotFound, BadRequest } from '../utils/errors.js'
 import { AuthenticatedRequest } from '../middleware/auth.js'
 import type { AdjustmentType } from '../services/price-calculator.js'
@@ -297,7 +297,7 @@ export class PriceAdjustmentsController extends Controller {
   ): Promise<PriceAdjustmentResponse> {
     const priceListCode = body.priceListCode?.toUpperCase() ?? null
     const commodityTicker = body.commodityTicker?.toUpperCase() ?? null
-    const locationId = body.locationId?.toUpperCase() ?? null
+    let locationId: string | null = null
 
     // Validate price list if provided
     if (priceListCode) {
@@ -325,17 +325,19 @@ export class PriceAdjustmentsController extends Controller {
       }
     }
 
-    // Validate location if provided
-    if (locationId) {
-      const locationExists = await db
+    // Validate location if provided (case-insensitive lookup)
+    if (body.locationId) {
+      const locationResult = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, locationId))
+        .where(ilike(fioLocations.naturalId, body.locationId))
         .limit(1)
 
-      if (locationExists.length === 0) {
-        throw BadRequest(`Location '${locationId}' not found`)
+      if (locationResult.length === 0) {
+        throw BadRequest(`Location '${body.locationId}' not found`)
       }
+      // Use the actual stored value from database
+      locationId = locationResult[0].naturalId
     }
 
     // Insert the adjustment
@@ -411,18 +413,22 @@ export class PriceAdjustmentsController extends Controller {
       }
     }
 
-    // Validate location if being updated to a specific value
+    // Validate location if being updated to a specific value (case-insensitive lookup)
+    let resolvedLocationId: string | null | undefined = undefined
     if (body.locationId !== undefined && body.locationId !== null) {
-      const locationId = body.locationId.toUpperCase()
-      const locationExists = await db
+      const locationResult = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, locationId))
+        .where(ilike(fioLocations.naturalId, body.locationId))
         .limit(1)
 
-      if (locationExists.length === 0) {
-        throw BadRequest(`Location '${locationId}' not found`)
+      if (locationResult.length === 0) {
+        throw BadRequest(`Location '${body.locationId}' not found`)
       }
+      // Use the actual stored value from database
+      resolvedLocationId = locationResult[0].naturalId
+    } else if (body.locationId === null) {
+      resolvedLocationId = null
     }
 
     // Build update object
@@ -448,8 +454,8 @@ export class PriceAdjustmentsController extends Controller {
     if (body.commodityTicker !== undefined) {
       updateData.commodityTicker = body.commodityTicker?.toUpperCase() ?? null
     }
-    if (body.locationId !== undefined) {
-      updateData.locationId = body.locationId?.toUpperCase() ?? null
+    if (resolvedLocationId !== undefined) {
+      updateData.locationId = resolvedLocationId
     }
     if (body.adjustmentType !== undefined) {
       updateData.adjustmentType = body.adjustmentType

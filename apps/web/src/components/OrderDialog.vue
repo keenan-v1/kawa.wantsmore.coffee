@@ -106,6 +106,35 @@
                         <span class="font-weight-medium ml-1">
                           {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
                         </span>
+                        <!-- Currency mismatch indicator -->
+                        <v-tooltip
+                          v-if="suggestedPrice.currency !== buyForm.currency"
+                          location="top"
+                        >
+                          <template #activator="{ props: tooltipProps }">
+                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                              mdi-swap-horizontal
+                            </v-icon>
+                          </template>
+                          <span
+                            >Price is in {{ suggestedPrice.currency }} (will update currency when
+                            used)</span
+                          >
+                        </v-tooltip>
+                        <!-- Fallback location indicator -->
+                        <v-tooltip v-if="suggestedPrice.isFallback" location="top">
+                          <template #activator="{ props: tooltipProps }">
+                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                              mdi-map-marker-question
+                            </v-icon>
+                          </template>
+                          <span
+                            >No price at
+                            {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
+                            using default location
+                            {{ getLocationDisplay(suggestedPrice.locationId) }}</span
+                          >
+                        </v-tooltip>
                         <v-btn
                           variant="text"
                           size="x-small"
@@ -211,6 +240,35 @@
                         <span class="font-weight-medium ml-1">
                           {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
                         </span>
+                        <!-- Currency mismatch indicator -->
+                        <v-tooltip
+                          v-if="suggestedPrice.currency !== sellForm.currency"
+                          location="top"
+                        >
+                          <template #activator="{ props: tooltipProps }">
+                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                              mdi-swap-horizontal
+                            </v-icon>
+                          </template>
+                          <span
+                            >Price is in {{ suggestedPrice.currency }} (will update currency when
+                            used)</span
+                          >
+                        </v-tooltip>
+                        <!-- Fallback location indicator -->
+                        <v-tooltip v-if="suggestedPrice.isFallback" location="top">
+                          <template #activator="{ props: tooltipProps }">
+                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                              mdi-map-marker-question
+                            </v-icon>
+                          </template>
+                          <span
+                            >No price at
+                            {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
+                            using default location
+                            {{ getLocationDisplay(suggestedPrice.locationId) }}</span
+                          >
+                        </v-tooltip>
                         <v-btn
                           variant="text"
                           size="x-small"
@@ -812,8 +870,10 @@ const useSuggestedPrice = () => {
 
   if (activeTab.value === 'buy') {
     buyForm.value.price = suggestedPrice.value.finalPrice
+    buyForm.value.currency = suggestedPrice.value.currency
   } else {
     sellForm.value.price = suggestedPrice.value.finalPrice
+    sellForm.value.currency = suggestedPrice.value.currency
   }
 }
 

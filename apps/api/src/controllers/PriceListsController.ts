@@ -20,7 +20,7 @@ import {
   importConfigs,
   fioLocations,
 } from '../db/index.js'
-import { eq } from 'drizzle-orm'
+import { eq, ilike } from 'drizzle-orm'
 import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 
 export type PriceListType = 'fio' | 'custom'
@@ -175,17 +175,20 @@ export class PriceListsController extends Controller {
       throw Conflict(`Price list '${code}' already exists`)
     }
 
-    // Validate location if provided
+    // Validate location if provided (case-insensitive lookup)
+    let resolvedLocationId: string | null = null
     if (body.defaultLocationId) {
-      const locationExists = await db
+      const locationResult = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, body.defaultLocationId.toUpperCase()))
+        .where(ilike(fioLocations.naturalId, body.defaultLocationId))
         .limit(1)
 
-      if (locationExists.length === 0) {
+      if (locationResult.length === 0) {
         throw BadRequest(`Location '${body.defaultLocationId}' not found`)
       }
+      // Use the actual stored value from database
+      resolvedLocationId = locationResult[0].naturalId
     }
 
     await db.insert(priceLists).values({
@@ -194,7 +197,7 @@ export class PriceListsController extends Controller {
       description: body.description ?? null,
       type: body.type,
       currency: body.currency,
-      defaultLocationId: body.defaultLocationId?.toUpperCase() ?? null,
+      defaultLocationId: resolvedLocationId,
       isActive: body.isActive ?? true,
     })
 
@@ -231,17 +234,22 @@ export class PriceListsController extends Controller {
       throw BadRequest('Cannot change currency on FIO price lists')
     }
 
-    // Validate location if provided
-    if (body.defaultLocationId) {
-      const locationExists = await db
+    // Validate location if provided (case-insensitive lookup)
+    let resolvedLocationId: string | null | undefined = undefined
+    if (body.defaultLocationId !== undefined && body.defaultLocationId !== null) {
+      const locationResult = await db
         .select({ naturalId: fioLocations.naturalId })
         .from(fioLocations)
-        .where(eq(fioLocations.naturalId, body.defaultLocationId.toUpperCase()))
+        .where(ilike(fioLocations.naturalId, body.defaultLocationId))
         .limit(1)
 
-      if (locationExists.length === 0) {
+      if (locationResult.length === 0) {
         throw BadRequest(`Location '${body.defaultLocationId}' not found`)
       }
+      // Use the actual stored value from database
+      resolvedLocationId = locationResult[0].naturalId
+    } else if (body.defaultLocationId === null) {
+      resolvedLocationId = null
     }
 
     // Build update object
@@ -252,8 +260,7 @@ export class PriceListsController extends Controller {
     if (body.name !== undefined) updateData.name = body.name
     if (body.description !== undefined) updateData.description = body.description
     if (body.currency !== undefined) updateData.currency = body.currency
-    if (body.defaultLocationId !== undefined)
-      updateData.defaultLocationId = body.defaultLocationId?.toUpperCase() ?? null
+    if (resolvedLocationId !== undefined) updateData.defaultLocationId = resolvedLocationId
     if (body.isActive !== undefined) updateData.isActive = body.isActive
 
     await db.update(priceLists).set(updateData).where(eq(priceLists.code, upperCode))

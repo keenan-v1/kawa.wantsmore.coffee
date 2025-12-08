@@ -17,15 +17,15 @@ export type FioPriceField = 'MMBuy' | 'MMSell' | 'PriceAverage' | 'Ask' | 'Bid'
 
 /**
  * Raw price data from FIO /csv/prices endpoint
+ * The API returns a PIVOT format where each exchange has its own columns:
+ * Ticker, MMBuy, MMSell, AI1-Average, AI1-AskPrice, AI1-BidPrice, CI1-Average, CI1-AskPrice, ...
  */
-interface FioCsvPrice {
+interface FioCsvPriceRow {
   Ticker: string
-  ExchangeCode: string
   MMBuy: number | null
   MMSell: number | null
-  PriceAverage: number | null
-  Ask: number | null
-  Bid: number | null
+  // Dynamic columns for each exchange: {EX}-Average, {EX}-AskPrice, {EX}-BidPrice, etc.
+  [key: string]: string | number | null | undefined
 }
 
 /**
@@ -87,23 +87,34 @@ async function getValidTickers(): Promise<Set<string>> {
 }
 
 /**
- * Get price from FIO price data using the configured price field
+ * Get price from FIO price data for a specific exchange using the configured price field
+ * The FIO API uses pivot format with columns like: CI1-Average, CI1-AskPrice, CI1-BidPrice
  */
-function getPriceValue(priceData: FioCsvPrice, priceField: FioPriceField): number | null {
-  switch (priceField) {
-    case 'MMBuy':
-      return priceData.MMBuy
-    case 'MMSell':
-      return priceData.MMSell
-    case 'PriceAverage':
-      return priceData.PriceAverage
-    case 'Ask':
-      return priceData.Ask
-    case 'Bid':
-      return priceData.Bid
-    default:
-      return priceData.PriceAverage
+function getPriceValue(
+  priceData: FioCsvPriceRow,
+  exchangeCode: string,
+  priceField: FioPriceField
+): number | null {
+  // Map price fields to FIO column suffixes
+  const fieldToColumn: Record<FioPriceField, string> = {
+    MMBuy: 'MMBuy', // Global column, not exchange-specific
+    MMSell: 'MMSell', // Global column, not exchange-specific
+    PriceAverage: `${exchangeCode}-Average`,
+    Ask: `${exchangeCode}-AskPrice`,
+    Bid: `${exchangeCode}-BidPrice`,
   }
+
+  const columnName = fieldToColumn[priceField]
+
+  // For MMBuy/MMSell, use global columns
+  if (priceField === 'MMBuy' || priceField === 'MMSell') {
+    const value = priceData[columnName]
+    return typeof value === 'number' ? value : null
+  }
+
+  // For exchange-specific fields, use the prefixed column
+  const value = priceData[columnName]
+  return typeof value === 'number' ? value : null
 }
 
 /**
@@ -149,21 +160,13 @@ export async function syncFioExchangePrices(
     // Fetch all prices from FIO API
     log.info('Fetching prices from FIO API')
     const csvData = await fioClient.getPrices(true)
-    const allPrices = parseCsvTyped<FioCsvPrice>(csvData)
+    const allPrices = parseCsvTyped<FioCsvPriceRow>(csvData)
     log.info({ count: allPrices.length }, 'Parsed price records from FIO')
 
-    // Group prices by exchange code
-    const pricesByExchange = new Map<string, FioCsvPrice[]>()
-    for (const price of allPrices) {
-      const existing = pricesByExchange.get(price.ExchangeCode) || []
-      existing.push(price)
-      pricesByExchange.set(price.ExchangeCode, existing)
-    }
-
-    // Process each price list
+    // Process each price list - the FIO API returns a pivot format
+    // where each row has one ticker with columns for each exchange: CI1-Average, NC1-Average, etc.
     const syncedAt = new Date()
     for (const priceList of fioPriceLists) {
-      const exchangePrices = pricesByExchange.get(priceList.code) || []
       const exchangeResult: FioExchangeSyncResult = {
         priceListCode: priceList.code,
         locationId: priceList.defaultLocationId,
@@ -181,21 +184,22 @@ export async function syncFioExchangePrices(
       }
 
       log.info(
-        { priceList: priceList.code, priceCount: exchangePrices.length },
+        { priceList: priceList.code, tickerCount: allPrices.length },
         'Processing exchange prices'
       )
 
-      for (const priceData of exchangePrices) {
+      // Iterate through all commodity rows and extract this exchange's prices
+      for (const priceData of allPrices) {
         // Validate ticker exists
-        if (!validTickers.has(priceData.Ticker)) {
+        if (!priceData.Ticker || !validTickers.has(priceData.Ticker)) {
           exchangeResult.pricesSkipped++
           continue
         }
 
-        // Get price using configured field
-        const price = getPriceValue(priceData, priceField)
+        // Get price using configured field for this specific exchange
+        const price = getPriceValue(priceData, priceList.code, priceField)
 
-        // Skip if price is null or 0 (no market data)
+        // Skip if price is null or 0 (no market data for this exchange)
         if (price === null || price === 0) {
           exchangeResult.pricesSkipped++
           continue
