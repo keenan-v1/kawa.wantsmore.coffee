@@ -3,6 +3,7 @@ import { db, fioCommodities } from '../../db/index.js'
 import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
 import { createLogger } from '../../utils/logger.js'
+import { syncService } from '../syncService.js'
 
 const log = createLogger({ service: 'fio-sync', entity: 'commodities' })
 
@@ -77,6 +78,12 @@ export async function syncCommodities(): Promise<SyncResult> {
 
     if (result.errors.length > 0) {
       log.warn({ errorCount: result.errors.length }, 'Errors occurred during sync')
+    }
+
+    // Bump data version if any commodities were synced
+    if (result.inserted > 0) {
+      await syncService.bumpDataVersion('commodities')
+      log.info('Bumped commodities data version')
     }
 
     return result

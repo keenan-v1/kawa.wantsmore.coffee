@@ -3,6 +3,7 @@ import { db, fioLocations } from '../../db/index.js'
 import { fioClient } from './client.js'
 import type { SyncResult } from './sync-types.js'
 import { createLogger } from '../../utils/logger.js'
+import { syncService } from '../syncService.js'
 
 const log = createLogger({ service: 'fio-sync', entity: 'locations' })
 
@@ -101,6 +102,12 @@ export async function syncLocations(): Promise<SyncResult> {
 
     if (result.errors.length > 0) {
       log.warn({ errorCount: result.errors.length }, 'Errors occurred during sync')
+    }
+
+    // Bump data version if any locations were synced
+    if (result.inserted > 0) {
+      await syncService.bumpDataVersion('locations')
+      log.info('Bumped locations data version')
     }
 
     return result

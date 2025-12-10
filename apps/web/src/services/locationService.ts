@@ -1,9 +1,52 @@
-// Location service - fetches from backend API
+// Location service - fetches from backend API with localStorage persistence
 
 import type { Location, LocationDisplayMode } from '../types'
 
-// Cache for locations to avoid repeated API calls
+// Cache keys and TTL
+const CACHE_KEY = 'kawakawa:locations'
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+interface CacheEntry {
+  data: Location[]
+  timestamp: number
+}
+
+// In-memory cache for fast access during session
 let cachedLocations: Location[] | null = null
+
+// Load from localStorage on module init
+const loadFromStorage = (): Location[] | null => {
+  try {
+    const stored = localStorage.getItem(CACHE_KEY)
+    if (!stored) return null
+
+    const entry: CacheEntry = JSON.parse(stored)
+    const age = Date.now() - entry.timestamp
+
+    if (age > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+
+    return entry.data
+  } catch {
+    localStorage.removeItem(CACHE_KEY)
+    return null
+  }
+}
+
+// Save to localStorage
+const saveToStorage = (data: Location[]): void => {
+  try {
+    const entry: CacheEntry = { data, timestamp: Date.now() }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
+  } catch (error) {
+    console.warn('Failed to cache locations to localStorage:', error)
+  }
+}
+
+// Initialize from localStorage
+cachedLocations = loadFromStorage()
 
 // Fetch locations from backend API
 const fetchLocations = async (): Promise<Location[]> => {
@@ -18,6 +61,7 @@ const fetchLocations = async (): Promise<Location[]> => {
     }
     const data = await response.json()
     cachedLocations = data
+    saveToStorage(data)
     return data
   } catch (error) {
     console.error('Error fetching locations:', error)
@@ -142,5 +186,6 @@ export const locationService = {
   // Clear cache (useful for refresh)
   clearCache: (): void => {
     cachedLocations = null
+    localStorage.removeItem(CACHE_KEY)
   },
 }

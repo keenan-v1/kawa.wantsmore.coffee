@@ -24,6 +24,9 @@ import type {
   DiscordAuthResult,
   DiscordRegisterRequest,
   DiscordRegisterResponse,
+  GlobalDefaultsResponse,
+  UpdateGlobalDefaultsRequest,
+  SyncState,
 } from '@kawakawa/types'
 
 interface LoginRequest {
@@ -1965,6 +1968,114 @@ const realApi = {
     return response.json()
   },
 
+  // Admin Global Defaults methods
+  getGlobalDefaults: async (): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging('/api/admin/global-defaults', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get global defaults: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateGlobalDefaults: async (
+    request: UpdateGlobalDefaultsRequest
+  ): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging('/api/admin/global-defaults', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || 'Failed to update global defaults')
+    }
+
+    return response.json()
+  },
+
+  resetGlobalDefault: async (key: string): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging(
+      `/api/admin/global-defaults/${encodeURIComponent(key)}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || 'Failed to reset global default')
+    }
+
+    return response.json()
+  },
+
+  getGlobalDefaultHistory: async (key: string): Promise<SettingHistoryEntry[]> => {
+    const response = await fetchWithLogging(
+      `/api/admin/global-defaults/history/${encodeURIComponent(key)}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get global default history: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   // User Discord methods
   getDiscordAuthUrl: async (): Promise<{ url: string; state: string }> => {
     const response = await fetchWithLogging('/api/discord/auth-url', {
@@ -2180,7 +2291,7 @@ const realApi = {
     return response.json()
   },
 
-  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
+  getSyncState: async (): Promise<SyncState> => {
     const response = await fetchWithLogging('/api/notifications/unread-count', {
       method: 'GET',
       headers: getAuthHeaders(),
@@ -2195,10 +2306,16 @@ const realApi = {
         window.location.href = '/login'
         throw new Error('Unauthorized')
       }
-      throw new Error(`Failed to get unread count: ${response.statusText}`)
+      throw new Error(`Failed to get sync state: ${response.statusText}`)
     }
 
     return response.json()
+  },
+
+  // Legacy wrapper for backward compatibility
+  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
+    const syncState = await realApi.getSyncState()
+    return { count: syncState.unreadCount }
   },
 
   markNotificationAsRead: async (id: number): Promise<void> => {
@@ -3595,6 +3712,9 @@ export const api = {
     markAllAsRead: () => realApi.markAllNotificationsAsRead(),
     delete: (id: number) => realApi.deleteNotification(id),
   },
+  sync: {
+    getSyncState: () => realApi.getSyncState(),
+  },
   reservations: {
     list: (role?: 'owner' | 'counterparty' | 'all', status?: ReservationStatus) =>
       realApi.getReservations(role, status),
@@ -3660,6 +3780,12 @@ export const api = {
     updateKawaSheet: (request: UpdateKawaSheetRequest) => realApi.updateKawaSheetSettings(request),
     previewKawaSheet: () => realApi.previewKawaSheet(),
     syncKawaSheet: (request: KawaSheetSyncRequest) => realApi.syncKawaSheet(request),
+  },
+  adminGlobalDefaults: {
+    get: () => realApi.getGlobalDefaults(),
+    update: (request: UpdateGlobalDefaultsRequest) => realApi.updateGlobalDefaults(request),
+    reset: (key: string) => realApi.resetGlobalDefault(key),
+    getHistory: (key: string) => realApi.getGlobalDefaultHistory(key),
   },
   priceLists: {
     list: () => realApi.getPriceLists(),

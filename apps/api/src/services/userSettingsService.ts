@@ -1,6 +1,7 @@
 // User Settings Service
 // Manages user preferences with caching and validation
 // Handles sensitive settings (like fio.apiKey) that are write-only
+// Resolution order: code defaults -> admin defaults -> user overrides
 
 import { db, userSettings } from '../db/index.js'
 import { eq, and } from 'drizzle-orm'
@@ -11,6 +12,7 @@ import {
   isSettingSensitive,
 } from '@kawakawa/types/settings'
 import type { SettingDefinition } from '@kawakawa/types'
+import { settingsService } from './settingsService.js'
 
 // ==================== CACHING ====================
 
@@ -21,12 +23,57 @@ interface CacheEntry {
   expiresAt: number
 }
 
+// User-specific settings cache
 const cache = new Map<number, CacheEntry>()
+
+// Admin defaults cache (shared across all users)
+let adminDefaultsCache: Record<string, unknown> | null = null
+let adminDefaultsCacheTime = 0
+const ADMIN_DEFAULTS_PREFIX = 'defaults.'
+
+// ==================== ADMIN DEFAULTS ====================
+
+/**
+ * Get admin-configured defaults from the settings table
+ * Uses a separate cache since these rarely change
+ */
+async function getAdminDefaults(): Promise<Record<string, unknown>> {
+  // Return from cache if valid
+  if (adminDefaultsCache && Date.now() - adminDefaultsCacheTime < CACHE_TTL_MS) {
+    return adminDefaultsCache
+  }
+
+  // Fetch admin defaults with the 'defaults.' prefix
+  const raw = await settingsService.getAll(ADMIN_DEFAULTS_PREFIX)
+  adminDefaultsCache = {}
+
+  for (const [fullKey, value] of Object.entries(raw)) {
+    const key = fullKey.replace(ADMIN_DEFAULTS_PREFIX, '')
+    try {
+      adminDefaultsCache[key] = JSON.parse(value)
+    } catch {
+      // Skip invalid JSON
+    }
+  }
+
+  adminDefaultsCacheTime = Date.now()
+  return adminDefaultsCache
+}
+
+/**
+ * Invalidate the admin defaults cache
+ * Call this when admin defaults are modified
+ */
+export function invalidateAdminDefaultsCache(): void {
+  adminDefaultsCache = null
+  adminDefaultsCacheTime = 0
+}
 
 // ==================== PUBLIC API ====================
 
 /**
  * Get all settings for a user, with defaults applied
+ * Resolution order: code defaults -> admin defaults -> user overrides
  * Sensitive settings (like fio.apiKey) are excluded from the response
  * @param includeSensitive - If true, include sensitive values (for internal use only)
  */
@@ -51,7 +98,7 @@ export async function getAllSettings(
     .from(userSettings)
     .where(eq(userSettings.userId, userId))
 
-  // Start with defaults from definitions (excluding sensitive unless requested)
+  // 1. Start with code defaults from definitions (excluding sensitive unless requested)
   const settings = new Map<string, unknown>()
   for (const key of SETTING_KEYS) {
     if (!includeSensitive && isSettingSensitive(key)) {
@@ -60,7 +107,19 @@ export async function getAllSettings(
     settings.set(key, SETTING_DEFINITIONS[key].defaultValue)
   }
 
-  // Apply user overrides
+  // 2. Apply admin defaults (override code defaults)
+  const adminDefaults = await getAdminDefaults()
+  for (const [key, value] of Object.entries(adminDefaults)) {
+    if (key in SETTING_DEFINITIONS) {
+      // Skip sensitive settings unless explicitly requested
+      if (!includeSensitive && isSettingSensitive(key as SettingKey)) {
+        continue
+      }
+      settings.set(key, value)
+    }
+  }
+
+  // 3. Apply user overrides (override admin defaults)
   for (const row of rows) {
     if (row.key in SETTING_DEFINITIONS) {
       // Skip sensitive settings unless explicitly requested
@@ -292,6 +351,7 @@ export const userSettingsService = {
   hasFioCredentials,
   invalidateCache,
   clearCache,
+  invalidateAdminDefaultsCache,
 }
 
 export default userSettingsService

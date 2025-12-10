@@ -321,6 +321,24 @@ export interface NotificationUnreadCount {
   count: number
 }
 
+// ==================== SYNC STATE ====================
+
+/** Data version keys that can be tracked for cache invalidation */
+export type SyncDataKey = 'locations' | 'commodities' | 'priceLists' | 'globalDefaults'
+
+/** Data versions - timestamps (ms) of last modification */
+export type DataVersions = Partial<Record<SyncDataKey, number>>
+
+/** Sync state returned by the polling endpoint */
+export interface SyncState {
+  /** Unread notification count */
+  unreadCount: number
+  /** App build/commit hash - changes trigger "new version" banner */
+  appVersion: string
+  /** Data version timestamps for cache invalidation */
+  dataVersions: DataVersions
+}
+
 // ==================== ORDER RESERVATIONS ====================
 
 export type ReservationStatus =
@@ -418,4 +436,25 @@ export interface SettingDefinition<T = unknown> {
 export interface UserSettingsResponse {
   values: Record<string, unknown>
   definitions: Record<string, SettingDefinition>
+}
+
+// ==================== ADMIN GLOBAL DEFAULTS ====================
+
+// Individual setting with code default, admin default, and effective value
+export interface GlobalDefaultSetting {
+  key: string
+  codeDefault: unknown
+  adminDefault: unknown | null // null = no admin override
+  effectiveDefault: unknown // adminDefault ?? codeDefault
+  definition: SettingDefinition
+}
+
+// Response from GET /admin/global-defaults
+export interface GlobalDefaultsResponse {
+  settings: GlobalDefaultSetting[]
+}
+
+// Request body for PUT /admin/global-defaults
+export interface UpdateGlobalDefaultsRequest {
+  settings: Record<string, unknown>
 }

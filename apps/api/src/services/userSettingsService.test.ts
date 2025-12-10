@@ -18,7 +18,15 @@ vi.mock('../db/index.js', () => ({
   },
 }))
 
+// Mock the settingsService for admin defaults
+vi.mock('./settingsService.js', () => ({
+  settingsService: {
+    getAll: vi.fn().mockResolvedValue({}),
+  },
+}))
+
 import { db } from '../db/index.js'
+import { settingsService } from './settingsService.js'
 
 describe('userSettingsService', () => {
   let mockSelect: ReturnType<typeof vi.fn>
@@ -33,6 +41,9 @@ describe('userSettingsService', () => {
     vi.clearAllMocks()
     // Clear cache before each test
     userSettingsService.clearCache()
+    userSettingsService.invalidateAdminDefaultsCache()
+    // Reset settingsService mock to return empty admin defaults
+    vi.mocked(settingsService.getAll).mockResolvedValue({})
 
     // Setup mock chain for select
     mockWhere = vi.fn().mockResolvedValue([])
@@ -384,6 +395,98 @@ describe('userSettingsService', () => {
         expect(def.label).toBeDefined()
         expect(def.description).toBeDefined()
       }
+    })
+  })
+
+  describe('admin defaults integration', () => {
+    it('should apply admin defaults over code defaults', async () => {
+      // Admin has set a different default currency
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': '"ICA"',
+      })
+      // No user overrides
+      mockWhere.mockResolvedValueOnce([])
+
+      const result = await userSettingsService.getAllSettings(1)
+
+      // Admin default should take precedence over code default
+      expect(result['market.preferredCurrency']).toBe('ICA')
+      // Other settings should still use code defaults
+      expect(result['display.locationDisplayMode']).toBe('both')
+    })
+
+    it('should apply user overrides over admin defaults', async () => {
+      // Admin has set a default currency
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': '"ICA"',
+      })
+      // User has their own preference
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"NCC"' }])
+
+      const result = await userSettingsService.getAllSettings(1)
+
+      // User override should take precedence over admin default
+      expect(result['market.preferredCurrency']).toBe('NCC')
+    })
+
+    it('should apply multiple admin defaults', async () => {
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': '"AIC"',
+        'defaults.general.timezone': '"America/New_York"',
+        'defaults.market.automaticPricing': 'true',
+      })
+      mockWhere.mockResolvedValueOnce([])
+
+      const result = await userSettingsService.getAllSettings(1)
+
+      expect(result['market.preferredCurrency']).toBe('AIC')
+      expect(result['general.timezone']).toBe('America/New_York')
+      expect(result['market.automaticPricing']).toBe(true)
+    })
+
+    it('should ignore invalid JSON in admin defaults', async () => {
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': 'invalid-json',
+      })
+      mockWhere.mockResolvedValueOnce([])
+
+      const result = await userSettingsService.getAllSettings(1)
+
+      // Should fall back to code default
+      expect(result['market.preferredCurrency']).toBe('CIS')
+    })
+
+    it('should cache admin defaults', async () => {
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': '"ICA"',
+      })
+      mockWhere.mockResolvedValue([])
+
+      // First call
+      await userSettingsService.getAllSettings(1)
+      // Second call with different user
+      await userSettingsService.getAllSettings(2)
+
+      // settingsService.getAll should only be called once due to caching
+      expect(settingsService.getAll).toHaveBeenCalledTimes(1)
+    })
+
+    it('invalidateAdminDefaultsCache should clear admin defaults cache', async () => {
+      vi.mocked(settingsService.getAll).mockResolvedValue({
+        'defaults.market.preferredCurrency': '"ICA"',
+      })
+      mockWhere.mockResolvedValue([])
+
+      // First call
+      await userSettingsService.getAllSettings(1)
+      expect(settingsService.getAll).toHaveBeenCalledTimes(1)
+
+      // Invalidate admin cache
+      userSettingsService.invalidateAdminDefaultsCache()
+
+      // Second call should fetch admin defaults again
+      await userSettingsService.getAllSettings(2)
+      expect(settingsService.getAll).toHaveBeenCalledTimes(2)
     })
   })
 })

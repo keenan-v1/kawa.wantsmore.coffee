@@ -46,6 +46,9 @@ const httpLoggerOptions: PinoHttpOptions = {
   },
   // Redact sensitive headers
   redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-auth-token"]'],
+  // Custom log messages that include status code
+  customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
+  customErrorMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
   // Add custom properties including request/response bodies
   // Note: redaction happens in logger formatter, not here (to avoid double-redaction)
   customProps: (req, res) => {
@@ -56,10 +59,10 @@ const httpLoggerOptions: PinoHttpOptions = {
     if (resBody !== undefined) props.resBody = resBody
     return props
   },
-  // Customize serializers to use pino's defaults + our additions
+  // Customize serializers - use pino's request serializer, omit redundant res object
   serializers: {
     req: pinoHttp.stdSerializers.req,
-    res: pinoHttp.stdSerializers.res,
+    res: () => undefined, // Status code is now in the message
   },
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

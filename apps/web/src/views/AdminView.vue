@@ -22,6 +22,7 @@
       <v-tab value="roles">Roles</v-tab>
       <v-tab value="discord">Discord</v-tab>
       <v-tab value="priceLists">Price Lists</v-tab>
+      <v-tab value="globalDefaults">Global Defaults</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -1041,6 +1042,242 @@
           </v-card-text>
         </v-card>
       </v-tabs-window-item>
+
+      <!-- GLOBAL DEFAULTS TAB -->
+      <v-tabs-window-item value="globalDefaults">
+        <v-card>
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-cog-outline</v-icon>
+                Global Default Settings
+              </v-col>
+              <v-col cols="auto">
+                <v-btn
+                  color="primary"
+                  variant="text"
+                  prepend-icon="mdi-refresh"
+                  :loading="loadingGlobalDefaults"
+                  @click="loadGlobalDefaults"
+                >
+                  Refresh
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+              Configure default values for user settings. These defaults apply to all users who have
+              not set their own preference. User-specific settings like FIO credentials and
+              favorites cannot be configured globally.
+            </v-alert>
+
+            <div v-if="loadingGlobalDefaults" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-expansion-panels v-else-if="globalDefaults.length > 0" v-model="openDefaultPanels">
+              <v-expansion-panel
+                v-for="category in globalDefaultCategories"
+                :key="category.id"
+                :value="category.id"
+              >
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center flex-grow-1">
+                    <strong>{{ category.label }}</strong>
+                    <span class="text-medium-emphasis ml-2">{{ category.description }}</span>
+                    <v-spacer />
+                    <v-chip
+                      v-if="getOverrideCount(category.id) > 0"
+                      size="x-small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      {{ getOverrideCount(category.id) }} override{{
+                        getOverrideCount(category.id) > 1 ? 's' : ''
+                      }}
+                    </v-chip>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-list density="compact">
+                    <v-list-item
+                      v-for="setting in getSettingsForCategory(category.id)"
+                      :key="setting.key"
+                      class="px-0"
+                    >
+                      <v-row align="center" no-gutters>
+                        <v-col cols="12" md="4">
+                          <div class="font-weight-medium">{{ setting.definition.label }}</div>
+                          <div class="text-caption text-medium-emphasis">
+                            {{ setting.definition.description }}
+                          </div>
+                        </v-col>
+                        <v-col cols="12" md="5" class="py-2 py-md-0">
+                          <!-- Timezone: autocomplete -->
+                          <v-autocomplete
+                            v-if="setting.key === 'general.timezone'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="timezoneOptions"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-clock-outline"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Location display mode: select with descriptive options -->
+                          <v-select
+                            v-else-if="setting.key === 'display.locationDisplayMode'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="locationDisplayModes"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-map-marker"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Commodity display mode: select with descriptive options -->
+                          <v-select
+                            v-else-if="setting.key === 'display.commodityDisplayMode'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="commodityDisplayModes"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-package-variant"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Preferred currency: select -->
+                          <v-select
+                            v-else-if="setting.key === 'market.preferredCurrency'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="currencyOptions"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-currency-usd"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Default price list: autocomplete with clearable -->
+                          <v-autocomplete
+                            v-else-if="setting.key === 'market.defaultPriceList'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] as string | null) ?? null
+                            "
+                            :items="globalDefaultsPriceLists"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-clipboard-list"
+                            clearable
+                            :loading="
+                              savingGlobalDefault === setting.key || loadingGlobalDefaultsPriceLists
+                            "
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Boolean type -->
+                          <v-switch
+                            v-else-if="setting.definition.type === 'boolean'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as boolean
+                            "
+                            density="compact"
+                            hide-details
+                            color="primary"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Enum type (generic fallback) -->
+                          <v-select
+                            v-else-if="setting.definition.type === 'enum'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="setting.definition.enumOptions || []"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- String type (generic fallback) -->
+                          <v-text-field
+                            v-else-if="setting.definition.type === 'string'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            :loading="savingGlobalDefault === setting.key"
+                            @blur="
+                              saveGlobalDefault(
+                                setting.key,
+                                ($event.target as HTMLInputElement).value
+                              )
+                            "
+                            @keyup.enter="
+                              saveGlobalDefault(
+                                setting.key,
+                                ($event.target as HTMLInputElement).value
+                              )
+                            "
+                          />
+                        </v-col>
+                        <v-col cols="12" md="3" class="text-md-right">
+                          <div
+                            v-if="setting.adminDefault !== null"
+                            class="d-flex align-center justify-end"
+                          >
+                            <v-chip size="x-small" color="primary" class="mr-2">
+                              Customized
+                            </v-chip>
+                            <v-btn
+                              size="small"
+                              variant="text"
+                              color="error"
+                              :loading="resettingGlobalDefault === setting.key"
+                              @click="resetGlobalDefault(setting.key)"
+                            >
+                              Reset
+                            </v-btn>
+                          </div>
+                          <div v-else class="text-caption text-medium-emphasis">
+                            Using code default
+                          </div>
+                        </v-col>
+                      </v-row>
+                    </v-list-item>
+                  </v-list>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <v-alert v-else type="info" variant="tonal">
+              No configurable settings found. This may indicate a loading error.
+            </v-alert>
+          </v-card-text>
+        </v-card>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Edit User Dialog -->
@@ -1534,7 +1771,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import type { Role } from '../types'
-import type { DiscordSettings, DiscordRoleMapping, DiscordRole } from '@kawakawa/types'
+import type {
+  DiscordSettings,
+  DiscordRoleMapping,
+  DiscordRole,
+  GlobalDefaultSetting,
+} from '@kawakawa/types'
 import { api } from '../services/api'
 import type {
   PriceSettingsResponse,
@@ -1768,6 +2010,76 @@ const fioPriceFieldOptions = [
   { title: 'Ask (lowest sell)', value: 'Ask' },
   { title: 'Bid (highest buy)', value: 'Bid' },
 ]
+
+// Global Defaults management state
+const globalDefaults = ref<GlobalDefaultSetting[]>([])
+const loadingGlobalDefaults = ref(false)
+const globalDefaultsForm = ref<Record<string, unknown>>({})
+const savingGlobalDefault = ref<string | null>(null)
+const resettingGlobalDefault = ref<string | null>(null)
+const openDefaultPanels = ref<string[]>([])
+
+// Global Defaults: Reference data for special fields
+const globalDefaultsPriceLists = ref<{ title: string; value: string }[]>([])
+const loadingGlobalDefaultsPriceLists = ref(false)
+
+// Timezone options
+const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+const timezoneOptions = computed(() => {
+  const timezones =
+    (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.('timeZone') ||
+    []
+  return [
+    { title: `Auto (${detectedTimezone})`, value: 'auto' },
+    ...timezones.map((tz: string) => ({ title: tz, value: tz })),
+  ]
+})
+
+// Display mode options
+const locationDisplayModes = [
+  { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
+  { title: 'Natural IDs Only (e.g., BEN, UV-351a)', value: 'natural-ids-only' },
+  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' },
+]
+const commodityDisplayModes = [
+  { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
+  { title: 'Name Only (e.g., Basic Rations)', value: 'name-only' },
+  { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
+]
+
+// Currency options (from settings enum)
+const currencyOptions = ['ICA', 'CIS', 'AIC', 'NCC']
+
+// Category metadata for Global Defaults
+const globalDefaultCategories = computed(() => {
+  const categories = new Map<string, { id: string; label: string; description: string }>()
+  for (const setting of globalDefaults.value) {
+    const category = setting.definition.category
+    if (!categories.has(category)) {
+      categories.set(category, getCategoryInfo(category))
+    }
+  }
+  return Array.from(categories.values())
+})
+
+function getCategoryInfo(category: string): { id: string; label: string; description: string } {
+  const categoryMap: Record<string, { label: string; description: string }> = {
+    general: { label: 'General', description: 'Timezone, formatting, and display preferences' },
+    display: { label: 'Display', description: 'How names and identifiers are shown' },
+    market: { label: 'Market', description: 'Trading preferences' },
+    notifications: { label: 'Notifications', description: 'Notification preferences' },
+    fio: { label: 'FIO Integration', description: 'FIO data synchronization settings' },
+  }
+  return { id: category, ...(categoryMap[category] || { label: category, description: '' }) }
+}
+
+function getSettingsForCategory(categoryId: string): GlobalDefaultSetting[] {
+  return globalDefaults.value.filter(s => s.definition.category === categoryId)
+}
+
+function getOverrideCount(categoryId: string): number {
+  return getSettingsForCategory(categoryId).filter(s => s.adminDefault !== null).length
+}
 
 // Discord computed properties - OAuth and Bot settings
 const hasOAuthSettingsChanges = computed(() => {
@@ -2798,6 +3110,97 @@ const getAdjustmentScope = (adjustment: PriceAdjustmentResponse) => {
   return parts.join(' / ')
 }
 
+// Global Defaults management functions
+const loadGlobalDefaults = async () => {
+  try {
+    loadingGlobalDefaults.value = true
+
+    // Load price lists for the defaultPriceList setting
+    if (globalDefaultsPriceLists.value.length === 0) {
+      loadingGlobalDefaultsPriceLists.value = true
+      try {
+        const priceLists = await api.priceLists.list()
+        globalDefaultsPriceLists.value = priceLists.map(pl => ({
+          title: `${pl.code} - ${pl.name}`,
+          value: pl.code,
+        }))
+      } catch (error) {
+        console.error('Failed to load price lists for global defaults', error)
+      } finally {
+        loadingGlobalDefaultsPriceLists.value = false
+      }
+    }
+
+    const response = await api.adminGlobalDefaults.get()
+    globalDefaults.value = response.settings
+    // Initialize form with current values
+    globalDefaultsForm.value = {}
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+  } catch (error) {
+    console.error('Failed to load global defaults', error)
+    showSnackbar('Failed to load global defaults', 'error')
+  } finally {
+    loadingGlobalDefaults.value = false
+  }
+}
+
+const saveGlobalDefault = async (key: string, value: unknown) => {
+  // Normalize empty strings to null for nullable string fields
+  let normalizedValue = value
+  if (value === '' && key === 'market.defaultPriceList') {
+    normalizedValue = null
+  }
+
+  // Don't save if value hasn't changed
+  const currentSetting = globalDefaults.value.find(s => s.key === key)
+  const currentValue = currentSetting?.adminDefault ?? currentSetting?.codeDefault
+  if (JSON.stringify(normalizedValue) === JSON.stringify(currentValue)) {
+    return
+  }
+
+  try {
+    savingGlobalDefault.value = key
+    const response = await api.adminGlobalDefaults.update({
+      settings: { [key]: normalizedValue },
+    })
+    globalDefaults.value = response.settings
+    // Update form
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+    showSnackbar('Default saved', 'success')
+  } catch (error) {
+    console.error('Failed to save global default', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to save default', 'error')
+    // Revert form value
+    if (currentSetting) {
+      globalDefaultsForm.value[key] = currentSetting.adminDefault ?? currentSetting.codeDefault
+    }
+  } finally {
+    savingGlobalDefault.value = null
+  }
+}
+
+const resetGlobalDefault = async (key: string) => {
+  try {
+    resettingGlobalDefault.value = key
+    const response = await api.adminGlobalDefaults.reset(key)
+    globalDefaults.value = response.settings
+    // Update form
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+    showSnackbar('Default reset to code value', 'success')
+  } catch (error) {
+    console.error('Failed to reset global default', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to reset default', 'error')
+  } finally {
+    resettingGlobalDefault.value = null
+  }
+}
+
 // Watch for tab changes to load data
 watch(activeTab, async newTab => {
   if (newTab === 'permissions') {
@@ -2824,6 +3227,11 @@ watch(activeTab, async newTab => {
     }
     // Always load all data together
     await Promise.all([loadPriceLists(), loadImportConfigs(), loadPriceAdjustments()])
+  } else if (newTab === 'globalDefaults') {
+    // Load global defaults if not already loaded
+    if (globalDefaults.value.length === 0) {
+      await loadGlobalDefaults()
+    }
   }
 })
 
