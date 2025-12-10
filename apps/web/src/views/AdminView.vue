@@ -21,6 +21,8 @@
       <v-tab value="permissions">Permissions</v-tab>
       <v-tab value="roles">Roles</v-tab>
       <v-tab value="discord">Discord</v-tab>
+      <v-tab value="priceLists">Price Lists</v-tab>
+      <v-tab value="globalDefaults">Global Defaults</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="activeTab">
@@ -657,6 +659,625 @@
           </v-col>
         </v-row>
       </v-tabs-window-item>
+
+      <!-- PRICE LISTS TAB -->
+      <v-tabs-window-item value="priceLists">
+        <!-- Price Lists Management -->
+        <v-card class="mb-4">
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-format-list-bulleted</v-icon>
+                Price Lists
+              </v-col>
+              <v-col cols="auto">
+                <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreatePriceListDialog">
+                  Add Price List
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <div v-if="loadingPriceLists" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-expansion-panels v-else-if="priceLists.length > 0" variant="accordion">
+              <v-expansion-panel v-for="priceList in priceLists" :key="priceList.code">
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center flex-grow-1">
+                    <v-chip
+                      :color="priceList.type === 'fio' ? 'blue' : 'green'"
+                      size="small"
+                      class="mr-3"
+                    >
+                      {{ priceList.type.toUpperCase() }}
+                    </v-chip>
+                    <div>
+                      <strong>{{ priceList.code }}</strong>
+                      <span class="text-medium-emphasis ml-2">{{ priceList.name }}</span>
+                    </div>
+                    <v-spacer />
+                    <div class="d-flex align-center ga-2 mr-4">
+                      <v-chip size="x-small" color="grey">
+                        {{ priceList.priceCount || 0 }} prices
+                      </v-chip>
+                      <v-chip size="x-small" color="grey">
+                        {{ priceList.importConfigCount || 0 }} imports
+                      </v-chip>
+                      <v-chip size="x-small" :color="priceList.isActive ? 'success' : 'error'">
+                        {{ priceList.isActive ? 'Active' : 'Inactive' }}
+                      </v-chip>
+                    </div>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <p v-if="priceList.description" class="text-body-2 text-medium-emphasis mb-2">
+                        {{ priceList.description }}
+                      </p>
+                      <div class="text-body-2">
+                        <strong>Currency:</strong> {{ priceList.currency }}<br />
+                        <strong>Default Location:</strong>
+                        {{ priceList.defaultLocationName || priceList.defaultLocationId || 'None' }}
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="6" class="text-md-right">
+                      <v-btn
+                        v-if="priceList.type === 'fio'"
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        class="mr-2"
+                        :loading="syncingFioPriceLists.has(priceList.code)"
+                        @click.stop="syncFioPriceList(priceList)"
+                      >
+                        <v-icon start>mdi-sync</v-icon>
+                        Sync from FIO
+                      </v-btn>
+                      <v-btn
+                        variant="outlined"
+                        size="small"
+                        class="mr-2"
+                        @click.stop="openEditPriceListDialog(priceList)"
+                      >
+                        <v-icon start>mdi-pencil</v-icon>
+                        Edit
+                      </v-btn>
+                      <v-btn
+                        v-if="priceList.type !== 'fio'"
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        @click.stop="confirmDeletePriceList(priceList)"
+                      >
+                        <v-icon start>mdi-delete</v-icon>
+                        Delete
+                      </v-btn>
+                    </v-col>
+                  </v-row>
+
+                  <!-- Import Configs for this price list -->
+                  <v-divider class="my-4" />
+                  <div class="d-flex align-center mb-2">
+                    <h4 class="text-subtitle-2">Import Configurations</h4>
+                    <v-spacer />
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="primary"
+                      @click.stop="openCreateImportConfigDialog(priceList.code)"
+                    >
+                      <v-icon start>mdi-plus</v-icon>
+                      Add Import
+                    </v-btn>
+                  </div>
+
+                  <v-table
+                    v-if="getImportConfigsForPriceList(priceList.code).length > 0"
+                    density="compact"
+                  >
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Format</th>
+                        <th class="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="config in getImportConfigsForPriceList(priceList.code)"
+                        :key="config.id"
+                      >
+                        <td>{{ config.name }}</td>
+                        <td>
+                          <v-chip size="x-small">{{ config.sourceType }}</v-chip>
+                        </td>
+                        <td>
+                          <v-chip
+                            size="x-small"
+                            :color="config.format === 'pivot' ? 'purple' : 'teal'"
+                          >
+                            {{ config.format }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right">
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            :loading="syncingConfigs.has(config.id)"
+                            :disabled="!config.sheetsUrl"
+                            @click.stop="syncImportConfig(config)"
+                          >
+                            <v-icon>mdi-sync</v-icon>
+                            <v-tooltip activator="parent" location="top">Sync Now</v-tooltip>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            @click.stop="openEditImportConfigDialog(config)"
+                          >
+                            <v-icon>mdi-pencil</v-icon>
+                            <v-tooltip activator="parent" location="top">Edit</v-tooltip>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            size="x-small"
+                            variant="text"
+                            color="error"
+                            @click.stop="confirmDeleteImportConfig(config)"
+                          >
+                            <v-icon>mdi-delete</v-icon>
+                            <v-tooltip activator="parent" location="top">Delete</v-tooltip>
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                  <p v-else class="text-body-2 text-medium-emphasis">
+                    No import configurations. Add one to enable automated price imports.
+                  </p>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <v-alert v-else type="info" variant="tonal">
+              No price lists configured. Click "Add Price List" to create one.
+            </v-alert>
+          </v-card-text>
+        </v-card>
+
+        <v-row>
+          <v-col cols="12" lg="6">
+            <!-- FIO API Settings -->
+            <v-card class="mb-4">
+              <v-card-title>
+                <v-icon class="mr-2">mdi-api</v-icon>
+                FIO API Settings
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Configure the FIO REST API endpoint used for syncing exchange prices and other
+                  game data.
+                </v-alert>
+
+                <v-text-field
+                  v-model="priceSettingsForm.fioBaseUrl"
+                  label="FIO Base URL"
+                  placeholder="https://rest.fnar.net"
+                  hint="The base URL for the FIO REST API"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-select
+                  v-model="priceSettingsForm.fioPriceField"
+                  :items="fioPriceFieldOptions"
+                  label="Price Field"
+                  hint="Which FIO price field to use when syncing exchange prices"
+                  persistent-hint
+                  class="mb-4"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingFioSettings"
+                  :disabled="!hasFioSettingsChanges"
+                  @click="saveFioSettings"
+                >
+                  Save FIO Settings
+                </v-btn>
+              </v-card-text>
+            </v-card>
+          </v-col>
+
+          <v-col cols="12" lg="6">
+            <!-- Google Sheets API Settings -->
+            <v-card>
+              <v-card-title>
+                <v-icon class="mr-2">mdi-google-spreadsheet</v-icon>
+                Google Sheets API
+              </v-card-title>
+              <v-card-text>
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Configure Google Sheets API access for importing price data from spreadsheets.
+                </v-alert>
+
+                <v-text-field
+                  v-model="priceSettingsForm.googleApiKey"
+                  :type="showGoogleApiKey ? 'text' : 'password'"
+                  label="Google API Key"
+                  :placeholder="
+                    priceSettings?.hasGoogleSheetsApiKey
+                      ? '••••••••••••••••'
+                      : 'Enter Google API key'
+                  "
+                  :hint="
+                    priceSettings?.hasGoogleSheetsApiKey
+                      ? 'API key is configured (enter new value to change)'
+                      : 'API key with Google Sheets API access'
+                  "
+                  persistent-hint
+                  class="mb-4"
+                  :append-inner-icon="showGoogleApiKey ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="showGoogleApiKey = !showGoogleApiKey"
+                />
+
+                <v-btn
+                  color="primary"
+                  :loading="savingGoogleSettings"
+                  :disabled="!priceSettingsForm.googleApiKey"
+                  @click="saveGoogleSettings"
+                >
+                  Save Google API Key
+                </v-btn>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+
+        <!-- Price Adjustments Management -->
+        <v-card class="mt-4">
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-tune</v-icon>
+                Price Adjustments
+              </v-col>
+              <v-col cols="auto">
+                <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateAdjustmentDialog">
+                  Add Adjustment
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+              Price adjustments allow you to apply percentage or fixed value changes to prices. They
+              can be scoped to specific price lists, commodities, or locations. Global adjustments
+              (no filters) apply to all prices.
+            </v-alert>
+
+            <div v-if="loadingAdjustments" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-table v-else-if="priceAdjustments.length > 0" density="compact">
+              <thead>
+                <tr>
+                  <th>Scope</th>
+                  <th>Type</th>
+                  <th>Value</th>
+                  <th>Priority</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="adjustment in priceAdjustments" :key="adjustment.id">
+                  <td>
+                    <span class="text-body-2">{{ getAdjustmentScope(adjustment) }}</span>
+                  </td>
+                  <td>
+                    <v-chip
+                      size="x-small"
+                      :color="adjustment.adjustmentType === 'percentage' ? 'blue' : 'purple'"
+                    >
+                      {{ adjustment.adjustmentType }}
+                    </v-chip>
+                  </td>
+                  <td>
+                    <span
+                      :class="
+                        parseFloat(adjustment.adjustmentValue) >= 0 ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ formatAdjustmentValue(adjustment) }}
+                    </span>
+                  </td>
+                  <td>{{ adjustment.priority }}</td>
+                  <td>
+                    <span class="text-body-2 text-medium-emphasis">
+                      {{ adjustment.description || '-' }}
+                    </span>
+                  </td>
+                  <td>
+                    <v-chip size="x-small" :color="adjustment.isActive ? 'success' : 'error'">
+                      {{ adjustment.isActive ? 'Active' : 'Inactive' }}
+                    </v-chip>
+                  </td>
+                  <td class="text-right">
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      @click="openEditAdjustmentDialog(adjustment)"
+                    >
+                      <v-icon>mdi-pencil</v-icon>
+                      <v-tooltip activator="parent" location="top">Edit</v-tooltip>
+                    </v-btn>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="error"
+                      @click="confirmDeleteAdjustment(adjustment)"
+                    >
+                      <v-icon>mdi-delete</v-icon>
+                      <v-tooltip activator="parent" location="top">Delete</v-tooltip>
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+
+            <v-alert v-else type="info" variant="tonal">
+              No price adjustments configured. Click "Add Adjustment" to create one.
+            </v-alert>
+          </v-card-text>
+        </v-card>
+      </v-tabs-window-item>
+
+      <!-- GLOBAL DEFAULTS TAB -->
+      <v-tabs-window-item value="globalDefaults">
+        <v-card>
+          <v-card-title>
+            <v-row align="center" no-gutters>
+              <v-col>
+                <v-icon class="mr-2">mdi-cog-outline</v-icon>
+                Global Default Settings
+              </v-col>
+              <v-col cols="auto">
+                <v-btn
+                  color="primary"
+                  variant="text"
+                  prepend-icon="mdi-refresh"
+                  :loading="loadingGlobalDefaults"
+                  @click="loadGlobalDefaults"
+                >
+                  Refresh
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+              Configure default values for user settings. These defaults apply to all users who have
+              not set their own preference. User-specific settings like FIO credentials and
+              favorites cannot be configured globally.
+            </v-alert>
+
+            <div v-if="loadingGlobalDefaults" class="text-center py-4">
+              <v-progress-circular indeterminate />
+            </div>
+
+            <v-expansion-panels v-else-if="globalDefaults.length > 0" v-model="openDefaultPanels">
+              <v-expansion-panel
+                v-for="category in globalDefaultCategories"
+                :key="category.id"
+                :value="category.id"
+              >
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center flex-grow-1">
+                    <strong>{{ category.label }}</strong>
+                    <span class="text-medium-emphasis ml-2">{{ category.description }}</span>
+                    <v-spacer />
+                    <v-chip
+                      v-if="getOverrideCount(category.id) > 0"
+                      size="x-small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      {{ getOverrideCount(category.id) }} override{{
+                        getOverrideCount(category.id) > 1 ? 's' : ''
+                      }}
+                    </v-chip>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-list density="compact">
+                    <v-list-item
+                      v-for="setting in getSettingsForCategory(category.id)"
+                      :key="setting.key"
+                      class="px-0"
+                    >
+                      <v-row align="center" no-gutters>
+                        <v-col cols="12" md="4">
+                          <div class="font-weight-medium">{{ setting.definition.label }}</div>
+                          <div class="text-caption text-medium-emphasis">
+                            {{ setting.definition.description }}
+                          </div>
+                        </v-col>
+                        <v-col cols="12" md="5" class="py-2 py-md-0">
+                          <!-- Timezone: autocomplete -->
+                          <v-autocomplete
+                            v-if="setting.key === 'general.timezone'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="timezoneOptions"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-clock-outline"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Location display mode: select with descriptive options -->
+                          <v-select
+                            v-else-if="setting.key === 'display.locationDisplayMode'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="locationDisplayModes"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-map-marker"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Commodity display mode: select with descriptive options -->
+                          <v-select
+                            v-else-if="setting.key === 'display.commodityDisplayMode'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="commodityDisplayModes"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-package-variant"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Preferred currency: select -->
+                          <v-select
+                            v-else-if="setting.key === 'market.preferredCurrency'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="currencyOptions"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-currency-usd"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Default price list: autocomplete with clearable -->
+                          <v-autocomplete
+                            v-else-if="setting.key === 'market.defaultPriceList'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] as string | null) ?? null
+                            "
+                            :items="globalDefaultsPriceLists"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            prepend-inner-icon="mdi-clipboard-list"
+                            clearable
+                            :loading="
+                              savingGlobalDefault === setting.key || loadingGlobalDefaultsPriceLists
+                            "
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Boolean type -->
+                          <v-switch
+                            v-else-if="setting.definition.type === 'boolean'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as boolean
+                            "
+                            density="compact"
+                            hide-details
+                            color="primary"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- Enum type (generic fallback) -->
+                          <v-select
+                            v-else-if="setting.definition.type === 'enum'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            :items="setting.definition.enumOptions || []"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            :loading="savingGlobalDefault === setting.key"
+                            @update:model-value="saveGlobalDefault(setting.key, $event)"
+                          />
+                          <!-- String type (generic fallback) -->
+                          <v-text-field
+                            v-else-if="setting.definition.type === 'string'"
+                            :model-value="
+                              (globalDefaultsForm[setting.key] ??
+                                setting.effectiveDefault) as string
+                            "
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            :loading="savingGlobalDefault === setting.key"
+                            @blur="
+                              saveGlobalDefault(
+                                setting.key,
+                                ($event.target as HTMLInputElement).value
+                              )
+                            "
+                            @keyup.enter="
+                              saveGlobalDefault(
+                                setting.key,
+                                ($event.target as HTMLInputElement).value
+                              )
+                            "
+                          />
+                        </v-col>
+                        <v-col cols="12" md="3" class="text-md-right">
+                          <div
+                            v-if="setting.adminDefault !== null"
+                            class="d-flex align-center justify-end"
+                          >
+                            <v-chip size="x-small" color="primary" class="mr-2">
+                              Customized
+                            </v-chip>
+                            <v-btn
+                              size="small"
+                              variant="text"
+                              color="error"
+                              :loading="resettingGlobalDefault === setting.key"
+                              @click="resetGlobalDefault(setting.key)"
+                            >
+                              Reset
+                            </v-btn>
+                          </div>
+                          <div v-else class="text-caption text-medium-emphasis">
+                            Using code default
+                          </div>
+                        </v-col>
+                      </v-row>
+                    </v-list-item>
+                  </v-list>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <v-alert v-else type="info" variant="tonal">
+              No configurable settings found. This may indicate a loading error.
+            </v-alert>
+          </v-card-text>
+        </v-card>
+      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Edit User Dialog -->
@@ -944,14 +1565,232 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Price List Dialog -->
+    <PriceListDialog
+      v-model="priceListDialog"
+      :price-list="editingPriceList"
+      @saved="onPriceListSaved"
+    />
+
+    <!-- Import Config Dialog -->
+    <ImportConfigDialog
+      v-model="importConfigDialog"
+      :config="editingImportConfig"
+      :price-list-code="newImportConfigPriceList"
+      @saved="onImportConfigSaved"
+    />
+
+    <!-- Delete Price List Confirmation Dialog -->
+    <v-dialog v-model="deletePriceListDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Price List</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This will permanently delete the price list and all associated prices.
+          </v-alert>
+          Are you sure you want to delete <strong>{{ deletingPriceList?.code }}</strong> ({{
+            deletingPriceList?.name
+          }})?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deletePriceListDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingPriceListLoading" @click="deletePriceListConfirm">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Import Config Confirmation Dialog -->
+    <v-dialog v-model="deleteImportConfigDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Import Configuration</v-card-title>
+        <v-card-text>
+          Are you sure you want to delete the import configuration
+          <strong>{{ deletingImportConfig?.name }}</strong
+          >?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteImportConfigDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            :loading="deletingImportConfigLoading"
+            @click="deleteImportConfigConfirm"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Create/Edit Price Adjustment Dialog -->
+    <v-dialog v-model="adjustmentDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ editingAdjustment ? 'Edit Price Adjustment' : 'Create Price Adjustment' }}
+        </v-card-title>
+        <v-card-text>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="adjustmentForm.priceListCode"
+                :items="[
+                  { title: 'All Price Lists', value: null },
+                  ...priceLists.map(pl => ({ title: `${pl.code} - ${pl.name}`, value: pl.code })),
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Price List"
+                hint="Leave empty to apply to all price lists"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="adjustmentForm.commodityTicker"
+                label="Commodity Ticker"
+                hint="e.g., DW, RAT, H2O (leave empty for all)"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="adjustmentForm.locationId"
+                label="Location ID"
+                hint="e.g., BEN, MON (leave empty for all)"
+                persistent-hint
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="adjustmentForm.priority"
+                type="number"
+                label="Priority"
+                hint="Higher priority adjustments applied first"
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="adjustmentForm.adjustmentType"
+                :items="[
+                  { title: 'Percentage (%)', value: 'percentage' },
+                  { title: 'Fixed Amount', value: 'fixed' },
+                ]"
+                item-title="title"
+                item-value="value"
+                label="Adjustment Type"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="adjustmentForm.adjustmentValue"
+                type="number"
+                step="0.01"
+                label="Value"
+                :hint="
+                  adjustmentForm.adjustmentType === 'percentage'
+                    ? 'e.g., 10 for +10%, -5 for -5%'
+                    : 'Fixed amount to add/subtract'
+                "
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
+
+          <v-text-field
+            v-model="adjustmentForm.description"
+            label="Description"
+            hint="Optional note explaining this adjustment"
+            persistent-hint
+            class="mt-4"
+          />
+
+          <v-switch
+            v-model="adjustmentForm.isActive"
+            label="Active"
+            color="success"
+            hint="Inactive adjustments are not applied to prices"
+            persistent-hint
+            class="mt-4"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="adjustmentDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingAdjustment" @click="saveAdjustment">
+            {{ editingAdjustment ? 'Update' : 'Create' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Price Adjustment Confirmation Dialog -->
+    <v-dialog v-model="deleteAdjustmentDialog" max-width="400">
+      <v-card>
+        <v-card-title>Delete Price Adjustment</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This will permanently delete this price adjustment.
+          </v-alert>
+          Are you sure you want to delete this adjustment?
+          <div v-if="deletingAdjustment" class="mt-2">
+            <strong>{{ getAdjustmentScope(deletingAdjustment) }}</strong>
+            <br />
+            {{ formatAdjustmentValue(deletingAdjustment) }}
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deleteAdjustmentDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            :loading="deletingAdjustmentLoading"
+            @click="deleteAdjustmentConfirm"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useUrlTab } from '../composables'
 import type { Role } from '../types'
-import type { DiscordSettings, DiscordRoleMapping, DiscordRole } from '@kawakawa/types'
+import type {
+  DiscordSettings,
+  DiscordRoleMapping,
+  DiscordRole,
+  GlobalDefaultSetting,
+} from '@kawakawa/types'
 import { api } from '../services/api'
+import type {
+  PriceSettingsResponse,
+  FioPriceField,
+  PriceListDefinition,
+  ImportConfigResponse,
+  PriceAdjustmentResponse,
+  CreatePriceAdjustmentRequest,
+  UpdatePriceAdjustmentRequest,
+  AdjustmentType,
+} from '../services/api'
+import PriceListDialog from '../components/PriceListDialog.vue'
+import ImportConfigDialog from '../components/ImportConfigDialog.vue'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -999,7 +1838,19 @@ interface RolePermissionWithDetails {
   allowed: boolean
 }
 
-const activeTab = ref('approvals')
+const ADMIN_TABS = [
+  'approvals',
+  'users',
+  'permissions',
+  'roles',
+  'discord',
+  'priceLists',
+  'globalDefaults',
+] as const
+const activeTab = useUrlTab({
+  validTabs: ADMIN_TABS,
+  defaultTab: 'approvals',
+})
 
 const userHeaders = [
   { title: 'Username', key: 'username', sortable: false },
@@ -1113,6 +1964,136 @@ const deleteMappingDialog = ref(false)
 const deletingMapping = ref<DiscordRoleMapping | null>(null)
 const deletingMappingLoading = ref(false)
 
+// Price settings state
+const priceSettings = ref<PriceSettingsResponse | null>(null)
+const priceSettingsForm = ref({
+  fioBaseUrl: '',
+  fioPriceField: 'PriceAverage' as FioPriceField,
+  googleApiKey: '',
+})
+const showGoogleApiKey = ref(false)
+const savingFioSettings = ref(false)
+const savingGoogleSettings = ref(false)
+
+// Price Lists management state
+const priceLists = ref<PriceListDefinition[]>([])
+const loadingPriceLists = ref(false)
+const priceListDialog = ref(false)
+const editingPriceList = ref<PriceListDefinition | null>(null)
+const deletingPriceList = ref<PriceListDefinition | null>(null)
+const deletePriceListDialog = ref(false)
+const deletingPriceListLoading = ref(false)
+
+// Import Configs management state
+const importConfigs = ref<ImportConfigResponse[]>([])
+const loadingImportConfigs = ref(false)
+const importConfigDialog = ref(false)
+const editingImportConfig = ref<ImportConfigResponse | null>(null)
+const newImportConfigPriceList = ref<string | null>(null)
+const syncingConfigs = ref<Set<number>>(new Set())
+const syncingFioPriceLists = ref<Set<string>>(new Set())
+const deleteImportConfigDialog = ref(false)
+const deletingImportConfig = ref<ImportConfigResponse | null>(null)
+const deletingImportConfigLoading = ref(false)
+
+// Price Adjustments management state
+const priceAdjustments = ref<PriceAdjustmentResponse[]>([])
+const loadingAdjustments = ref(false)
+const adjustmentDialog = ref(false)
+const editingAdjustment = ref<PriceAdjustmentResponse | null>(null)
+const adjustmentForm = ref({
+  priceListCode: null as string | null,
+  commodityTicker: null as string | null,
+  locationId: null as string | null,
+  adjustmentType: 'percentage' as AdjustmentType,
+  adjustmentValue: 0,
+  priority: 0,
+  description: null as string | null,
+  isActive: true,
+})
+const savingAdjustment = ref(false)
+const deleteAdjustmentDialog = ref(false)
+const deletingAdjustment = ref<PriceAdjustmentResponse | null>(null)
+const deletingAdjustmentLoading = ref(false)
+
+const fioPriceFieldOptions = [
+  { title: 'Price Average (30-day weighted)', value: 'PriceAverage' },
+  { title: 'Market Maker Buy', value: 'MMBuy' },
+  { title: 'Market Maker Sell', value: 'MMSell' },
+  { title: 'Ask (lowest sell)', value: 'Ask' },
+  { title: 'Bid (highest buy)', value: 'Bid' },
+]
+
+// Global Defaults management state
+const globalDefaults = ref<GlobalDefaultSetting[]>([])
+const loadingGlobalDefaults = ref(false)
+const globalDefaultsForm = ref<Record<string, unknown>>({})
+const savingGlobalDefault = ref<string | null>(null)
+const resettingGlobalDefault = ref<string | null>(null)
+const openDefaultPanels = ref<string[]>([])
+
+// Global Defaults: Reference data for special fields
+const globalDefaultsPriceLists = ref<{ title: string; value: string }[]>([])
+const loadingGlobalDefaultsPriceLists = ref(false)
+
+// Timezone options
+const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+const timezoneOptions = computed(() => {
+  const timezones =
+    (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.('timeZone') ||
+    []
+  return [
+    { title: `Auto (${detectedTimezone})`, value: 'auto' },
+    ...timezones.map((tz: string) => ({ title: tz, value: tz })),
+  ]
+})
+
+// Display mode options
+const locationDisplayModes = [
+  { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
+  { title: 'Natural IDs Only (e.g., BEN, UV-351a)', value: 'natural-ids-only' },
+  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' },
+]
+const commodityDisplayModes = [
+  { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
+  { title: 'Name Only (e.g., Basic Rations)', value: 'name-only' },
+  { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
+]
+
+// Currency options (from settings enum)
+const currencyOptions = ['ICA', 'CIS', 'AIC', 'NCC']
+
+// Category metadata for Global Defaults
+const globalDefaultCategories = computed(() => {
+  const categories = new Map<string, { id: string; label: string; description: string }>()
+  for (const setting of globalDefaults.value) {
+    const category = setting.definition.category
+    if (!categories.has(category)) {
+      categories.set(category, getCategoryInfo(category))
+    }
+  }
+  return Array.from(categories.values())
+})
+
+function getCategoryInfo(category: string): { id: string; label: string; description: string } {
+  const categoryMap: Record<string, { label: string; description: string }> = {
+    general: { label: 'General', description: 'Timezone, formatting, and display preferences' },
+    display: { label: 'Display', description: 'How names and identifiers are shown' },
+    market: { label: 'Market', description: 'Trading preferences' },
+    notifications: { label: 'Notifications', description: 'Notification preferences' },
+    fio: { label: 'FIO Integration', description: 'FIO data synchronization settings' },
+  }
+  return { id: category, ...(categoryMap[category] || { label: category, description: '' }) }
+}
+
+function getSettingsForCategory(categoryId: string): GlobalDefaultSetting[] {
+  return globalDefaults.value.filter(s => s.definition.category === categoryId)
+}
+
+function getOverrideCount(categoryId: string): number {
+  return getSettingsForCategory(categoryId).filter(s => s.adminDefault !== null).length
+}
+
 // Discord computed properties - OAuth and Bot settings
 const hasOAuthSettingsChanges = computed(() => {
   return (
@@ -1127,6 +2108,14 @@ const hasBotSettingsChanges = computed(() => {
     discordForm.value.botToken !== '' ||
     discordForm.value.guildId !== (discordSettings.value?.guildId || '') ||
     discordForm.value.autoApprovalEnabled !== (discordSettings.value?.autoApprovalEnabled || false)
+  )
+})
+
+// Price settings computed properties
+const hasFioSettingsChanges = computed(() => {
+  return (
+    priceSettingsForm.value.fioBaseUrl !== (priceSettings.value?.fioBaseUrl || '') ||
+    priceSettingsForm.value.fioPriceField !== (priceSettings.value?.fioPriceField || 'PriceAverage')
   )
 })
 
@@ -1800,6 +2789,431 @@ const deleteMapping = async () => {
   }
 }
 
+// Price settings functions
+const loadPriceSettings = async () => {
+  try {
+    priceSettings.value = await api.adminPriceSettings.get()
+    // Initialize form with current settings
+    priceSettingsForm.value.fioBaseUrl = priceSettings.value.fioBaseUrl || ''
+    priceSettingsForm.value.fioPriceField = priceSettings.value.fioPriceField || 'PriceAverage'
+    // Don't populate API key - it should only be entered when changing
+    priceSettingsForm.value.googleApiKey = ''
+  } catch (error) {
+    console.error('Failed to load price settings', error)
+    showSnackbar('Failed to load price settings', 'error')
+  }
+}
+
+const saveFioSettings = async () => {
+  try {
+    savingFioSettings.value = true
+    priceSettings.value = await api.adminPriceSettings.updateFio({
+      baseUrl: priceSettingsForm.value.fioBaseUrl,
+      priceField: priceSettingsForm.value.fioPriceField,
+    })
+    showSnackbar('FIO settings saved successfully')
+  } catch (error) {
+    console.error('Failed to save FIO settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save FIO settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingFioSettings.value = false
+  }
+}
+
+const saveGoogleSettings = async () => {
+  try {
+    savingGoogleSettings.value = true
+    priceSettings.value = await api.adminPriceSettings.updateGoogle({
+      apiKey: priceSettingsForm.value.googleApiKey,
+    })
+    // Clear the API key field after save
+    priceSettingsForm.value.googleApiKey = ''
+    showSnackbar('Google API key saved successfully')
+  } catch (error) {
+    console.error('Failed to save Google settings', error)
+    const message = error instanceof Error ? error.message : 'Failed to save Google settings'
+    showSnackbar(message, 'error')
+  } finally {
+    savingGoogleSettings.value = false
+  }
+}
+
+// Price Lists management functions
+const loadPriceLists = async () => {
+  try {
+    loadingPriceLists.value = true
+    priceLists.value = await api.priceLists.list()
+  } catch (error) {
+    console.error('Failed to load price lists', error)
+    showSnackbar('Failed to load price lists', 'error')
+  } finally {
+    loadingPriceLists.value = false
+  }
+}
+
+const openCreatePriceListDialog = () => {
+  editingPriceList.value = null
+  priceListDialog.value = true
+}
+
+const openEditPriceListDialog = (priceList: PriceListDefinition) => {
+  editingPriceList.value = priceList
+  priceListDialog.value = true
+}
+
+const onPriceListSaved = async () => {
+  await loadPriceLists()
+  showSnackbar('Price list saved successfully')
+}
+
+const confirmDeletePriceList = (priceList: PriceListDefinition) => {
+  deletingPriceList.value = priceList
+  deletePriceListDialog.value = true
+}
+
+const deletePriceListConfirm = async () => {
+  if (!deletingPriceList.value) return
+
+  try {
+    deletingPriceListLoading.value = true
+    await api.priceLists.delete(deletingPriceList.value.code)
+    showSnackbar('Price list deleted successfully')
+    deletePriceListDialog.value = false
+    await loadPriceLists()
+  } catch (error) {
+    console.error('Failed to delete price list', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete price list'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingPriceListLoading.value = false
+    deletingPriceList.value = null
+  }
+}
+
+// Import Configs management functions
+const loadImportConfigs = async () => {
+  try {
+    loadingImportConfigs.value = true
+    const configs = await api.importConfigs.list()
+    importConfigs.value = configs
+  } catch (error) {
+    console.error('Failed to load import configs', error)
+    showSnackbar('Failed to load import configs', 'error')
+  } finally {
+    loadingImportConfigs.value = false
+  }
+}
+
+const openCreateImportConfigDialog = (priceListCode?: string) => {
+  editingImportConfig.value = null
+  newImportConfigPriceList.value = priceListCode || null
+  importConfigDialog.value = true
+}
+
+const openEditImportConfigDialog = (config: ImportConfigResponse) => {
+  editingImportConfig.value = config
+  newImportConfigPriceList.value = null
+  importConfigDialog.value = true
+}
+
+const onImportConfigSaved = async () => {
+  await loadImportConfigs()
+  await loadPriceLists() // Refresh counts
+  showSnackbar('Import configuration saved successfully')
+}
+
+const confirmDeleteImportConfig = (config: ImportConfigResponse) => {
+  deletingImportConfig.value = config
+  deleteImportConfigDialog.value = true
+}
+
+const deleteImportConfigConfirm = async () => {
+  if (!deletingImportConfig.value) return
+
+  try {
+    deletingImportConfigLoading.value = true
+    await api.importConfigs.delete(deletingImportConfig.value.id)
+    showSnackbar('Import configuration deleted successfully')
+    deleteImportConfigDialog.value = false
+    await loadImportConfigs()
+    await loadPriceLists() // Refresh counts
+  } catch (error) {
+    console.error('Failed to delete import config', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete import config'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingImportConfigLoading.value = false
+    deletingImportConfig.value = null
+  }
+}
+
+const syncImportConfig = async (config: ImportConfigResponse) => {
+  try {
+    syncingConfigs.value.add(config.id)
+    const result = await api.importConfigs.sync(config.id)
+    showSnackbar(
+      `Synced ${result.imported} new, ${result.updated} updated prices`,
+      result.errors.length > 0 ? 'error' : 'success'
+    )
+    await loadPriceLists() // Refresh price counts
+  } catch (error) {
+    console.error('Failed to sync import config', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync import config'
+    showSnackbar(message, 'error')
+  } finally {
+    syncingConfigs.value.delete(config.id)
+  }
+}
+
+const getImportConfigsForPriceList = (priceListCode: string) => {
+  return importConfigs.value.filter(c => c.priceListCode === priceListCode)
+}
+
+const syncFioPriceList = async (priceList: PriceListDefinition) => {
+  try {
+    syncingFioPriceLists.value.add(priceList.code)
+    const result = await api.fioPriceSync.syncExchange(priceList.code)
+    if (result.success) {
+      showSnackbar(`Synced ${result.totalUpdated} prices for ${priceList.code}`)
+    } else {
+      showSnackbar(
+        result.errors.length > 0 ? result.errors[0] : 'Sync completed with errors',
+        'error'
+      )
+    }
+    await loadPriceLists() // Refresh price counts
+  } catch (error) {
+    console.error('Failed to sync FIO prices', error)
+    const message = error instanceof Error ? error.message : 'Failed to sync FIO prices'
+    showSnackbar(message, 'error')
+  } finally {
+    syncingFioPriceLists.value.delete(priceList.code)
+  }
+}
+
+// Price Adjustments management functions
+const loadPriceAdjustments = async () => {
+  try {
+    loadingAdjustments.value = true
+    priceAdjustments.value = await api.priceAdjustments.list()
+  } catch (error) {
+    console.error('Failed to load price adjustments', error)
+    showSnackbar('Failed to load price adjustments', 'error')
+  } finally {
+    loadingAdjustments.value = false
+  }
+}
+
+const openCreateAdjustmentDialog = () => {
+  editingAdjustment.value = null
+  adjustmentForm.value = {
+    priceListCode: null,
+    commodityTicker: null,
+    locationId: null,
+    adjustmentType: 'percentage',
+    adjustmentValue: 0,
+    priority: 0,
+    description: null,
+    isActive: true,
+  }
+  adjustmentDialog.value = true
+}
+
+const openEditAdjustmentDialog = (adjustment: PriceAdjustmentResponse) => {
+  editingAdjustment.value = adjustment
+  adjustmentForm.value = {
+    priceListCode: adjustment.priceListCode,
+    commodityTicker: adjustment.commodityTicker,
+    locationId: adjustment.locationId,
+    adjustmentType: adjustment.adjustmentType as AdjustmentType,
+    adjustmentValue: parseFloat(adjustment.adjustmentValue),
+    priority: adjustment.priority,
+    description: adjustment.description,
+    isActive: adjustment.isActive,
+  }
+  adjustmentDialog.value = true
+}
+
+const saveAdjustment = async () => {
+  try {
+    savingAdjustment.value = true
+    if (editingAdjustment.value) {
+      const updateData: UpdatePriceAdjustmentRequest = {
+        priceListCode: adjustmentForm.value.priceListCode,
+        commodityTicker: adjustmentForm.value.commodityTicker,
+        locationId: adjustmentForm.value.locationId,
+        adjustmentType: adjustmentForm.value.adjustmentType,
+        adjustmentValue: adjustmentForm.value.adjustmentValue,
+        priority: adjustmentForm.value.priority,
+        description: adjustmentForm.value.description,
+        isActive: adjustmentForm.value.isActive,
+      }
+      await api.priceAdjustments.update(editingAdjustment.value.id, updateData)
+      showSnackbar('Adjustment updated successfully')
+    } else {
+      const createData: CreatePriceAdjustmentRequest = {
+        priceListCode: adjustmentForm.value.priceListCode,
+        commodityTicker: adjustmentForm.value.commodityTicker,
+        locationId: adjustmentForm.value.locationId,
+        adjustmentType: adjustmentForm.value.adjustmentType,
+        adjustmentValue: adjustmentForm.value.adjustmentValue,
+        priority: adjustmentForm.value.priority,
+        description: adjustmentForm.value.description,
+        isActive: adjustmentForm.value.isActive,
+      }
+      await api.priceAdjustments.create(createData)
+      showSnackbar('Adjustment created successfully')
+    }
+    adjustmentDialog.value = false
+    await loadPriceAdjustments()
+  } catch (error) {
+    console.error('Failed to save adjustment', error)
+    const message = error instanceof Error ? error.message : 'Failed to save adjustment'
+    showSnackbar(message, 'error')
+  } finally {
+    savingAdjustment.value = false
+  }
+}
+
+const confirmDeleteAdjustment = (adjustment: PriceAdjustmentResponse) => {
+  deletingAdjustment.value = adjustment
+  deleteAdjustmentDialog.value = true
+}
+
+const deleteAdjustmentConfirm = async () => {
+  if (!deletingAdjustment.value) return
+  try {
+    deletingAdjustmentLoading.value = true
+    await api.priceAdjustments.delete(deletingAdjustment.value.id)
+    showSnackbar('Adjustment deleted successfully')
+    deleteAdjustmentDialog.value = false
+    await loadPriceAdjustments()
+  } catch (error) {
+    console.error('Failed to delete adjustment', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete adjustment'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingAdjustmentLoading.value = false
+    deletingAdjustment.value = null
+  }
+}
+
+const formatAdjustmentValue = (adjustment: PriceAdjustmentResponse) => {
+  const value = parseFloat(adjustment.adjustmentValue)
+  if (adjustment.adjustmentType === 'percentage') {
+    return `${value >= 0 ? '+' : ''}${value}%`
+  }
+  return `${value >= 0 ? '+' : ''}${value}`
+}
+
+const getAdjustmentScope = (adjustment: PriceAdjustmentResponse) => {
+  const parts = []
+  if (adjustment.priceListCode) {
+    parts.push(adjustment.priceListCode)
+  } else {
+    parts.push('All price lists')
+  }
+  if (adjustment.commodityTicker) {
+    parts.push(adjustment.commodityName || adjustment.commodityTicker)
+  }
+  if (adjustment.locationId) {
+    parts.push(adjustment.locationName || adjustment.locationId)
+  }
+  return parts.join(' / ')
+}
+
+// Global Defaults management functions
+const loadGlobalDefaults = async () => {
+  try {
+    loadingGlobalDefaults.value = true
+
+    // Load price lists for the defaultPriceList setting
+    if (globalDefaultsPriceLists.value.length === 0) {
+      loadingGlobalDefaultsPriceLists.value = true
+      try {
+        const priceLists = await api.priceLists.list()
+        globalDefaultsPriceLists.value = priceLists.map(pl => ({
+          title: `${pl.code} - ${pl.name}`,
+          value: pl.code,
+        }))
+      } catch (error) {
+        console.error('Failed to load price lists for global defaults', error)
+      } finally {
+        loadingGlobalDefaultsPriceLists.value = false
+      }
+    }
+
+    const response = await api.adminGlobalDefaults.get()
+    globalDefaults.value = response.settings
+    // Initialize form with current values
+    globalDefaultsForm.value = {}
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+  } catch (error) {
+    console.error('Failed to load global defaults', error)
+    showSnackbar('Failed to load global defaults', 'error')
+  } finally {
+    loadingGlobalDefaults.value = false
+  }
+}
+
+const saveGlobalDefault = async (key: string, value: unknown) => {
+  // Normalize empty strings to null for nullable string fields
+  let normalizedValue = value
+  if (value === '' && key === 'market.defaultPriceList') {
+    normalizedValue = null
+  }
+
+  // Don't save if value hasn't changed
+  const currentSetting = globalDefaults.value.find(s => s.key === key)
+  const currentValue = currentSetting?.adminDefault ?? currentSetting?.codeDefault
+  if (JSON.stringify(normalizedValue) === JSON.stringify(currentValue)) {
+    return
+  }
+
+  try {
+    savingGlobalDefault.value = key
+    const response = await api.adminGlobalDefaults.update({
+      settings: { [key]: normalizedValue },
+    })
+    globalDefaults.value = response.settings
+    // Update form
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+    showSnackbar('Default saved', 'success')
+  } catch (error) {
+    console.error('Failed to save global default', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to save default', 'error')
+    // Revert form value
+    if (currentSetting) {
+      globalDefaultsForm.value[key] = currentSetting.adminDefault ?? currentSetting.codeDefault
+    }
+  } finally {
+    savingGlobalDefault.value = null
+  }
+}
+
+const resetGlobalDefault = async (key: string) => {
+  try {
+    resettingGlobalDefault.value = key
+    const response = await api.adminGlobalDefaults.reset(key)
+    globalDefaults.value = response.settings
+    // Update form
+    for (const setting of response.settings) {
+      globalDefaultsForm.value[setting.key] = setting.adminDefault ?? setting.codeDefault
+    }
+    showSnackbar('Default reset to code value', 'success')
+  } catch (error) {
+    console.error('Failed to reset global default', error)
+    showSnackbar(error instanceof Error ? error.message : 'Failed to reset default', 'error')
+  } finally {
+    resettingGlobalDefault.value = null
+  }
+}
+
 // Watch for tab changes to load data
 watch(activeTab, async newTab => {
   if (newTab === 'permissions') {
@@ -1819,6 +3233,18 @@ watch(activeTab, async newTab => {
     if (discordRoleMappings.value.length === 0) {
       await loadRoleMappings()
     }
+  } else if (newTab === 'priceLists') {
+    // Load price settings, price lists, import configs, and adjustments
+    if (!priceSettings.value) {
+      await loadPriceSettings()
+    }
+    // Always load all data together
+    await Promise.all([loadPriceLists(), loadImportConfigs(), loadPriceAdjustments()])
+  } else if (newTab === 'globalDefaults') {
+    // Load global defaults if not already loaded
+    if (globalDefaults.value.length === 0) {
+      await loadGlobalDefaults()
+    }
   }
 })
 
@@ -1837,5 +3263,19 @@ onMounted(() => {
 
 .permission-matrix td:first-child {
   width: 1%;
+}
+
+.sheet-preview-table {
+  max-height: 400px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+.sheet-preview-table th,
+.sheet-preview-table td {
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

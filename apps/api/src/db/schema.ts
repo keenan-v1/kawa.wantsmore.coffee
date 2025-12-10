@@ -57,6 +57,22 @@ export const reservationStatusEnum = pgEnum('reservation_status', [
   'cancelled',
 ])
 
+// ==================== PRICING SYSTEM ENUMS ====================
+export const priceSourceEnum = pgEnum('price_source', [
+  'manual',
+  'csv_import',
+  'google_sheets',
+  'fio_exchange',
+])
+
+export const adjustmentTypeEnum = pgEnum('adjustment_type', ['percentage', 'fixed'])
+
+export const priceListTypeEnum = pgEnum('price_list_type', ['fio', 'custom'])
+
+export const importSourceTypeEnum = pgEnum('import_source_type', ['csv', 'google_sheets'])
+
+export const importFormatEnum = pgEnum('import_format', ['flat', 'pivot', 'kawa'])
+
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(
   'settings',
@@ -163,26 +179,24 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// ==================== USER SETTINGS ====================
-export const userSettings = pgTable('user_settings', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  fioUsername: varchar('fio_username', { length: 100 }), // FIO game username
-  fioApiKey: text('fio_api_key'), // FIO API key (encrypted)
-  preferredCurrency: currencyEnum('preferred_currency').notNull().default('CIS'),
-  locationDisplayMode: locationDisplayModeEnum('location_display_mode').notNull().default('both'),
-  commodityDisplayMode: commodityDisplayModeEnum('commodity_display_mode')
-    .notNull()
-    .default('both'),
-  // FIO sync preferences
-  fioAutoSync: boolean('fio_auto_sync').notNull().default(true), // Auto-sync inventory on schedule
-  fioExcludedLocations: text('fio_excluded_locations').array(), // Location NaturalIds or Names to exclude
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+// ==================== USER SETTINGS (Key-value settings per user) ====================
+// Stores user preference overrides; defaults come from SETTING_DEFINITIONS in code
+// All settings including FIO credentials (fio.username, fio.apiKey) are stored here
+export const userSettings = pgTable(
+  'user_settings',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    settingKey: varchar('setting_key', { length: 100 }).notNull(), // e.g., 'display.preferredCurrency', 'fio.apiKey'
+    value: text('value').notNull(), // JSON-encoded value
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueUserSetting: uniqueIndex('user_settings_user_key_idx').on(table.userId, table.settingKey),
+  })
+)
 
 // ==================== PASSWORD RESET TOKENS ====================
 export const passwordResetTokens = pgTable('password_reset_tokens', {
@@ -287,6 +301,7 @@ export const sellOrders = pgTable(
       .references(() => fioLocations.naturalId),
     price: decimal('price', { precision: 12, scale: 2 }).notNull(),
     currency: currencyEnum('currency').notNull(),
+    priceListCode: varchar('price_list_code', { length: 20 }), // null = custom/fixed price, set = dynamic pricing from price list
     orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
     limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
     limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
@@ -318,6 +333,7 @@ export const buyOrders = pgTable(
     quantity: integer('quantity').notNull(),
     price: decimal('price', { precision: 12, scale: 2 }).notNull(),
     currency: currencyEnum('currency').notNull(),
+    priceListCode: varchar('price_list_code', { length: 20 }), // null = custom/fixed price, set = dynamic pricing from price list
     orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -382,13 +398,121 @@ export const orderReservations = pgTable(
   })
 )
 
+// ==================== PRICE LISTS (Exchange definitions - CI1, KAWA, etc.) ====================
+// Defines available price lists/exchanges and their properties
+export const priceLists = pgTable('price_lists', {
+  code: varchar('code', { length: 20 }).primaryKey(), // CI1, NC1, IC1, AI1, KAWA, etc.
+  name: varchar('name', { length: 100 }).notNull(), // "Commodity Exchange - Benton", "KAWA Internal", etc.
+  description: text('description'), // Optional description
+  type: priceListTypeEnum('type').notNull(), // 'fio' = synced from FIO API, 'custom' = user-managed
+  currency: currencyEnum('currency').notNull(), // Fixed currency for this price list
+  defaultLocationId: varchar('default_location_id', { length: 20 }).references(
+    () => fioLocations.naturalId
+  ), // Default location for imports (Proxion for KAWA, BEN for CI1)
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// ==================== PRICES (Individual price records per commodity/location) ====================
+export const prices = pgTable(
+  'prices',
+  {
+    id: serial('id').primaryKey(),
+    priceListCode: varchar('price_list_code', { length: 20 })
+      .notNull()
+      .references(() => priceLists.code), // FK to price list
+    commodityTicker: varchar('commodity_ticker', { length: 10 })
+      .notNull()
+      .references(() => fioCommodities.ticker),
+    locationId: varchar('location_id', { length: 20 })
+      .notNull()
+      .references(() => fioLocations.naturalId),
+    price: decimal('price', { precision: 12, scale: 2 }).notNull(),
+    // Currency is derived from price list, not stored per-price
+    source: priceSourceEnum('source').notNull(), // How this price was set
+    sourceReference: text('source_reference'), // Google Sheets URL, CSV filename, sync timestamp, etc.
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Unique constraint: one price per price list/commodity/location combination
+    uniquePriceListCommodityLocation: uniqueIndex('prices_price_list_commodity_location_idx').on(
+      table.priceListCode,
+      table.commodityTicker,
+      table.locationId
+    ),
+    // Index for efficient lookups by price list
+    priceListIdx: index('prices_price_list_idx').on(table.priceListCode),
+  })
+)
+
+// ==================== PRICE ADJUSTMENTS (Modifiers for prices) ====================
+// Adjustments can target specific price lists, locations, commodities, or any combination
+// NULL fields act as wildcards (match anything)
+export const priceAdjustments = pgTable(
+  'price_adjustments',
+  {
+    id: serial('id').primaryKey(),
+    priceListCode: varchar('price_list_code', { length: 20 }).references(() => priceLists.code), // NULL = applies to all price lists
+    commodityTicker: varchar('commodity_ticker', { length: 10 }).references(
+      () => fioCommodities.ticker
+    ), // NULL = applies to all commodities
+    locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // NULL = applies to all locations
+    // Currency is now fixed per price list, so no currency field here
+    adjustmentType: adjustmentTypeEnum('adjustment_type').notNull(), // 'percentage' or 'fixed'
+    adjustmentValue: decimal('adjustment_value', { precision: 12, scale: 4 }).notNull(), // e.g., 5.00 for +5% or +5 units
+    priority: integer('priority').notNull().default(0), // Order of application (lower = first)
+    description: text('description'), // Human-readable explanation
+    isActive: boolean('is_active').notNull().default(true), // Enable/disable without deleting
+    effectiveFrom: timestamp('effective_from'), // NULL = immediately effective
+    effectiveUntil: timestamp('effective_until'), // NULL = no expiration
+    createdByUserId: integer('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Index for efficient lookups when calculating effective prices
+    adjustmentLookupIdx: index('price_adjustments_lookup_idx').on(
+      table.priceListCode,
+      table.locationId,
+      table.commodityTicker
+    ),
+    // Index for active adjustments
+    activeIdx: index('price_adjustments_active_idx').on(table.isActive),
+  })
+)
+
+// ==================== IMPORT CONFIGS (Saved import configurations for price lists) ====================
+// Stores configurations for importing prices from external sources (Google Sheets, CSV)
+export const importConfigs = pgTable(
+  'import_configs',
+  {
+    id: serial('id').primaryKey(),
+    priceListCode: varchar('price_list_code', { length: 20 })
+      .notNull()
+      .references(() => priceLists.code, { onDelete: 'cascade' }), // Target price list
+    name: varchar('name', { length: 100 }).notNull(), // Configuration name, e.g., "KAWA Price Sheet"
+    sourceType: importSourceTypeEnum('source_type').notNull(), // 'csv' or 'google_sheets'
+    format: importFormatEnum('format').notNull(), // 'flat' or 'pivot'
+    sheetsUrl: text('sheets_url'), // Google Sheets URL (for google_sheets source type)
+    sheetGid: integer('sheet_gid'), // Specific sheet tab (null = first sheet)
+    config: jsonb('config'), // Format-specific config (FlatConfig or PivotConfig as JSON)
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    // Index for finding configs by price list
+    priceListIdx: index('import_configs_price_list_idx').on(table.priceListCode),
+  })
+)
+
 // ==================== RELATIONS ====================
 
-export const usersRelations = relations(users, ({ one, many }) => ({
-  settings: one(userSettings, {
-    fields: [users.id],
-    references: [userSettings.userId],
-  }),
+export const usersRelations = relations(users, ({ many, one }) => ({
+  settings: many(userSettings), // Key-value user settings (preferences & FIO credentials)
   userRoles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
   fioUserStorage: many(fioUserStorage),
@@ -400,6 +524,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [userDiscordProfiles.userId],
   }),
+  createdPriceAdjustments: many(priceAdjustments), // Adjustments created by this user
 }))
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -451,11 +576,16 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
 export const fioCommoditiesRelations = relations(fioCommodities, ({ many }) => ({
   fioInventory: many(fioInventory),
   sellOrders: many(sellOrders),
+  prices: many(prices),
+  priceAdjustments: many(priceAdjustments),
 }))
 
 export const fioLocationsRelations = relations(fioLocations, ({ many }) => ({
   fioUserStorage: many(fioUserStorage),
   sellOrders: many(sellOrders),
+  priceLists: many(priceLists), // Price lists with this as default location
+  prices: many(prices),
+  priceAdjustments: many(priceAdjustments),
 }))
 
 export const fioUserStorageRelations = relations(fioUserStorage, ({ one, many }) => ({
@@ -557,5 +687,58 @@ export const orderReservationsRelations = relations(orderReservations, ({ one })
   counterpartyUser: one(users, {
     fields: [orderReservations.counterpartyUserId],
     references: [users.id],
+  }),
+}))
+
+// ==================== PRICING SYSTEM RELATIONS ====================
+
+export const priceListsRelations = relations(priceLists, ({ one, many }) => ({
+  defaultLocation: one(fioLocations, {
+    fields: [priceLists.defaultLocationId],
+    references: [fioLocations.naturalId],
+  }),
+  prices: many(prices),
+  priceAdjustments: many(priceAdjustments),
+  importConfigs: many(importConfigs),
+}))
+
+export const pricesRelations = relations(prices, ({ one }) => ({
+  priceList: one(priceLists, {
+    fields: [prices.priceListCode],
+    references: [priceLists.code],
+  }),
+  commodity: one(fioCommodities, {
+    fields: [prices.commodityTicker],
+    references: [fioCommodities.ticker],
+  }),
+  location: one(fioLocations, {
+    fields: [prices.locationId],
+    references: [fioLocations.naturalId],
+  }),
+}))
+
+export const priceAdjustmentsRelations = relations(priceAdjustments, ({ one }) => ({
+  priceList: one(priceLists, {
+    fields: [priceAdjustments.priceListCode],
+    references: [priceLists.code],
+  }),
+  commodity: one(fioCommodities, {
+    fields: [priceAdjustments.commodityTicker],
+    references: [fioCommodities.ticker],
+  }),
+  location: one(fioLocations, {
+    fields: [priceAdjustments.locationId],
+    references: [fioLocations.naturalId],
+  }),
+  createdByUser: one(users, {
+    fields: [priceAdjustments.createdByUserId],
+    references: [users.id],
+  }),
+}))
+
+export const importConfigsRelations = relations(importConfigs, ({ one }) => ({
+  priceList: one(priceLists, {
+    fields: [importConfigs.priceListCode],
+    references: [priceLists.code],
   }),
 }))

@@ -1,10 +1,53 @@
-// Commodity service - fetches from backend API
+// Commodity service - fetches from backend API with localStorage persistence
 
 import type { Commodity, CommodityDisplayMode } from '../types'
 import { localizeMaterial } from '../utils/materials'
 
-// Cache for commodities to avoid repeated API calls
+// Cache keys and TTL
+const CACHE_KEY = 'kawakawa:commodities'
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+interface CacheEntry {
+  data: Commodity[]
+  timestamp: number
+}
+
+// In-memory cache for fast access during session
 let cachedCommodities: Commodity[] | null = null
+
+// Load from localStorage on module init
+const loadFromStorage = (): Commodity[] | null => {
+  try {
+    const stored = localStorage.getItem(CACHE_KEY)
+    if (!stored) return null
+
+    const entry: CacheEntry = JSON.parse(stored)
+    const age = Date.now() - entry.timestamp
+
+    if (age > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+
+    return entry.data
+  } catch {
+    localStorage.removeItem(CACHE_KEY)
+    return null
+  }
+}
+
+// Save to localStorage
+const saveToStorage = (data: Commodity[]): void => {
+  try {
+    const entry: CacheEntry = { data, timestamp: Date.now() }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
+  } catch (error) {
+    console.warn('Failed to cache commodities to localStorage:', error)
+  }
+}
+
+// Initialize from localStorage
+cachedCommodities = loadFromStorage()
 
 // Fetch commodities from backend API
 const fetchCommodities = async (): Promise<Commodity[]> => {
@@ -19,6 +62,7 @@ const fetchCommodities = async (): Promise<Commodity[]> => {
     }
     const data = await response.json()
     cachedCommodities = data
+    saveToStorage(data)
     return data
   } catch (error) {
     console.error('Error fetching commodities:', error)
@@ -27,10 +71,16 @@ const fetchCommodities = async (): Promise<Commodity[]> => {
 }
 
 export const commodityService = {
-  // Get all commodities
+  // Get all commodities (async)
   getAllCommodities: async (): Promise<Commodity[]> => {
     const commodities = await fetchCommodities()
     return [...commodities].sort((a, b) => a.ticker.localeCompare(b.ticker))
+  },
+
+  // Get all commodities from cache (synchronous, returns empty array if not loaded)
+  getAllCommoditiesSync: (): Commodity[] => {
+    if (!cachedCommodities) return []
+    return [...cachedCommodities].sort((a, b) => a.ticker.localeCompare(b.ticker))
   },
 
   // Get commodity by ticker
@@ -102,5 +152,6 @@ export const commodityService = {
   // Clear cache (useful for refresh)
   clearCache: (): void => {
     cachedCommodities = null
+    localStorage.removeItem(CACHE_KEY)
   },
 }

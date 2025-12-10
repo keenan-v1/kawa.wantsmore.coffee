@@ -1,7 +1,6 @@
 // Seed database with initial roles and permissions
 // Commodities and locations will come from FIO API integration
-import { db, roles, permissions, rolePermissions } from './index.js'
-import postgres from 'postgres'
+import { db, client, roles, permissions, rolePermissions } from './index.js'
 import { createLogger } from '../utils/logger.js'
 
 const log = createLogger({ script: 'seed' })
@@ -58,6 +57,42 @@ const PERMISSIONS_DATA = [
     name: 'Manage Roles',
     description: 'Can modify roles and their permissions',
   },
+  // Pricing system permissions
+  {
+    id: 'prices.view',
+    name: 'View Price Lists',
+    description: 'Can view price lists and effective prices',
+  },
+  {
+    id: 'prices.manage',
+    name: 'Manage Prices',
+    description: 'Can create, update, and delete prices manually',
+  },
+  {
+    id: 'prices.import',
+    name: 'Import Prices',
+    description: 'Can import prices from CSV or Google Sheets',
+  },
+  {
+    id: 'prices.sync_fio',
+    name: 'Sync FIO Prices',
+    description: 'Can trigger FIO exchange price synchronization',
+  },
+  {
+    id: 'adjustments.view',
+    name: 'View Price Adjustments',
+    description: 'Can view price adjustment rules',
+  },
+  {
+    id: 'adjustments.manage',
+    name: 'Manage Price Adjustments',
+    description: 'Can create, update, and delete price adjustment rules',
+  },
+  {
+    id: 'import_configs.manage',
+    name: 'Manage Import Configurations',
+    description: 'Can manage saved import configurations for Google Sheets',
+  },
 ]
 
 // Default role permissions (roleId -> list of permissionIds that are allowed)
@@ -68,6 +103,8 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   applicant: [
     'orders.view_internal',
     'orders.view_partner',
+    'prices.view', // Can view price lists
+    'adjustments.view', // Can view adjustments
     // Note: applicants cannot post by default
   ],
   member: [
@@ -75,6 +112,8 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'orders.view_partner',
     'orders.post_internal',
     'reservations.place_internal',
+    'prices.view',
+    'adjustments.view',
   ],
   lead: [
     'orders.view_internal',
@@ -83,11 +122,20 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'orders.post_partner',
     'reservations.place_internal',
     'reservations.place_partner',
+    'prices.view',
+    'prices.manage',
+    'prices.import',
+    'prices.sync_fio',
+    'adjustments.view',
+    'adjustments.manage',
+    'import_configs.manage',
   ],
   'trade-partner': [
     'orders.view_partner', // Can only see partner orders
     'orders.post_partner', // Can post partner orders
     'reservations.place_partner', // Can place reservations on partner orders
+    'prices.view', // Can view prices
+    'adjustments.view', // Can view adjustments
   ],
   administrator: [
     'orders.view_internal',
@@ -96,6 +144,13 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // Combine with 'member' or 'trade-partner' roles if they need to create orders
     'admin.manage_users',
     'admin.manage_roles',
+    'prices.view',
+    'prices.manage',
+    'prices.import',
+    'prices.sync_fio',
+    'adjustments.view',
+    'adjustments.manage',
+    'import_configs.manage',
   ],
 }
 
@@ -136,7 +191,7 @@ async function seed() {
     throw error
   } finally {
     // Close the connection
-    await postgres(process.env.DATABASE_URL!).end()
+    await client.end()
   }
 }
 

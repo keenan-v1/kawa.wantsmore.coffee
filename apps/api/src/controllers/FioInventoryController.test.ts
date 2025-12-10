@@ -2,17 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FioInventoryController } from './FioInventoryController.js'
 import { db } from '../db/index.js'
 import * as syncUserInventoryModule from '../services/fio/sync-user-inventory.js'
+import * as userSettingsService from '../services/userSettingsService.js'
 
 vi.mock('../db/index.js', () => ({
   db: {
     select: vi.fn(),
     delete: vi.fn(),
     insert: vi.fn(),
-  },
-  userSettings: {
-    userId: 'userId',
-    fioUsername: 'fioUsername',
-    fioApiKey: 'fioApiKey',
   },
   fioInventory: {
     id: 'id',
@@ -43,6 +39,11 @@ vi.mock('../db/index.js', () => ({
 
 vi.mock('../services/fio/sync-user-inventory.js', () => ({
   syncUserInventory: vi.fn(),
+}))
+
+vi.mock('../services/userSettingsService.js', () => ({
+  getSetting: vi.fn(),
+  getFioCredentials: vi.fn(),
 }))
 
 describe('FioInventoryController', () => {
@@ -130,13 +131,14 @@ describe('FioInventoryController', () => {
 
   describe('syncInventory', () => {
     it('should sync inventory when FIO credentials are configured', async () => {
-      const mockSettings = {
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
         fioUsername: 'fiouser',
         fioApiKey: 'fio-api-key-123',
-        fioExcludedLocations: ['UV-351a'],
-      }
+      })
 
-      mockSelect.where.mockResolvedValueOnce([mockSettings])
+      // Mock excluded locations from userSettingsService
+      vi.mocked(userSettingsService.getSetting).mockResolvedValueOnce(['UV-351a'])
 
       vi.mocked(syncUserInventoryModule.syncUserInventory).mockResolvedValueOnce({
         success: true,
@@ -171,12 +173,10 @@ describe('FioInventoryController', () => {
     })
 
     it('should throw error when FIO username is not configured', async () => {
-      mockSelect.where.mockResolvedValueOnce([
-        {
-          fioUsername: null,
-          fioApiKey: 'some-key',
-        },
-      ])
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: null,
+        fioApiKey: 'some-key',
+      })
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -188,12 +188,10 @@ describe('FioInventoryController', () => {
     })
 
     it('should throw error when FIO API key is not configured', async () => {
-      mockSelect.where.mockResolvedValueOnce([
-        {
-          fioUsername: 'fiouser',
-          fioApiKey: null,
-        },
-      ])
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: 'fiouser',
+        fioApiKey: null,
+      })
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -203,8 +201,11 @@ describe('FioInventoryController', () => {
       expect(setStatusSpy).toHaveBeenCalledWith(400)
     })
 
-    it('should throw error when no settings exist for user', async () => {
-      mockSelect.where.mockResolvedValueOnce([])
+    it('should throw error when no FIO credentials exist for user', async () => {
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: null,
+        fioApiKey: null,
+      })
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -215,13 +216,14 @@ describe('FioInventoryController', () => {
     })
 
     it('should return sync errors when some items fail', async () => {
-      mockSelect.where.mockResolvedValueOnce([
-        {
-          fioUsername: 'fiouser',
-          fioApiKey: 'fio-api-key',
-          fioExcludedLocations: null,
-        },
-      ])
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: 'fiouser',
+        fioApiKey: 'fio-api-key',
+      })
+
+      // Mock excluded locations from userSettingsService (empty array)
+      vi.mocked(userSettingsService.getSetting).mockResolvedValueOnce([])
 
       vi.mocked(syncUserInventoryModule.syncUserInventory).mockResolvedValueOnce({
         success: false,

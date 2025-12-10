@@ -364,7 +364,7 @@ describe('ReservationsController', () => {
       expect(notificationService.create).toHaveBeenCalledWith(
         1, // counterparty
         'reservation_confirmed',
-        'Reservation Confirmed',
+        'Confirmed',
         expect.any(String),
         expect.any(Object)
       )
@@ -403,7 +403,7 @@ describe('ReservationsController', () => {
       expect(notificationService.create).toHaveBeenCalledWith(
         1, // counterparty
         'reservation_rejected',
-        'Reservation Rejected',
+        'Rejected',
         expect.any(String),
         expect.any(Object)
       )

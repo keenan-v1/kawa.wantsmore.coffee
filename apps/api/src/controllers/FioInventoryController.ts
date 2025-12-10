@@ -9,18 +9,12 @@ import {
   Request,
   SuccessResponse,
 } from 'tsoa'
-import {
-  db,
-  userSettings,
-  fioInventory,
-  fioUserStorage,
-  fioCommodities,
-  fioLocations,
-} from '../db/index.js'
+import { db, fioInventory, fioUserStorage, fioCommodities, fioLocations } from '../db/index.js'
 import { eq, count, min, max } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
+import * as userSettingsService from '../services/userSettingsService.js'
 
 interface FioInventorySyncResult {
   success: boolean
@@ -124,26 +118,25 @@ export class FioInventoryController extends Controller {
   ): Promise<FioInventorySyncResult> {
     const userId = request.user.userId
 
-    // Get user's FIO credentials and sync preferences
-    const [settings] = await db
-      .select({
-        fioUsername: userSettings.fioUsername,
-        fioApiKey: userSettings.fioApiKey,
-        fioExcludedLocations: userSettings.fioExcludedLocations,
-      })
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
+    // Get user's FIO credentials from settings service
+    const { fioUsername, fioApiKey } = await userSettingsService.getFioCredentials(userId)
 
-    if (!settings?.fioUsername || !settings?.fioApiKey) {
+    if (!fioUsername || !fioApiKey) {
       this.setStatus(400)
       throw BadRequest(
-        'FIO credentials not configured. Please set your FIO username and API key in your profile.'
+        'FIO credentials not configured. Please set your FIO username and API key in Settings.'
       )
     }
 
+    // Get excluded locations from user settings service
+    const excludedLocations = (await userSettingsService.getSetting(
+      userId,
+      'fio.excludedLocations'
+    )) as string[]
+
     // Perform sync with excluded locations
-    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername, {
-      excludedLocations: settings.fioExcludedLocations ?? [],
+    const result = await syncUserInventory(userId, fioApiKey, fioUsername, {
+      excludedLocations: excludedLocations ?? [],
     })
 
     return {

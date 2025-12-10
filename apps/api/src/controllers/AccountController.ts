@@ -1,37 +1,25 @@
 import { Body, Controller, Delete, Get, Put, Route, Security, Tags, Request } from 'tsoa'
-import type { Currency, LocationDisplayMode, CommodityDisplayMode, Role } from '@kawakawa/types'
-import { db, users, userSettings, userRoles, roles } from '../db/index.js'
+import type { Role } from '@kawakawa/types'
+import { db, users, userRoles, roles } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound } from '../utils/errors.js'
 import { getPermissions } from '../utils/permissionService.js'
 
+// User profile returned by the account endpoint
+// Note: Display preferences (currency, display modes) and FIO credentials are in /user-settings
 interface UserProfile {
   profileName: string
   displayName: string
-  fioUsername: string
-  hasFioApiKey: boolean // Indicates if FIO API key is configured (never expose actual key)
-  preferredCurrency: Currency
-  locationDisplayMode: LocationDisplayMode
-  commodityDisplayMode: CommodityDisplayMode
-  // FIO sync preferences
-  fioAutoSync: boolean
-  fioExcludedLocations: string[]
   roles: Role[]
   permissions: string[] // Permission IDs granted to this user
 }
 
+// Update profile request
+// Note: FIO credentials and display preferences are now updated via /user-settings
 interface UpdateProfileRequest {
   displayName?: string
-  fioUsername?: string
-  fioApiKey?: string // FIO API key (write-only, never returned in responses)
-  preferredCurrency?: Currency
-  locationDisplayMode?: LocationDisplayMode
-  commodityDisplayMode?: CommodityDisplayMode
-  // FIO sync preferences
-  fioAutoSync?: boolean
-  fioExcludedLocations?: string[]
 }
 
 interface ChangePasswordRequest {
@@ -47,21 +35,13 @@ export class AccountController extends Controller {
   public async getProfile(@Request() request: { user: JwtPayload }): Promise<UserProfile> {
     const userId = request.user.userId
 
-    // Query user with settings and roles
+    // Query user basic info
     const [user] = await db
       .select({
         username: users.username,
         displayName: users.displayName,
-        fioUsername: userSettings.fioUsername,
-        fioApiKey: userSettings.fioApiKey,
-        preferredCurrency: userSettings.preferredCurrency,
-        locationDisplayMode: userSettings.locationDisplayMode,
-        commodityDisplayMode: userSettings.commodityDisplayMode,
-        fioAutoSync: userSettings.fioAutoSync,
-        fioExcludedLocations: userSettings.fioExcludedLocations,
       })
       .from(users)
-      .leftJoin(userSettings, eq(users.id, userSettings.userId))
       .where(eq(users.id, userId))
 
     if (!user) {
@@ -96,13 +76,6 @@ export class AccountController extends Controller {
     return {
       profileName: user.username,
       displayName: user.displayName,
-      fioUsername: user.fioUsername || '',
-      hasFioApiKey: !!user.fioApiKey,
-      preferredCurrency: user.preferredCurrency || 'CIS',
-      locationDisplayMode: user.locationDisplayMode || 'both',
-      commodityDisplayMode: user.commodityDisplayMode || 'both',
-      fioAutoSync: user.fioAutoSync ?? true,
-      fioExcludedLocations: user.fioExcludedLocations || [],
       roles: rolesArray,
       permissions: permissionIds,
     }
@@ -126,24 +99,7 @@ export class AccountController extends Controller {
         .where(eq(users.id, userId))
     }
 
-    // Update user settings if any settings provided
-    const settingsUpdate: Partial<typeof userSettings.$inferInsert> = {}
-    if (body.fioUsername !== undefined) settingsUpdate.fioUsername = body.fioUsername
-    if (body.fioApiKey !== undefined) settingsUpdate.fioApiKey = body.fioApiKey
-    if (body.preferredCurrency !== undefined)
-      settingsUpdate.preferredCurrency = body.preferredCurrency
-    if (body.locationDisplayMode !== undefined)
-      settingsUpdate.locationDisplayMode = body.locationDisplayMode
-    if (body.commodityDisplayMode !== undefined)
-      settingsUpdate.commodityDisplayMode = body.commodityDisplayMode
-    if (body.fioAutoSync !== undefined) settingsUpdate.fioAutoSync = body.fioAutoSync
-    if (body.fioExcludedLocations !== undefined)
-      settingsUpdate.fioExcludedLocations = body.fioExcludedLocations
-
-    if (Object.keys(settingsUpdate).length > 0) {
-      settingsUpdate.updatedAt = new Date()
-      await db.update(userSettings).set(settingsUpdate).where(eq(userSettings.userId, userId))
-    }
+    // Note: FIO credentials are now updated via /user-settings endpoint
 
     // Return updated profile
     return this.getProfile(request)
@@ -206,7 +162,7 @@ export class AccountController extends Controller {
     }
 
     // Delete the user - cascade will handle all related data:
-    // - userSettings
+    // - userSettings (key-value settings including FIO credentials)
     // - userRoles
     // - passwordResetTokens
     // - fioUserStorage (and fioInventory through it)

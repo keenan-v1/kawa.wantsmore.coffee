@@ -337,7 +337,7 @@ export class ReservationsController extends Controller {
       sellOrder.userId,
       'reservation_placed',
       'New Reservation',
-      `${buyer?.displayName ?? 'Someone'} wants to reserve ${body.quantity} ${sellOrder.commodityTicker} from your sell order`,
+      `${buyer?.displayName ?? 'Someone'} wants ${body.quantity} ${sellOrder.commodityTicker}`,
       {
         reservationId: reservation.id,
         sellOrderId: body.sellOrderId,
@@ -429,7 +429,7 @@ export class ReservationsController extends Controller {
       buyOrder.userId,
       'reservation_placed',
       'Order Fill Request',
-      `${seller?.displayName ?? 'Someone'} wants to fill ${body.quantity} ${buyOrder.commodityTicker} from your buy order`,
+      `${seller?.displayName ?? 'Someone'} can fill ${body.quantity} ${buyOrder.commodityTicker}`,
       {
         reservationId: reservation.id,
         buyOrderId: body.buyOrderId,
@@ -666,33 +666,28 @@ export class ReservationsController extends Controller {
       },
       confirmed: {
         type: 'reservation_confirmed',
-        title: 'Reservation Confirmed',
-        getMessage: n =>
-          `${n} confirmed your reservation for ${reservation.quantity} ${commodityTicker}`,
+        title: 'Confirmed',
+        getMessage: n => `${n} confirmed ${reservation.quantity} ${commodityTicker}`,
       },
       rejected: {
         type: 'reservation_rejected',
-        title: 'Reservation Rejected',
-        getMessage: n =>
-          `${n} rejected your reservation for ${reservation.quantity} ${commodityTicker}`,
+        title: 'Rejected',
+        getMessage: n => `${n} rejected ${reservation.quantity} ${commodityTicker}`,
       },
       fulfilled: {
         type: 'reservation_fulfilled',
-        title: 'Reservation Fulfilled',
-        getMessage: n =>
-          `${n} marked the reservation for ${reservation.quantity} ${commodityTicker} as fulfilled`,
+        title: 'Fulfilled',
+        getMessage: n => `${n} fulfilled ${reservation.quantity} ${commodityTicker}`,
       },
       cancelled: {
         type: 'reservation_cancelled',
-        title: 'Reservation Cancelled',
-        getMessage: n =>
-          `${n} cancelled the reservation for ${reservation.quantity} ${commodityTicker}`,
+        title: 'Cancelled',
+        getMessage: n => `${n} cancelled ${reservation.quantity} ${commodityTicker}`,
       },
       expired: {
         type: 'reservation_expired',
-        title: 'Reservation Expired',
-        getMessage: () =>
-          `Your reservation for ${reservation.quantity} ${commodityTicker} has expired`,
+        title: 'Expired',
+        getMessage: () => `${reservation.quantity} ${commodityTicker} reservation expired`,
       },
     }
 

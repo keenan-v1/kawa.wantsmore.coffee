@@ -1,92 +1,43 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <h1 class="text-h4 mb-4">Market</h1>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
       {{ snackbar.message }}
     </v-snackbar>
 
+    <!-- Delete Confirmation Dialog -->
+    <ConfirmationDialog
+      v-model="deleteDialog"
+      :title="`Delete ${deletingItem?.itemType === 'sell' ? 'Sell' : 'Buy'} Order`"
+      :loading="deleting"
+      confirm-text="Delete"
+      confirm-color="error"
+      @confirm="confirmDelete"
+    >
+      Are you sure you want to delete your
+      {{ deletingItem?.itemType === 'sell' ? 'sell' : 'buy' }} order for
+      <strong>{{ deletingItem ? getCommodityDisplay(deletingItem.commodityTicker) : '' }}</strong>
+      at <strong>{{ deletingItem ? getLocationDisplay(deletingItem.locationId) : '' }}</strong
+      >?
+    </ConfirmationDialog>
+
     <!-- Filters Card -->
     <v-card class="mb-4">
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="6" sm="4" lg="2">
-            <v-select
-              v-model="filters.itemType"
-              :items="itemTypeOptions"
-              item-title="title"
-              item-value="value"
-              label="Buy/Sell"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="6" sm="4" lg="2">
-            <KeyValueAutocomplete
-              v-model="filters.commodity"
-              :items="commodityOptions"
-              label="Commodity"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="6" sm="4" lg="2">
-            <v-select
-              v-model="filters.category"
-              :items="categoryOptions"
-              label="Category"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="6" sm="4" lg="2">
-            <KeyValueAutocomplete
-              v-model="filters.location"
-              :items="locationOptions"
-              label="Location"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="6" sm="4" lg="2">
-            <v-select
-              v-model="filters.userName"
-              :items="userOptions"
-              label="User"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="6" sm="4" lg="2">
-            <v-select
-              v-model="filters.orderType"
-              :items="visibilityOptions"
-              item-title="title"
-              item-value="value"
-              label="Visibility"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-        </v-row>
-        <v-row dense class="mt-2">
-          <v-col cols="12" class="d-flex align-center justify-space-between">
+      <v-card-text class="py-2">
+        <!-- Collapsed view: single row with Filters button and Create Order -->
+        <v-row v-if="!filtersExpanded && !hasActiveFilters" dense align="center">
+          <v-col cols="auto">
             <v-btn
-              v-if="hasActiveFilters"
-              variant="text"
-              color="primary"
-              size="small"
-              @click="clearFilters"
+              variant="outlined"
+              prepend-icon="mdi-filter-variant"
+              @click="filtersExpanded = true"
             >
-              Clear Filters
+              Filters
             </v-btn>
-            <v-spacer />
+          </v-col>
+          <v-spacer />
+          <v-col cols="auto">
             <v-tooltip
               :disabled="canCreateAnyOrders"
               text="You do not have permission to create orders"
@@ -107,14 +58,209 @@
             </v-tooltip>
           </v-col>
         </v-row>
+
+        <!-- Expanded view: all filter dropdowns -->
+        <template v-else>
+          <v-row dense>
+            <v-col cols="6" sm="4" lg="2">
+              <v-select
+                v-model="filters.itemType"
+                :items="itemTypeOptions"
+                item-title="title"
+                item-value="value"
+                label="Buy/Sell"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <KeyValueAutocomplete
+                v-model="filters.commodity"
+                :items="commodityOptions"
+                :favorites="settingsStore.favoritedCommodities.value"
+                label="Commodity"
+                density="compact"
+                clearable
+                hide-details
+                multiple
+                @update:favorites="
+                  settingsStore.updateSetting('market.favoritedCommodities', $event)
+                "
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <v-select
+                v-model="filters.category"
+                :items="categoryOptions"
+                label="Category"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <KeyValueAutocomplete
+                v-model="filters.location"
+                :items="locationOptions"
+                :favorites="settingsStore.favoritedLocations.value"
+                label="Location"
+                density="compact"
+                clearable
+                hide-details
+                multiple
+                @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <v-select
+                v-model="filters.userName"
+                :items="userOptions"
+                label="User"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <v-select
+                v-model="filters.pricing"
+                :items="pricingOptions"
+                item-title="title"
+                item-value="value"
+                label="Pricing"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="6" sm="4" lg="2">
+              <v-select
+                v-model="filters.orderType"
+                :items="visibilityOptions"
+                item-title="title"
+                item-value="value"
+                label="Visibility"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+          </v-row>
+          <!-- Active Filters Display -->
+          <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
+            <v-chip
+              v-if="filters.itemType"
+              closable
+              size="small"
+              :color="filters.itemType === 'sell' ? 'success' : 'warning'"
+              @click:close="filters.itemType = null"
+            >
+              {{ filters.itemType === 'sell' ? 'Sell' : 'Buy' }}
+            </v-chip>
+            <v-chip
+              v-for="ticker in filters.commodity"
+              :key="`commodity-${ticker}`"
+              closable
+              size="small"
+              color="primary"
+              @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
+            >
+              {{ getCommodityDisplay(ticker) }}
+            </v-chip>
+            <v-chip
+              v-if="filters.category"
+              closable
+              size="small"
+              color="secondary"
+              @click:close="filters.category = null"
+            >
+              Category: {{ filters.category }}
+            </v-chip>
+            <v-chip
+              v-for="locId in filters.location"
+              :key="`location-${locId}`"
+              closable
+              size="small"
+              color="info"
+              @click:close="filters.location = filters.location.filter(l => l !== locId)"
+            >
+              {{ getLocationDisplay(locId) }}
+            </v-chip>
+            <v-chip
+              v-if="filters.userName"
+              closable
+              size="small"
+              color="default"
+              @click:close="filters.userName = null"
+            >
+              User: {{ filters.userName }}
+            </v-chip>
+            <v-chip
+              v-if="filters.orderType"
+              closable
+              size="small"
+              :color="filters.orderType === 'partner' ? 'primary' : 'default'"
+              @click:close="filters.orderType = null"
+            >
+              {{ filters.orderType === 'partner' ? 'Partner' : 'Internal' }}
+            </v-chip>
+            <v-chip
+              v-if="filters.pricing"
+              closable
+              size="small"
+              :color="filters.pricing === 'custom' ? 'default' : 'info'"
+              @click:close="filters.pricing = null"
+            >
+              {{ filters.pricing === 'custom' ? 'Custom Pricing' : filters.pricing }}
+            </v-chip>
+          </div>
+
+          <v-row dense class="mt-2">
+            <v-col cols="12" class="d-flex align-center justify-space-between">
+              <div>
+                <v-btn
+                  v-if="hasActiveFilters"
+                  variant="text"
+                  color="primary"
+                  size="small"
+                  @click="clearFilters"
+                >
+                  Clear Filters
+                </v-btn>
+                <v-btn v-else variant="text" size="small" @click="filtersExpanded = false">
+                  Hide Filters
+                </v-btn>
+              </div>
+              <v-tooltip
+                :disabled="canCreateAnyOrders"
+                text="You do not have permission to create orders"
+                location="bottom"
+              >
+                <template #activator="{ props }">
+                  <span v-bind="props">
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-plus"
+                      :disabled="!canCreateAnyOrders"
+                      @click="openOrderDialog"
+                    >
+                      Create Order
+                    </v-btn>
+                  </span>
+                </template>
+              </v-tooltip>
+            </v-col>
+          </v-row>
+        </template>
       </v-card-text>
     </v-card>
 
     <!-- Market Listings Table -->
     <v-card>
       <v-card-title>
-        <v-row align="center">
-          <v-col cols="12" md="6">
+        <v-row>
+          <v-col cols="12" md="4">
             <v-text-field
               v-model="search"
               prepend-icon="mdi-magnify"
@@ -125,7 +271,7 @@
               density="compact"
             />
           </v-col>
-          <v-col cols="12" md="6" class="text-right">
+          <v-col cols="12" md="4" class="text-right">
             <span class="text-body-2 text-medium-emphasis">
               {{ filteredItems.length }} order(s)
             </span>
@@ -139,7 +285,8 @@
         :loading="loading"
         :items-per-page="25"
         :row-props="getRowProps"
-        class="elevation-0"
+        class="elevation-0 clickable-rows"
+        @click:row="onRowClick"
       >
         <template #item.itemType="{ item }">
           <v-chip
@@ -147,46 +294,52 @@
             size="small"
             variant="flat"
             class="clickable-chip"
-            @click="setFilter('itemType', item.itemType)"
+            @click.stop="setFilter('itemType', item.itemType)"
           >
             {{ item.itemType === 'sell' ? 'SELL' : 'BUY' }}
           </v-chip>
         </template>
 
         <template #item.commodityTicker="{ item }">
-          <div
-            class="font-weight-medium clickable-cell"
-            @click="setFilter('commodity', item.commodityTicker)"
+          <a
+            href="#"
+            class="font-weight-medium filter-link"
+            @click.stop.prevent="setFilter('commodity', item.commodityTicker)"
           >
             {{ getCommodityDisplay(item.commodityTicker) }}
-          </div>
-          <div
-            v-if="getCommodityCategory(item.commodityTicker)"
-            class="text-caption text-medium-emphasis clickable-cell"
-            @click="setFilter('category', getCommodityCategory(item.commodityTicker))"
-          >
-            {{ getCommodityCategory(item.commodityTicker) }}
+          </a>
+          <div v-if="getCommodityCategory(item.commodityTicker)" class="d-none d-lg-block">
+            <a
+              href="#"
+              class="text-caption text-medium-emphasis filter-link"
+              @click.stop.prevent="
+                setFilter('category', getCommodityCategory(item.commodityTicker))
+              "
+            >
+              {{ getCommodityCategory(item.commodityTicker) }}
+            </a>
           </div>
         </template>
 
         <template #item.locationId="{ item }">
-          <div
-            class="font-weight-medium clickable-cell"
-            @click="setFilter('location', item.locationId)"
+          <a
+            href="#"
+            class="font-weight-medium filter-link"
+            @click.stop.prevent="setFilter('location', item.locationId)"
           >
             {{ getLocationDisplay(item.locationId) }}
-          </div>
+          </a>
         </template>
 
         <template #item.userName="{ item }">
-          <div
-            class="clickable-cell"
+          <a
+            href="#"
+            class="filter-link"
             :class="{ 'font-weight-medium': item.isOwn }"
-            @click="setFilter('userName', item.userName)"
+            @click.stop.prevent="setFilter('userName', item.userName)"
           >
             {{ item.userName }}
-            <v-chip v-if="item.isOwn" size="x-small" color="info" class="ml-1">You</v-chip>
-          </div>
+          </a>
         </template>
 
         <template #item.fioUploadedAt="{ item }">
@@ -196,21 +349,59 @@
             variant="tonal"
             :color="getFioAgeColor(item.fioUploadedAt)"
           >
-            {{ formatFioAge(item.fioUploadedAt) }}
+            {{ formatRelativeTime(item.fioUploadedAt) }}
           </v-chip>
           <span v-else class="text-medium-emphasis text-caption">—</span>
         </template>
 
         <template #item.price="{ item }">
-          <span class="font-weight-medium">
-            {{
-              item.price.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })
-            }}
-          </span>
-          <span class="text-caption text-medium-emphasis ml-1">{{ item.currency }}</span>
+          <div class="d-flex align-center">
+            <template v-if="getDisplayPrice(item) !== null">
+              <span class="font-weight-medium">
+                {{
+                  getDisplayPrice(item)!.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                }}
+              </span>
+              <span class="text-caption text-medium-emphasis ml-1">{{ item.currency }}</span>
+            </template>
+            <span v-else class="text-medium-emphasis">--</span>
+            <!-- Inline pricing chip for small screens -->
+            <v-chip
+              v-if="item.pricingMode === 'dynamic'"
+              size="x-small"
+              color="info"
+              variant="tonal"
+              class="ml-2 d-lg-none"
+            >
+              {{ item.priceListCode }}
+            </v-chip>
+          </div>
+        </template>
+
+        <template #item.pricingMode="{ item }">
+          <v-chip
+            v-if="item.pricingMode === 'dynamic'"
+            size="small"
+            color="info"
+            variant="tonal"
+            class="clickable-chip"
+            @click.stop="setFilter('pricing', item.priceListCode)"
+          >
+            {{ item.priceListCode }}
+          </v-chip>
+          <v-chip
+            v-else
+            size="small"
+            color="default"
+            variant="outlined"
+            class="clickable-chip"
+            @click.stop="setFilter('pricing', 'custom')"
+          >
+            Custom
+          </v-chip>
         </template>
 
         <template #item.quantity="{ item }">
@@ -218,9 +409,6 @@
             <template #activator="{ props }">
               <span v-bind="props" class="font-weight-medium">
                 {{ item.remainingQuantity.toLocaleString() }}
-                <span v-if="item.reservedQuantity > 0" class="text-medium-emphasis">
-                  / {{ item.quantity.toLocaleString() }}
-                </span>
               </span>
             </template>
             <div>
@@ -240,7 +428,7 @@
             size="small"
             variant="tonal"
             class="clickable-chip"
-            @click="setFilter('orderType', item.orderType)"
+            @click.stop="setFilter('orderType', item.orderType)"
           >
             {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
           </v-chip>
@@ -261,11 +449,26 @@
         <template #item.actions="{ item }">
           <v-menu>
             <template #activator="{ props }">
-              <v-btn v-bind="props" icon size="small" variant="text">
+              <v-btn v-bind="props" icon size="small" variant="text" @click.stop>
                 <v-icon>mdi-dots-vertical</v-icon>
               </v-btn>
             </template>
             <v-list density="compact">
+              <!-- Reserve/Fill option for small screens -->
+              <v-list-item
+                v-if="!item.isOwn && canReserveOrder(item)"
+                class="d-lg-none"
+                @click="openReserveDialog(item)"
+              >
+                <template #prepend>
+                  <v-icon :color="item.itemType === 'sell' ? 'warning' : 'success'">
+                    {{ item.itemType === 'sell' ? 'mdi-cart-arrow-down' : 'mdi-package-variant' }}
+                  </v-icon>
+                </template>
+                <v-list-item-title>
+                  {{ item.itemType === 'sell' ? 'Reserve' : 'Fill' }}
+                </v-list-item-title>
+              </v-list-item>
               <v-list-item @click="viewOrder(item)">
                 <template #prepend>
                   <v-icon>mdi-eye</v-icon>
@@ -338,7 +541,71 @@
               class="mb-2"
             />
 
-            <v-row>
+            <!-- Automatic Pricing Toggle -->
+            <div class="d-flex align-center mb-3 text-body-2">
+              <span class="text-medium-emphasis">Automatic Pricing:</span>
+              <a
+                v-if="editForm.usePriceList"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleEditPricing(false)"
+              >
+                ON
+              </a>
+              <a
+                v-else-if="canUseDynamicPricing"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleEditPricing(true)"
+              >
+                OFF
+              </a>
+              <span v-else class="ml-2 text-medium-emphasis">
+                OFF
+                <v-tooltip location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                      mdi-alert-circle-outline
+                    </v-icon>
+                  </template>
+                  <span>Set a default price list in Account Settings to enable</span>
+                </v-tooltip>
+              </span>
+              <v-chip
+                v-if="editForm.usePriceList"
+                size="x-small"
+                color="info"
+                variant="tonal"
+                class="ml-2"
+              >
+                {{ editForm.priceListCode }}
+              </v-chip>
+            </div>
+
+            <!-- Dynamic Pricing Display (when using price list) -->
+            <PriceListDisplay
+              v-if="editForm.usePriceList"
+              :loading="loadingEditSuggestedPrice"
+              :price="editSuggestedPrice"
+              :price-list-code="settingsStore.defaultPriceList.value ?? ''"
+              :requested-currency="editForm.currency"
+              :fallback-location-display="
+                editSuggestedPrice?.locationId
+                  ? getLocationDisplay(editSuggestedPrice.locationId)
+                  : ''
+              "
+              :requested-location-display="
+                editSuggestedPrice?.requestedLocationId
+                  ? getLocationDisplay(editSuggestedPrice.requestedLocationId)
+                  : ''
+              "
+              class="mb-4"
+            />
+
+            <!-- Custom Price Input (when not using price list) -->
+            <v-row v-if="!editForm.usePriceList">
               <v-col cols="8">
                 <v-text-field
                   v-model.number="editForm.price"
@@ -372,29 +639,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400">
-      <v-card>
-        <v-card-title
-          >Delete {{ deletingItem?.itemType === 'sell' ? 'Sell' : 'Buy' }} Order</v-card-title
-        >
-        <v-card-text>
-          Are you sure you want to delete your
-          {{ deletingItem?.itemType === 'sell' ? 'sell' : 'buy' }} order for
-          <strong>{{
-            deletingItem ? getCommodityDisplay(deletingItem.commodityTicker) : ''
-          }}</strong>
-          at <strong>{{ deletingItem ? getLocationDisplay(deletingItem.locationId) : '' }}</strong
-          >?
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="deleting" @click="confirmDelete"> Delete </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <!-- Reservation Dialog -->
     <ReservationDialog
       v-model="reserveDialog"
@@ -409,6 +653,7 @@
       :order-id="orderDetailId"
       @deleted="loadMarketItems"
       @updated="loadMarketItems"
+      @edit="onEditFromDetail"
     />
   </v-container>
 </template>
@@ -416,19 +661,33 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
-import { api } from '../services/api'
-import { locationService } from '../services/locationService'
-import { commodityService } from '../services/commodityService'
+import { api, type EffectivePrice } from '../services/api'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
+import {
+  useSnackbar,
+  useDisplayHelpers,
+  useFormatters,
+  useOrderDeepLink,
+  useUrlFilters,
+  useUrlState,
+} from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
 import ReservationDialog from '../components/ReservationDialog.vue'
+import PriceListDisplay from '../components/PriceListDisplay.vue'
+import ConfirmationDialog from '../components/ConfirmationDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+const { snackbar, showSnackbar } = useSnackbar()
+const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
+const { formatRelativeTime, getFioAgeColor } = useFormatters()
 
 // Unified market item type
 type MarketItemType = 'sell' | 'buy'
+type PricingMode = 'fixed' | 'dynamic'
 
 interface MarketItem {
   id: number
@@ -445,84 +704,99 @@ interface MarketItem {
   activeReservationCount: number
   isOwn: boolean
   fioUploadedAt: string | null // When seller's FIO inventory was last synced
+  pricingMode: PricingMode
+  effectivePrice: number | null
+  priceListCode: string | null
 }
 
-interface Filters {
-  itemType: MarketItemType | null
-  commodity: string | null
-  category: string | null
-  location: string | null
-  userName: string | null
-  orderType: OrderType | null
+// Get display price for an item (effective price for dynamic, regular price for fixed)
+const getDisplayPrice = (item: MarketItem): number | null => {
+  if (item.pricingMode === 'dynamic') {
+    return item.effectivePrice
+  }
+  return item.price
 }
 
-// Display helpers that respect user preferences
-const getLocationDisplay = (locationId: string): string => {
-  return locationService.getLocationDisplay(locationId, userStore.getLocationDisplayMode())
-}
-
-const getCommodityDisplay = (ticker: string): string => {
-  return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
-}
-
-const getCommodityCategory = (ticker: string): string | null => {
-  return commodityService.getCommodityCategory(ticker)
-}
-
-// Format FIO age as a short duration (e.g., "2h", "3d")
-const formatFioAge = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = Date.now()
-  const diffMs = now - date.getTime()
-
-  if (diffMs < 0) return 'Future?'
-
-  const minutes = Math.floor(diffMs / (1000 * 60))
-  const hours = Math.floor(diffMs / (1000 * 60 * 60))
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (days > 0) return `${days}d`
-  if (hours > 0) return `${hours}h`
-  if (minutes > 0) return `${minutes}m`
-  return '<1m'
-}
-
-// Get color based on FIO data age (fresh = green, stale = red)
-const getFioAgeColor = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = Date.now()
-  const hoursAgo = (now - date.getTime()) / (1000 * 60 * 60)
-
-  if (hoursAgo < 1) return 'success' // Less than 1 hour - very fresh
-  if (hoursAgo < 24) return 'default' // Less than 24 hours - fine
-  if (hoursAgo < 72) return 'warning' // 1-3 days - getting stale
-  return 'error' // More than 3 days - very stale
-}
+// Filters interface removed - using useUrlFilters instead
 
 const headers = [
-  { title: '', key: 'itemType', sortable: true, width: 70 },
-  { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
-  { title: 'Commodity', key: 'commodityTicker', sortable: true },
-  { title: 'Location', key: 'locationId', sortable: true },
-  { title: 'User', key: 'userName', sortable: true },
-  { title: 'FIO Age', key: 'fioUploadedAt', sortable: true },
-  { title: 'Price', key: 'price', sortable: true, align: 'end' as const },
-  { title: 'Visibility', key: 'orderType', sortable: true },
-  { title: '', key: 'reserve', sortable: false, width: 90 },
+  {
+    title: '',
+    key: 'itemType',
+    sortable: true,
+    width: 70,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
+  },
+  { title: 'Qty', key: 'quantity', sortable: true, align: 'end' as const, width: 80 },
+  {
+    title: 'Commodity',
+    key: 'commodityTicker',
+    sortable: true,
+    cellProps: { class: 'col-commodity' },
+    headerProps: { class: 'col-commodity' },
+  },
+  {
+    title: 'Location',
+    key: 'locationId',
+    sortable: true,
+    cellProps: { class: 'col-location' },
+    headerProps: { class: 'col-location' },
+  },
+  { title: 'User', key: 'userName', sortable: true, width: 120 },
+  {
+    title: 'FIO Age',
+    key: 'fioUploadedAt',
+    sortable: true,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
+  },
+  { title: 'Price', key: 'price', sortable: true },
+  {
+    title: 'Pricing',
+    key: 'pricingMode',
+    sortable: true,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
+  },
+  {
+    title: 'Visibility',
+    key: 'orderType',
+    sortable: true,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
+  },
+  {
+    title: '',
+    key: 'reserve',
+    sortable: false,
+    width: 90,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
+  },
   { title: '', key: 'actions', sortable: false, width: 50 },
 ]
 
 const marketItems = ref<MarketItem[]>([])
 const loading = ref(false)
-const search = ref('')
+
+// Search with URL deep linking
+const search = useUrlState<string | null>({
+  param: 'search',
+  defaultValue: null,
+  debounce: 150,
+})
 
 const orderDialog = ref(false)
 const orderDialogTab = ref<'buy' | 'sell'>('buy')
 
-// Order detail dialog
-const orderDetailDialog = ref(false)
-const orderDetailType = ref<'sell' | 'buy'>('sell')
-const orderDetailId = ref<number>(0)
+// Order detail dialog with deep linking
+const {
+  dialogOpen: orderDetailDialog,
+  orderType: orderDetailType,
+  orderId: orderDetailId,
+  openOrder,
+} = useOrderDeepLink()
 
 // Edit dialog
 const editDialog = ref(false)
@@ -575,6 +849,17 @@ const editForm = ref({
   currency: 'CIS' as Currency,
   orderType: 'internal' as OrderType,
   quantity: 0, // Only used for buy orders
+  usePriceList: false,
+  priceListCode: null as string | null,
+})
+
+// Suggested price for edit dialog
+const loadingEditSuggestedPrice = ref(false)
+const editSuggestedPrice = ref<EffectivePrice | null>(null)
+
+// Check if user can use dynamic pricing (has a default price list)
+const canUseDynamicPricing = computed(() => {
+  return settingsStore.defaultPriceList.value !== null
 })
 
 // Delete dialog
@@ -586,22 +871,36 @@ const deleting = ref(false)
 const reserveDialog = ref(false)
 const reservingItem = ref<MarketItem | null>(null)
 
-// Filters
-const filters = ref<Filters>({
-  itemType: null,
-  commodity: null,
-  category: null,
-  location: null,
-  userName: null,
-  orderType: null,
+// Filters with URL deep linking
+const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
+  schema: {
+    itemType: { type: 'string' },
+    commodity: { type: 'array' },
+    category: { type: 'string' },
+    location: { type: 'array' },
+    userName: { type: 'string' },
+    orderType: { type: 'string' },
+    pricing: { type: 'string' },
+  },
 })
+const filtersExpanded = ref(false)
+
+// Get FIO age border class for responsive view
+const getFioBorderClass = (fioUploadedAt: string | null): string => {
+  if (!fioUploadedAt) return 'fio-border-none'
+  const color = getFioAgeColor(fioUploadedAt)
+  return `fio-border-${color}`
+}
 
 // Row highlighting for own orders and alternating colors
 const getRowProps = ({ item, index }: { item: MarketItem; index: number }) => {
   const classes: string[] = []
   if (item.isOwn) classes.push('own-listing-row')
   if (index % 2 === 1) classes.push('alt-row')
-  return classes.length > 0 ? { class: classes.join(' ') } : {}
+  // Add border classes for responsive view
+  classes.push(item.itemType === 'sell' ? 'type-border-sell' : 'type-border-buy')
+  classes.push(getFioBorderClass(item.fioUploadedAt))
+  return { class: classes.join(' ') }
 }
 
 // Computed filter options based on market items data
@@ -643,58 +942,49 @@ const visibilityOptions = [
   { title: 'Partner', value: 'partner' as OrderType },
 ]
 
-const hasActiveFilters = computed(() => {
-  return Object.values(filters.value).some(v => v !== null)
+const pricingOptions = computed(() => {
+  const options: { title: string; value: string }[] = [{ title: 'Custom', value: 'custom' }]
+  const priceLists = new Set(
+    marketItems.value.filter(l => l.priceListCode).map(l => l.priceListCode!)
+  )
+  for (const code of Array.from(priceLists).sort()) {
+    options.push({ title: code, value: code })
+  }
+  return options
 })
 
-const clearFilters = () => {
-  filters.value = {
-    itemType: null,
-    commodity: null,
-    category: null,
-    location: null,
-    userName: null,
-    orderType: null,
-  }
-}
-
-const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
-  if (value) {
-    filters.value[key] = value
-  }
-}
-
-const snackbar = ref({
-  show: false,
-  message: '',
-  color: 'success',
-})
-
-const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
-  snackbar.value = { show: true, message, color }
-}
+// hasActiveFilters, clearFilters, and setFilter are provided by useUrlFilters
 
 const filteredItems = computed(() => {
   let result = marketItems.value
 
-  // Apply filters
+  // Apply string filters (single-select)
   if (filters.value.itemType) {
     result = result.filter(l => l.itemType === filters.value.itemType)
   }
-  if (filters.value.commodity) {
-    result = result.filter(l => l.commodityTicker === filters.value.commodity)
-  }
   if (filters.value.category) {
     result = result.filter(l => getCommodityCategory(l.commodityTicker) === filters.value.category)
-  }
-  if (filters.value.location) {
-    result = result.filter(l => l.locationId === filters.value.location)
   }
   if (filters.value.userName) {
     result = result.filter(l => l.userName === filters.value.userName)
   }
   if (filters.value.orderType) {
     result = result.filter(l => l.orderType === filters.value.orderType)
+  }
+  if (filters.value.pricing) {
+    if (filters.value.pricing === 'custom') {
+      result = result.filter(l => l.pricingMode === 'fixed')
+    } else {
+      result = result.filter(l => l.priceListCode === filters.value.pricing)
+    }
+  }
+
+  // Apply array filters (multi-select)
+  if (filters.value.commodity.length > 0) {
+    result = result.filter(l => filters.value.commodity.includes(l.commodityTicker))
+  }
+  if (filters.value.location.length > 0) {
+    result = result.filter(l => filters.value.location.includes(l.locationId))
   }
 
   // Apply search
@@ -737,6 +1027,9 @@ const loadMarketItems = async () => {
       activeReservationCount: listing.activeReservationCount,
       isOwn: listing.isOwn,
       fioUploadedAt: listing.fioUploadedAt,
+      pricingMode: listing.pricingMode,
+      effectivePrice: listing.effectivePrice,
+      priceListCode: listing.priceListCode,
     }))
 
     // Transform buy requests to unified format
@@ -755,9 +1048,12 @@ const loadMarketItems = async () => {
       activeReservationCount: request.activeReservationCount,
       isOwn: request.isOwn,
       fioUploadedAt: request.fioUploadedAt,
+      pricingMode: request.pricingMode,
+      effectivePrice: request.effectivePrice,
+      priceListCode: request.priceListCode,
     }))
 
-    // Combine and sort by commodity, then location, then price
+    // Combine and sort by commodity, then location, then price (using effective price for dynamic)
     marketItems.value = [...sellItems, ...buyItems].sort((a, b) => {
       if (a.commodityTicker !== b.commodityTicker) {
         return a.commodityTicker.localeCompare(b.commodityTicker)
@@ -765,7 +1061,10 @@ const loadMarketItems = async () => {
       if (a.locationId !== b.locationId) {
         return a.locationId.localeCompare(b.locationId)
       }
-      return a.price - b.price
+      // Use display price for sorting (effective for dynamic, regular for fixed)
+      const priceA = getDisplayPrice(a) ?? Infinity
+      const priceB = getDisplayPrice(b) ?? Infinity
+      return priceA - priceB
     })
   } catch (error) {
     console.error('Failed to load market items', error)
@@ -781,9 +1080,20 @@ const openOrderDialog = () => {
 }
 
 const viewOrder = (item: MarketItem) => {
-  orderDetailType.value = item.itemType
-  orderDetailId.value = item.id
-  orderDetailDialog.value = true
+  openOrder(item.itemType, item.id)
+}
+
+// Handler for row clicks on the data table
+const onRowClick = (_event: Event, { item }: { item: MarketItem }) => {
+  viewOrder(item)
+}
+
+// Handler for edit event from OrderDetailDialog
+const onEditFromDetail = (orderType: 'sell' | 'buy', orderId: number) => {
+  const item = marketItems.value.find(i => i.itemType === orderType && i.id === orderId)
+  if (item) {
+    openEditDialog(item)
+  }
 }
 
 const openReserveDialog = (item: MarketItem) => {
@@ -801,15 +1111,64 @@ const onOrderCreated = async (type: 'buy' | 'sell') => {
   await loadMarketItems()
 }
 
+// Load suggested price for edit dialog
+const loadEditSuggestedPrice = async () => {
+  if (!editingItem.value) return
+  const commodity = editingItem.value.commodityTicker
+  const location = editingItem.value.locationId
+  const currency = editForm.value.currency
+  const priceList = settingsStore.defaultPriceList.value
+
+  if (!commodity || !location || !currency || !priceList) {
+    editSuggestedPrice.value = null
+    return
+  }
+
+  try {
+    loadingEditSuggestedPrice.value = true
+    const prices = await api.prices.getEffective(priceList, location, currency)
+    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
+    editSuggestedPrice.value = price ?? null
+  } catch {
+    editSuggestedPrice.value = null
+  } finally {
+    loadingEditSuggestedPrice.value = false
+  }
+}
+
 const openEditDialog = (item: MarketItem) => {
   editingItem.value = item
+  const usePriceList = item.pricingMode === 'dynamic' && item.priceListCode !== null
   editForm.value = {
     price: item.price,
     currency: item.currency,
     orderType: item.orderType,
     quantity: item.quantity,
+    usePriceList,
+    priceListCode: item.priceListCode,
   }
+  editSuggestedPrice.value = null
   editDialog.value = true
+  // Load suggested price if user has a default price list
+  if (settingsStore.defaultPriceList.value) {
+    loadEditSuggestedPrice()
+  }
+}
+
+// Toggle automatic pricing in edit form
+const toggleEditPricing = (enable: boolean) => {
+  editForm.value.usePriceList = enable
+  if (enable) {
+    editForm.value.priceListCode = settingsStore.defaultPriceList.value
+    editForm.value.price = 0
+  } else {
+    editForm.value.priceListCode = null
+    // Keep the existing price or set a default
+    if (editForm.value.price === 0 && editingItem.value) {
+      // If switching from dynamic to custom, use effective price if available
+      editForm.value.price = editingItem.value.effectivePrice ?? 1
+    }
+  }
 }
 
 const saveEdit = async () => {
@@ -820,18 +1179,23 @@ const saveEdit = async () => {
 
   try {
     saving.value = true
+    const priceListCode = editForm.value.usePriceList ? editForm.value.priceListCode : null
+    const price = editForm.value.usePriceList ? 0 : editForm.value.price
+
     if (editingItem.value.itemType === 'sell') {
       await api.sellOrders.update(editingItem.value.id, {
-        price: editForm.value.price,
+        price,
         currency: editForm.value.currency,
         orderType: editForm.value.orderType,
+        priceListCode,
       })
     } else {
       await api.buyOrders.update(editingItem.value.id, {
-        price: editForm.value.price,
+        price,
         currency: editForm.value.currency,
         orderType: editForm.value.orderType,
         quantity: editForm.value.quantity,
+        priceListCode,
       })
     }
     showSnackbar('Order updated successfully')
@@ -879,12 +1243,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.clickable-cell {
-  cursor: pointer;
+.filter-link {
+  color: inherit;
+  text-decoration: none;
   transition: color 0.2s;
 }
 
-.clickable-cell:hover {
+.filter-link:hover {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
 }
@@ -897,10 +1262,31 @@ onMounted(() => {
 .clickable-chip:hover {
   opacity: 0.8;
 }
+
+/* Column width constraints */
+.col-commodity {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-location {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>
 
 <style>
 /* Non-scoped to target v-data-table rows */
+.clickable-rows tbody tr {
+  cursor: pointer;
+}
+
+.clickable-rows tbody tr:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08) !important;
+}
+
 .own-listing-row {
   background-color: rgba(var(--v-theme-info), 0.08) !important;
 }
@@ -912,5 +1298,39 @@ onMounted(() => {
 /* Ensure own-listing-row takes precedence over alt-row */
 .own-listing-row.alt-row {
   background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
+
+/* Responsive borders for smaller screens (below lg breakpoint) */
+@media (max-width: 1279px) {
+  /* Left border for Buy/Sell type */
+  .type-border-sell > td:nth-child(2) {
+    border-left: 6px solid rgb(var(--v-theme-success)) !important;
+  }
+  .type-border-buy > td:nth-child(2) {
+    border-left: 6px solid rgb(var(--v-theme-warning)) !important;
+  }
+
+  /* Right border for FIO age */
+  .fio-border-success > td:last-child {
+    border-right: 6px solid rgb(var(--v-theme-success)) !important;
+  }
+  .fio-border-default > td:last-child {
+    border-right: 6px solid rgba(var(--v-theme-on-surface), 0.3) !important;
+  }
+  .fio-border-warning > td:last-child {
+    border-right: 6px solid rgb(var(--v-theme-warning)) !important;
+  }
+  .fio-border-error > td:last-child {
+    border-right: 6px solid rgb(var(--v-theme-error)) !important;
+  }
+  .fio-border-none > td:last-child {
+    border-right: 6px solid rgba(var(--v-theme-on-surface), 0.12) !important;
+  }
+
+  /* Hide columns that should be hidden below lg breakpoint */
+  .v-data-table th.col-hidden-below-lg,
+  .v-data-table td.col-hidden-below-lg {
+    display: none !important;
+  }
 }
 </style>

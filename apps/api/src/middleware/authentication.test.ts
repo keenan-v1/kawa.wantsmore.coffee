@@ -19,13 +19,25 @@ vi.mock('../utils/requestContext.js', () => ({
   setContextValue: vi.fn(),
 }))
 
+// Mock database to return proper permission results
+const mockDbWhere = vi.fn()
+
 vi.mock('../db/index.js', () => ({
   db: {
-    select: vi.fn(),
+    select: () => ({
+      from: () => ({
+        where: mockDbWhere,
+      }),
+    }),
   },
   userRoles: {
     userId: 'userId',
     roleId: 'roleId',
+  },
+  rolePermissions: {
+    roleId: 'roleId',
+    permissionId: 'permissionId',
+    allowed: 'allowed',
   },
 }))
 
@@ -39,6 +51,8 @@ describe('expressAuthentication', () => {
         authorization: 'Bearer valid-token',
       },
     }
+    // Default: return empty permissions (no permissions granted)
+    mockDbWhere.mockResolvedValue([])
   })
 
   describe('jwt authentication', () => {
@@ -70,59 +84,74 @@ describe('expressAuthentication', () => {
       expect(result).toEqual(payload)
     })
 
-    it('should pass when user has required scope', async () => {
-      const payload = { userId: 1, username: 'admin', roles: ['administrator'] }
+    it('should pass when user has required permission', async () => {
+      const payload = { userId: 1, username: 'admin', roles: ['admin'] }
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
-      vi.mocked(roleCache.getCachedRoles).mockReturnValue(['administrator'])
+      vi.mocked(roleCache.getCachedRoles).mockReturnValue(['admin'])
+      // Mock: admin role has 'prices.manage' permission
+      mockDbWhere.mockResolvedValue([{ permissionId: 'prices.manage' }])
 
-      const result = await expressAuthentication(mockRequest as Request, 'jwt', ['administrator'])
+      const result = await expressAuthentication(mockRequest as Request, 'jwt', ['prices.manage'])
 
       expect(result).toEqual(payload)
     })
 
-    it('should pass when user has all required scopes', async () => {
-      const payload = { userId: 1, username: 'admin', roles: ['administrator', 'member'] }
+    it('should pass when user has all required permissions', async () => {
+      const payload = { userId: 1, username: 'admin', roles: ['admin'] }
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
-      vi.mocked(roleCache.getCachedRoles).mockReturnValue(['administrator', 'member'])
+      vi.mocked(roleCache.getCachedRoles).mockReturnValue(['admin'])
+      // Mock: admin role has both permissions
+      mockDbWhere.mockResolvedValue([
+        { permissionId: 'prices.manage' },
+        { permissionId: 'prices.view' },
+      ])
 
       const result = await expressAuthentication(mockRequest as Request, 'jwt', [
-        'administrator',
-        'member',
+        'prices.manage',
+        'prices.view',
       ])
 
       expect(result).toEqual(payload)
     })
 
-    it('should reject when user lacks required scope', async () => {
+    it('should reject when user lacks required permission', async () => {
       const payload = { userId: 1, username: 'user', roles: ['member'] }
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
       vi.mocked(roleCache.getCachedRoles).mockReturnValue(['member'])
+      // Mock: member role doesn't have 'admin.manage_users' permission
+      mockDbWhere.mockResolvedValue([])
 
       await expect(
-        expressAuthentication(mockRequest as Request, 'jwt', ['administrator'])
+        expressAuthentication(mockRequest as Request, 'jwt', ['admin.manage_users'])
       ).rejects.toThrow('Insufficient permissions')
     })
 
-    it('should reject when user has only some required scopes', async () => {
+    it('should reject when user has only some required permissions', async () => {
       const payload = { userId: 1, username: 'user', roles: ['member'] }
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(payload)
       vi.mocked(roleCache.getCachedRoles).mockReturnValue(['member'])
+      // Mock: member role only has prices.view, not prices.manage
+      mockDbWhere.mockResolvedValue([{ permissionId: 'prices.view' }])
 
       await expect(
-        expressAuthentication(mockRequest as Request, 'jwt', ['member', 'administrator'])
+        expressAuthentication(mockRequest as Request, 'jwt', ['prices.view', 'prices.manage'])
       ).rejects.toThrow('Insufficient permissions')
     })
 
-    it('should use current roles from cache/db for scope check when roles changed', async () => {
+    it('should use current roles from cache/db for permission check when roles changed', async () => {
       const tokenPayload = { userId: 1, username: 'user', roles: ['member'] }
-      const currentRoles = ['member', 'administrator']
+      const currentRoles = ['member', 'admin']
 
       vi.mocked(jwtUtils.verifyToken).mockReturnValue(tokenPayload)
       vi.mocked(roleCache.getCachedRoles).mockReturnValue(currentRoles)
       vi.mocked(jwtUtils.generateToken).mockReturnValue('new-token')
+      // Mock: admin role has 'admin.manage_users' permission
+      mockDbWhere.mockResolvedValue([{ permissionId: 'admin.manage_users' }])
 
-      // Should pass because current roles (not token roles) include administrator
-      const result = await expressAuthentication(mockRequest as Request, 'jwt', ['administrator'])
+      // Should pass because current roles (not token roles) include admin which has the permission
+      const result = await expressAuthentication(mockRequest as Request, 'jwt', [
+        'admin.manage_users',
+      ])
 
       expect(result).toEqual({
         userId: 1,

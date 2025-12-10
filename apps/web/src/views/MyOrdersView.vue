@@ -100,8 +100,25 @@
             </template>
 
             <template #item.price="{ item }">
-              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
-              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+              <div class="d-flex align-center">
+                <template v-if="item.price > 0">
+                  <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+                  <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+                </template>
+                <span v-else class="text-medium-emphasis">--</span>
+                <v-chip
+                  v-if="item.priceListCode"
+                  size="x-small"
+                  color="info"
+                  variant="tonal"
+                  class="ml-2"
+                >
+                  {{ item.priceListCode }}
+                </v-chip>
+                <v-chip v-else size="x-small" color="default" variant="outlined" class="ml-2">
+                  Custom
+                </v-chip>
+              </div>
             </template>
 
             <template #item.availableQuantity="{ item }">
@@ -292,8 +309,25 @@
             </template>
 
             <template #item.price="{ item }">
-              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
-              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+              <div class="d-flex align-center">
+                <template v-if="item.price > 0">
+                  <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+                  <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+                </template>
+                <span v-else class="text-medium-emphasis">--</span>
+                <v-chip
+                  v-if="item.priceListCode"
+                  size="x-small"
+                  color="info"
+                  variant="tonal"
+                  class="ml-2"
+                >
+                  {{ item.priceListCode }}
+                </v-chip>
+                <v-chip v-else size="x-small" color="default" variant="outlined" class="ml-2">
+                  Custom
+                </v-chip>
+              </div>
             </template>
 
             <template #item.quantity="{ item }">
@@ -719,7 +753,71 @@
           </v-alert>
 
           <v-form ref="editSellFormRef">
-            <v-row>
+            <!-- Automatic Pricing Status -->
+            <div class="d-flex align-center mb-3 text-body-2">
+              <span class="text-medium-emphasis">Automatic Pricing:</span>
+              <a
+                v-if="editSellForm.usePriceList"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleSellAutomaticPricing(false)"
+              >
+                ON
+              </a>
+              <a
+                v-else-if="canUseDynamicPricing"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleSellAutomaticPricing(true)"
+              >
+                OFF
+              </a>
+              <span v-else class="ml-2 text-medium-emphasis">
+                OFF
+                <v-tooltip location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                      mdi-alert-circle-outline
+                    </v-icon>
+                  </template>
+                  <span>Set a default price list in Account Settings to enable</span>
+                </v-tooltip>
+              </span>
+              <v-chip
+                v-if="editSellForm.usePriceList"
+                size="x-small"
+                color="info"
+                variant="tonal"
+                class="ml-2"
+              >
+                {{ settingsStore.defaultPriceList.value }}
+              </v-chip>
+            </div>
+
+            <!-- Dynamic Pricing Display (when using price list) -->
+            <PriceListDisplay
+              v-if="editSellForm.usePriceList"
+              :loading="loadingSuggestedSellPrice"
+              :price="suggestedSellPrice"
+              :price-list-code="settingsStore.defaultPriceList.value ?? ''"
+              :requested-currency="editSellForm.currency"
+              :fallback-location-display="
+                suggestedSellPrice?.locationId
+                  ? getLocationDisplay(suggestedSellPrice.locationId)
+                  : ''
+              "
+              :requested-location-display="
+                suggestedSellPrice?.requestedLocationId
+                  ? getLocationDisplay(suggestedSellPrice.requestedLocationId)
+                  : ''
+              "
+              class="mb-3"
+            />
+
+            <!-- Custom Price (when not using price list) -->
+            <v-row v-if="!editSellForm.usePriceList">
               <v-col cols="8">
                 <v-text-field
                   v-model.number="editSellForm.price"
@@ -796,7 +894,71 @@
               required
             />
 
-            <v-row>
+            <!-- Automatic Pricing Status -->
+            <div class="d-flex align-center mb-3 text-body-2">
+              <span class="text-medium-emphasis">Automatic Pricing:</span>
+              <a
+                v-if="editBuyForm.usePriceList"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleBuyAutomaticPricing(false)"
+              >
+                ON
+              </a>
+              <a
+                v-else-if="canUseDynamicPricing"
+                href="#"
+                tabindex="-1"
+                class="ml-2 font-weight-medium text-primary"
+                @click.prevent="toggleBuyAutomaticPricing(true)"
+              >
+                OFF
+              </a>
+              <span v-else class="ml-2 text-medium-emphasis">
+                OFF
+                <v-tooltip location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                      mdi-alert-circle-outline
+                    </v-icon>
+                  </template>
+                  <span>Set a default price list in Account Settings to enable</span>
+                </v-tooltip>
+              </span>
+              <v-chip
+                v-if="editBuyForm.usePriceList"
+                size="x-small"
+                color="info"
+                variant="tonal"
+                class="ml-2"
+              >
+                {{ settingsStore.defaultPriceList.value }}
+              </v-chip>
+            </div>
+
+            <!-- Dynamic Pricing Display (when using price list) -->
+            <PriceListDisplay
+              v-if="editBuyForm.usePriceList"
+              :loading="loadingSuggestedBuyPrice"
+              :price="suggestedBuyPrice"
+              :price-list-code="settingsStore.defaultPriceList.value ?? ''"
+              :requested-currency="editBuyForm.currency"
+              :fallback-location-display="
+                suggestedBuyPrice?.locationId
+                  ? getLocationDisplay(suggestedBuyPrice.locationId)
+                  : ''
+              "
+              :requested-location-display="
+                suggestedBuyPrice?.requestedLocationId
+                  ? getLocationDisplay(suggestedBuyPrice.requestedLocationId)
+                  : ''
+              "
+              class="mb-3"
+            />
+
+            <!-- Custom Price (when not using price list) -->
+            <v-row v-if="!editBuyForm.usePriceList">
               <v-col cols="8">
                 <v-text-field
                   v-model.number="editBuyForm.price"
@@ -881,6 +1043,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useUrlTab, useOrderDeepLink } from '../composables'
 import {
   PERMISSIONS,
   type Currency,
@@ -893,15 +1056,24 @@ import {
   type BuyOrderResponse,
   type ReservationWithDetails,
   type ReservationStatus,
+  type EffectivePrice,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
 import ReservationStatusChip from '../components/ReservationStatusChip.vue'
+import PriceListDisplay from '../components/PriceListDisplay.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+
+// Check if user can use dynamic pricing (has a default price list configured)
+const canUseDynamicPricing = computed(() => {
+  return !!settingsStore.defaultPriceList.value
+})
 
 // Display helpers that respect user preferences
 const getLocationDisplay = (locationId: string): string => {
@@ -912,7 +1084,11 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
-const activeTab = ref('sell')
+const ORDERS_TABS = ['sell', 'buy', 'reservations'] as const
+const activeTab = useUrlTab({
+  validTabs: ORDERS_TABS,
+  defaultTab: 'sell',
+})
 
 const sellHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
@@ -993,22 +1169,29 @@ const reservationRoleFilter = ref<'all' | 'owner' | 'counterparty'>('all')
 const reservationStatusFilter = ref<ReservationStatus | null>(null)
 const reservationActionLoading = ref<string | null>(null)
 
-// Order detail dialog
-const orderDetailDialog = ref(false)
-const orderDetailType = ref<'sell' | 'buy'>('sell')
-const orderDetailId = ref<number>(0)
+// Order detail dialog with deep linking
+const {
+  dialogOpen: orderDetailDialog,
+  orderType: orderDetailType,
+  orderId: orderDetailId,
+  openOrder,
+} = useOrderDeepLink()
 
 // Edit sell order state
 const editSellDialog = ref(false)
 const editingSellOrder = ref<SellOrderResponse | null>(null)
 const editSellFormRef = ref()
 const savingSell = ref(false)
+const loadingSuggestedSellPrice = ref(false)
+const suggestedSellPrice = ref<EffectivePrice | null>(null)
 
 // Edit buy order state
 const editBuyDialog = ref(false)
 const editingBuyOrder = ref<BuyOrderResponse | null>(null)
 const editBuyFormRef = ref()
 const savingBuy = ref(false)
+const loadingSuggestedBuyPrice = ref(false)
+const suggestedBuyPrice = ref<EffectivePrice | null>(null)
 
 // Delete state
 const deleteSellDialog = ref(false)
@@ -1061,6 +1244,8 @@ const editSellForm = ref({
   orderType: 'internal' as OrderType,
   limitMode: 'none' as SellOrderLimitMode,
   limitQuantity: 0,
+  usePriceList: false,
+  priceListCode: null as string | null,
 })
 
 const editBuyForm = ref({
@@ -1068,6 +1253,8 @@ const editBuyForm = ref({
   price: 0,
   currency: 'CIS' as Currency,
   orderType: 'internal' as OrderType,
+  usePriceList: false,
+  priceListCode: null as string | null,
 })
 
 const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
@@ -1275,15 +1462,11 @@ const openSellOrderDialog = () => {
 
 // View order functions
 const viewSellOrder = (order: SellOrderResponse) => {
-  orderDetailType.value = 'sell'
-  orderDetailId.value = order.id
-  orderDetailDialog.value = true
+  openOrder('sell', order.id)
 }
 
 const viewBuyOrder = (order: BuyOrderResponse) => {
-  orderDetailType.value = 'buy'
-  orderDetailId.value = order.id
-  orderDetailDialog.value = true
+  openOrder('buy', order.id)
 }
 
 // Handler for OrderDialog creation
@@ -1312,17 +1495,101 @@ const onOrderUpdated = async () => {
   }
 }
 
+// Load suggested price for sell order editing
+const loadSuggestedSellPrice = async () => {
+  if (!editingSellOrder.value) return
+  const commodity = editingSellOrder.value.commodityTicker
+  const location = editingSellOrder.value.locationId
+  const currency = editSellForm.value.currency
+  const priceList = settingsStore.defaultPriceList.value
+
+  if (!commodity || !location || !currency || !priceList) {
+    suggestedSellPrice.value = null
+    return
+  }
+
+  try {
+    loadingSuggestedSellPrice.value = true
+    const prices = await api.prices.getEffective(priceList, location, currency)
+    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
+    suggestedSellPrice.value = price ?? null
+  } catch {
+    suggestedSellPrice.value = null
+  } finally {
+    loadingSuggestedSellPrice.value = false
+  }
+}
+
+// Load suggested price for buy order editing
+const loadSuggestedBuyPrice = async () => {
+  if (!editingBuyOrder.value) return
+  const commodity = editingBuyOrder.value.commodityTicker
+  const location = editingBuyOrder.value.locationId
+  const currency = editBuyForm.value.currency
+  const priceList = settingsStore.defaultPriceList.value
+
+  if (!commodity || !location || !currency || !priceList) {
+    suggestedBuyPrice.value = null
+    return
+  }
+
+  try {
+    loadingSuggestedBuyPrice.value = true
+    const prices = await api.prices.getEffective(priceList, location, currency)
+    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
+    suggestedBuyPrice.value = price ?? null
+  } catch {
+    suggestedBuyPrice.value = null
+  } finally {
+    loadingSuggestedBuyPrice.value = false
+  }
+}
+
+// Toggle automatic pricing for sell order edit
+const toggleSellAutomaticPricing = async (enable: boolean) => {
+  const priceListCode = enable ? settingsStore.defaultPriceList.value : null
+  editSellForm.value.usePriceList = enable
+  editSellForm.value.priceListCode = priceListCode
+  if (enable) {
+    editSellForm.value.price = 0
+    if (suggestedSellPrice.value) {
+      editSellForm.value.currency = suggestedSellPrice.value.currency
+    }
+  }
+}
+
+// Toggle automatic pricing for buy order edit
+const toggleBuyAutomaticPricing = async (enable: boolean) => {
+  const priceListCode = enable ? settingsStore.defaultPriceList.value : null
+  editBuyForm.value.usePriceList = enable
+  editBuyForm.value.priceListCode = priceListCode
+  if (enable) {
+    editBuyForm.value.price = 0
+    if (suggestedBuyPrice.value) {
+      editBuyForm.value.currency = suggestedBuyPrice.value.currency
+    }
+  }
+}
+
 // Edit sell order functions
 const openEditSellDialog = (order: SellOrderResponse) => {
   editingSellOrder.value = order
+  const usePriceList = !!order.priceListCode
   editSellForm.value = {
     price: order.price,
     currency: order.currency,
     orderType: order.orderType,
     limitMode: order.limitMode,
     limitQuantity: order.limitQuantity ?? 0,
+    usePriceList,
+    priceListCode: order.priceListCode ?? null,
   }
+  suggestedSellPrice.value = null
   editSellDialog.value = true
+  // Load suggested price if user has a default price list
+  if (settingsStore.defaultPriceList.value) {
+    loadSuggestedSellPrice()
+  }
 }
 
 const saveEditSell = async () => {
@@ -1334,8 +1601,9 @@ const saveEditSell = async () => {
   try {
     savingSell.value = true
     await api.sellOrders.update(editingSellOrder.value.id, {
-      price: editSellForm.value.price,
+      price: editSellForm.value.usePriceList ? 0 : editSellForm.value.price,
       currency: editSellForm.value.currency,
+      priceListCode: editSellForm.value.priceListCode,
       orderType: editSellForm.value.orderType,
       limitMode: editSellForm.value.limitMode,
       limitQuantity:
@@ -1356,13 +1624,21 @@ const saveEditSell = async () => {
 // Edit buy order functions
 const openEditBuyDialog = (order: BuyOrderResponse) => {
   editingBuyOrder.value = order
+  const usePriceList = !!order.priceListCode
   editBuyForm.value = {
     quantity: order.quantity,
     price: order.price,
     currency: order.currency,
     orderType: order.orderType,
+    usePriceList,
+    priceListCode: order.priceListCode ?? null,
   }
+  suggestedBuyPrice.value = null
   editBuyDialog.value = true
+  // Load suggested price if user has a default price list
+  if (settingsStore.defaultPriceList.value) {
+    loadSuggestedBuyPrice()
+  }
 }
 
 const saveEditBuy = async () => {
@@ -1375,8 +1651,9 @@ const saveEditBuy = async () => {
     savingBuy.value = true
     await api.buyOrders.update(editingBuyOrder.value.id, {
       quantity: editBuyForm.value.quantity,
-      price: editBuyForm.value.price,
+      price: editBuyForm.value.usePriceList ? 0 : editBuyForm.value.price,
       currency: editBuyForm.value.currency,
+      priceListCode: editBuyForm.value.priceListCode,
       orderType: editBuyForm.value.orderType,
     })
     showSnackbar('Buy order updated successfully')

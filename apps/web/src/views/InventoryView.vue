@@ -25,8 +25,8 @@
             <div v-else class="text-body-2 text-medium-emphasis">
               <template v-if="!fioConfigured">
                 No inventory synced yet.
-                <router-link to="/account">Go to Account</router-link>
-                to configure FIO.
+                <router-link to="/account?tab=fio">Configure FIO</router-link>
+                to get started.
               </template>
               <template v-else>No inventory synced yet</template>
             </div>
@@ -62,10 +62,13 @@
             <KeyValueAutocomplete
               v-model="filters.commodity"
               :items="commodityOptions"
+              :favorites="settingsStore.favoritedCommodities.value"
               label="Commodity"
               density="compact"
               clearable
               hide-details
+              multiple
+              @update:favorites="settingsStore.updateSetting('market.favoritedCommodities', $event)"
             />
           </v-col>
           <v-col cols="12" sm="6" md="4" lg="2">
@@ -82,10 +85,13 @@
             <KeyValueAutocomplete
               v-model="filters.location"
               :items="locationOptions"
+              :favorites="settingsStore.favoritedLocations.value"
               label="Location"
               density="compact"
               clearable
               hide-details
+              multiple
+              @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
             />
           </v-col>
           <v-col cols="12" sm="6" md="4" lg="2">
@@ -124,13 +130,14 @@
         <!-- Active Filters Display -->
         <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
           <v-chip
-            v-if="filters.commodity"
+            v-for="ticker in filters.commodity"
+            :key="`commodity-${ticker}`"
             closable
             size="small"
             color="primary"
-            @click:close="filters.commodity = null"
+            @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
           >
-            Commodity: {{ filters.commodity }}
+            {{ getCommodityDisplay(ticker) }}
           </v-chip>
           <v-chip
             v-if="filters.category"
@@ -142,13 +149,14 @@
             Category: {{ filters.category }}
           </v-chip>
           <v-chip
-            v-if="filters.location"
+            v-for="locId in filters.location"
+            :key="`location-${locId}`"
             closable
             size="small"
             color="info"
-            @click:close="filters.location = null"
+            @click:close="filters.location = filters.location.filter(l => l !== locId)"
           >
-            Location: {{ getLocationDisplay(filters.location) }}
+            {{ getLocationDisplay(locId) }}
           </v-chip>
           <v-chip
             v-if="filters.locationType"
@@ -221,7 +229,7 @@
         <template #item.locationId="{ item }">
           <div
             class="font-weight-medium clickable-cell"
-            @click="setFilter('location', item.locationId)"
+            @click="item.locationId && setFilter('location', item.locationId)"
           >
             {{ getLocationDisplay(item.locationId) }}
           </div>
@@ -318,8 +326,8 @@
               </template>
               <template v-else-if="!fioConfigured">
                 No inventory synced yet.
-                <router-link to="/account">Go to Account</router-link>
-                to configure FIO.
+                <router-link to="/account?tab=fio">Configure FIO</router-link>
+                to get started.
               </template>
               <template v-else> Sync your FIO inventory to see your items here </template>
             </p>
@@ -338,7 +346,7 @@
               color="primary"
               class="mt-4"
               prepend-icon="mdi-cog"
-              to="/account"
+              to="/account?tab=fio"
             >
               Configure FIO
             </v-btn>
@@ -361,18 +369,27 @@
 import { ref, computed, onMounted } from 'vue'
 import { PERMISSIONS } from '@kawakawa/types'
 import { api, type FioInventoryItem } from '../services/api'
-import { locationService } from '../services/locationService'
-import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
+import {
+  useSnackbar,
+  useDisplayHelpers,
+  useFormatters,
+  useUrlFilters,
+  useUrlState,
+} from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+const { snackbar, showSnackbar } = useSnackbar()
+const { getLocationDisplay, getCommodityDisplay } = useDisplayHelpers()
+const { formatDateTime, formatRelativeTime, getSyncStatusColor } = useFormatters()
 
 // Check if FIO is configured
 const fioConfigured = computed(() => {
-  const user = userStore.getUser()
-  return user?.hasFioApiKey && user?.fioUsername
+  return settingsStore.hasFioCredentials.value
 })
 
 // Check permissions for order creation
@@ -393,24 +410,6 @@ interface LastSync {
   fioUploadedAt: string | null
 }
 
-interface Filters {
-  commodity: string | null
-  category: string | null
-  location: string | null
-  locationType: string | null
-  storageType: string | null
-}
-
-// Display helpers that respect user preferences
-const getLocationDisplay = (locationId: string | null): string => {
-  if (!locationId) return 'Unknown'
-  return locationService.getLocationDisplay(locationId, userStore.getLocationDisplayMode())
-}
-
-const getCommodityDisplay = (ticker: string): string => {
-  return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
-}
-
 const headers = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
@@ -422,19 +421,27 @@ const headers = [
 const inventory = ref<FioInventoryItem[]>([])
 const loading = ref(false)
 const syncing = ref(false)
-const search = ref('')
 const lastSync = ref<LastSync>({ lastSyncedAt: null, fioUploadedAt: null })
 
 const orderDialog = ref(false)
 const selectedItem = ref<FioInventoryItem | null>(null)
 
-// Filters
-const filters = ref<Filters>({
-  commodity: null,
-  category: null,
-  location: null,
-  locationType: null,
-  storageType: null,
+// Filters with URL deep linking
+const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
+  schema: {
+    commodity: { type: 'array' },
+    location: { type: 'array' },
+    category: { type: 'string' },
+    locationType: { type: 'string' },
+    storageType: { type: 'string' },
+  },
+})
+
+// Search with URL deep linking
+const search = useUrlState<string | null>({
+  param: 'search',
+  defaultValue: null,
+  debounce: 150,
 })
 
 // Computed filter options based on inventory data
@@ -471,48 +478,22 @@ const storageTypeOptions = computed(() => {
   return Array.from(types).sort() as string[]
 })
 
-const hasActiveFilters = computed(() => {
-  return Object.values(filters.value).some(v => v !== null)
-})
-
-const clearFilters = () => {
-  filters.value = {
-    commodity: null,
-    category: null,
-    location: null,
-    locationType: null,
-    storageType: null,
-  }
-}
-
-const setFilter = (key: keyof Filters, value: string | null) => {
-  if (value) {
-    filters.value[key] = value
-  }
-}
-
-const snackbar = ref({
-  show: false,
-  message: '',
-  color: 'success',
-})
-
-const showSnackbar = (message: string, color: 'success' | 'error' | 'warning' = 'success') => {
-  snackbar.value = { show: true, message, color }
-}
+// hasActiveFilters, clearFilters, and setFilter are provided by useUrlFilters
 
 const filteredInventory = computed(() => {
   let result = inventory.value
 
-  // Apply filters
-  if (filters.value.commodity) {
-    result = result.filter(i => i.commodityTicker === filters.value.commodity)
+  // Apply array filters (multi-select)
+  if (filters.value.commodity.length > 0) {
+    result = result.filter(i => filters.value.commodity.includes(i.commodityTicker))
   }
+  if (filters.value.location.length > 0) {
+    result = result.filter(i => i.locationId && filters.value.location.includes(i.locationId))
+  }
+
+  // Apply string filters (single-select)
   if (filters.value.category) {
     result = result.filter(i => i.commodityCategory === filters.value.category)
-  }
-  if (filters.value.location) {
-    result = result.filter(i => i.locationId === filters.value.location)
   }
   if (filters.value.locationType) {
     result = result.filter(i => i.locationType === filters.value.locationType)
@@ -535,34 +516,6 @@ const filteredInventory = computed(() => {
 
   return result
 })
-
-const formatDateTime = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleString()
-}
-
-const formatRelativeTime = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffHours < 1) return 'Just now'
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return new Date(dateStr).toLocaleDateString()
-}
-
-const getSyncStatusColor = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHours = diffMs / (1000 * 60 * 60)
-
-  if (diffHours > 48) return 'error'
-  if (diffHours > 24) return 'warning'
-  return 'success'
-}
 
 const loadInventory = async () => {
   try {

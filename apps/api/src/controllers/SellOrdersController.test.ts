@@ -116,6 +116,7 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'none',
           limitQuantity: null,
+          priceListCode: null,
         },
         {
           id: 2,
@@ -126,12 +127,26 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'max_sell',
           limitQuantity: 200,
+          priceListCode: null,
         },
       ]
-      // Second query returns inventory with location from storage (now includes lastSyncedAt)
+      // Second query returns inventory with location from storage (now includes lastSyncedAt and fioUploadedAt)
+      const fioUploadDate = new Date('2024-01-15T10:00:00Z')
       const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
-        { commodityTicker: 'RAT', quantity: 500, locationId: 'BEN', lastSyncedAt: new Date() },
+        {
+          commodityTicker: 'H2O',
+          quantity: 1000,
+          locationId: 'BEN',
+          lastSyncedAt: new Date(),
+          fioUploadedAt: fioUploadDate,
+        },
+        {
+          commodityTicker: 'RAT',
+          quantity: 500,
+          locationId: 'BEN',
+          lastSyncedAt: new Date(),
+          fioUploadedAt: fioUploadDate,
+        },
       ]
 
       // Query sequence:
@@ -154,6 +169,7 @@ describe('SellOrdersController', () => {
         locationId: 'BEN',
         price: 100,
         currency: 'CIS',
+        priceListCode: null,
         orderType: 'internal',
         limitMode: 'none',
         limitQuantity: null,
@@ -163,6 +179,11 @@ describe('SellOrdersController', () => {
         reservedQuantity: 0,
         fulfilledQuantity: 0,
         remainingQuantity: 1000,
+        fioUploadedAt: '2024-01-15T10:00:00.000Z',
+        pricingMode: 'fixed',
+        effectivePrice: null,
+        isFallback: false,
+        priceLocationId: null,
       })
       expect(result[1]).toEqual({
         id: 2,
@@ -170,6 +191,7 @@ describe('SellOrdersController', () => {
         locationId: 'BEN',
         price: 50,
         currency: 'CIS',
+        priceListCode: null,
         orderType: 'internal',
         limitMode: 'max_sell',
         limitQuantity: 200,
@@ -179,6 +201,11 @@ describe('SellOrdersController', () => {
         reservedQuantity: 0,
         fulfilledQuantity: 0,
         remainingQuantity: 200,
+        fioUploadedAt: '2024-01-15T10:00:00.000Z',
+        pricingMode: 'fixed',
+        effectivePrice: null,
+        isFallback: false,
+        priceLocationId: null,
       })
     })
 

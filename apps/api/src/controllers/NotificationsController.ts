@@ -11,10 +11,11 @@ import {
   Request,
   SuccessResponse,
 } from 'tsoa'
-import type { Notification, NotificationUnreadCount } from '@kawakawa/types'
+import type { Notification, SyncState } from '@kawakawa/types'
 import type { JwtPayload } from '../utils/jwt.js'
 import { NotFound } from '../utils/errors.js'
 import { notificationService } from '../services/notificationService.js'
+import { syncService } from '../services/syncService.js'
 
 @Route('notifications')
 @Tags('Notifications')
@@ -42,15 +43,13 @@ export class NotificationsController extends Controller {
   }
 
   /**
-   * Get unread notification count for the current user
+   * Get sync state including unread count, app version, and data versions
+   * Used for polling to detect app updates and cache invalidation
    */
   @Get('unread-count')
-  public async getUnreadCount(
-    @Request() request: { user: JwtPayload }
-  ): Promise<NotificationUnreadCount> {
+  public async getSyncState(@Request() request: { user: JwtPayload }): Promise<SyncState> {
     const userId = request.user.userId
-    const count = await notificationService.getUnreadCount(userId)
-    return { count }
+    return syncService.getSyncState(userId)
   }
 
   /**

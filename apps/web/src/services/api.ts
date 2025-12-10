@@ -8,6 +8,7 @@ import type {
   CommodityDisplayMode,
   Role,
   SellOrderLimitMode,
+  PricingMode,
   OrderType,
   DiscordSettings,
   UpdateDiscordSettingsRequest,
@@ -23,6 +24,9 @@ import type {
   DiscordAuthResult,
   DiscordRegisterRequest,
   DiscordRegisterResponse,
+  GlobalDefaultsResponse,
+  UpdateGlobalDefaultsRequest,
+  SyncState,
 } from '@kawakawa/types'
 
 interface LoginRequest {
@@ -179,6 +183,328 @@ interface FioLastSyncResponse {
   fioUploadedAt: string | null
 }
 
+// Price List types
+type PriceSource = 'manual' | 'csv_import' | 'google_sheets' | 'fio_exchange'
+
+interface PriceListResponse {
+  id: number
+  exchangeCode: string
+  commodityTicker: string
+  commodityName: string | null
+  locationId: string
+  locationName: string | null
+  price: string
+  currency: Currency
+  source: PriceSource
+  sourceReference: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreatePriceRequest {
+  exchangeCode: string
+  commodityTicker: string
+  locationId: string
+  price: number
+  currency: Currency
+  source?: PriceSource
+  sourceReference?: string | null
+}
+
+interface UpdatePriceRequest {
+  price?: number
+  currency?: Currency
+  source?: PriceSource
+  sourceReference?: string | null
+}
+
+// Effective Price types
+interface AppliedAdjustment {
+  id: number
+  description: string | null
+  type: 'percentage' | 'fixed'
+  value: number
+  appliedAmount: number
+}
+
+interface EffectivePrice {
+  exchangeCode: string
+  commodityTicker: string
+  commodityName: string | null
+  locationId: string
+  locationName: string | null
+  currency: Currency
+  basePrice: number
+  source: PriceSource
+  sourceReference: string | null
+  adjustments: AppliedAdjustment[]
+  finalPrice: number
+  // Fallback information - indicates if price came from default location
+  isFallback?: boolean
+  requestedLocationId?: string // Original location when isFallback is true
+}
+
+// Price Adjustments types
+type AdjustmentType = 'percentage' | 'fixed'
+
+interface PriceAdjustmentResponse {
+  id: number
+  priceListCode: string | null
+  commodityTicker: string | null
+  commodityName: string | null
+  locationId: string | null
+  locationName: string | null
+  currency: Currency | null
+  adjustmentType: AdjustmentType
+  adjustmentValue: string
+  priority: number
+  description: string | null
+  isActive: boolean
+  effectiveFrom: string | null
+  effectiveUntil: string | null
+  createdByUserId: number | null
+  createdByUsername: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreatePriceAdjustmentRequest {
+  priceListCode?: string | null
+  commodityTicker?: string | null
+  locationId?: string | null
+  adjustmentType: AdjustmentType
+  adjustmentValue: number
+  priority?: number
+  description?: string | null
+  isActive?: boolean
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+interface UpdatePriceAdjustmentRequest {
+  priceListCode?: string | null
+  commodityTicker?: string | null
+  locationId?: string | null
+  adjustmentType?: AdjustmentType
+  adjustmentValue?: number
+  priority?: number
+  description?: string | null
+  isActive?: boolean
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+// FIO Exchanges types
+interface FioExchangeResponse {
+  code: string
+  name: string
+  locationId: string | null
+  locationName: string | null
+  currency: Currency
+  createdAt: string
+}
+
+// User Settings types
+interface SettingDefinitionDto {
+  key: string
+  type: 'string' | 'boolean' | 'number' | 'enum' | 'string[]'
+  defaultValue: unknown
+  category: string
+  label: string
+  description: string
+  enumOptions?: string[]
+}
+
+interface UserSettingsResponse {
+  values: Record<string, unknown>
+  definitions: Record<string, SettingDefinitionDto>
+}
+
+// CSV Import types
+interface CsvFieldMapping {
+  ticker: string | number
+  location?: string | number
+  price: string | number
+  currency?: string | number
+}
+
+interface CsvRowError {
+  rowNumber: number
+  field: string
+  value: string
+  message: string
+}
+
+interface ParsedPriceRow {
+  rowNumber: number
+  ticker: string
+  location: string
+  price: number
+  currency: Currency
+  raw: Record<string, string>
+}
+
+interface CsvImportResult {
+  imported: number
+  updated: number
+  skipped: number
+  errors: CsvRowError[]
+}
+
+interface CsvPreviewResult {
+  headers: string[]
+  sampleRows: ParsedPriceRow[]
+  parseErrors: CsvRowError[]
+  validationErrors: CsvRowError[]
+  delimiter: string
+  totalRows: number
+  validRows: number
+}
+
+interface CsvImportRequest {
+  exchangeCode: string
+  mapping: CsvFieldMapping
+  locationDefault?: string
+  currencyDefault?: Currency
+  delimiter?: string
+  hasHeader?: boolean
+}
+
+interface GoogleSheetsImportRequest {
+  url: string
+  exchangeCode: string
+  fieldMapping: CsvFieldMapping
+  locationDefault?: string | null
+  currencyDefault?: Currency | null
+}
+
+// Admin Price Settings types
+type FioPriceField = 'PriceAverage' | 'MMBuy' | 'MMSell' | 'Ask' | 'Bid'
+
+interface PriceSettingsResponse {
+  fioBaseUrl: string
+  fioPriceField: FioPriceField
+  hasGoogleSheetsApiKey: boolean
+  kawaSheetUrl: string | null
+  kawaSheetGid: number | null
+}
+
+interface UpdateFioSettingsRequest {
+  baseUrl?: string
+  priceField?: FioPriceField
+}
+
+interface UpdateGoogleSettingsRequest {
+  apiKey?: string
+}
+
+interface UpdateKawaSheetRequest {
+  url?: string
+  gid?: number | null
+}
+
+// Price List types
+type PriceListType = 'fio' | 'custom'
+
+interface PriceListDefinition {
+  code: string
+  name: string
+  description: string | null
+  type: PriceListType
+  currency: Currency
+  defaultLocationId: string | null
+  defaultLocationName: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  priceCount?: number
+  importConfigCount?: number
+}
+
+interface CreatePriceListRequest {
+  code: string
+  name: string
+  description?: string | null
+  type: PriceListType
+  currency: Currency
+  defaultLocationId?: string | null
+  isActive?: boolean
+}
+
+interface UpdatePriceListRequest {
+  name?: string
+  description?: string | null
+  currency?: Currency
+  defaultLocationId?: string | null
+  isActive?: boolean
+}
+
+// Import Config types
+type ImportSourceType = 'csv' | 'google_sheets'
+type ImportFormat = 'flat' | 'pivot' | 'kawa'
+
+interface ImportConfigResponse {
+  id: number
+  priceListCode: string
+  name: string
+  sourceType: ImportSourceType
+  format: ImportFormat
+  sheetsUrl: string | null
+  sheetGid: number | null
+  config: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreateImportConfigRequest {
+  priceListCode: string
+  name: string
+  sourceType: ImportSourceType
+  format: ImportFormat
+  sheetsUrl?: string | null
+  sheetGid?: number | null
+  config?: Record<string, unknown> | null
+}
+
+interface UpdateImportConfigRequest {
+  name?: string
+  sheetsUrl?: string | null
+  sheetGid?: number | null
+  config?: Record<string, unknown> | null
+}
+
+interface PivotImportResult {
+  imported: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
+// FIO Price Sync types
+interface ExchangeSyncStatus {
+  exchangeCode: string
+  locationId: string | null
+  lastSyncedAt: string | null
+  priceCount: number
+}
+
+interface ExchangeSyncResultResponse {
+  exchangeCode: string
+  locationId: string | null
+  currency: Currency
+  pricesUpdated: number
+  pricesSkipped: number
+  syncedAt: string
+}
+
+interface SyncPricesResponse {
+  success: boolean
+  exchanges: ExchangeSyncResultResponse[]
+  totalUpdated: number
+  totalSkipped: number
+  errors: string[]
+}
+
 interface FioStatsResponse {
   totalItems: number
   totalQuantity: number
@@ -206,6 +532,7 @@ interface SellOrderResponse {
   locationId: string
   price: number
   currency: Currency
+  priceListCode: string | null
   orderType: OrderType
   limitMode: SellOrderLimitMode
   limitQuantity: number | null
@@ -215,6 +542,12 @@ interface SellOrderResponse {
   reservedQuantity: number
   fulfilledQuantity: number
   remainingQuantity: number
+  fioUploadedAt: string | null // When seller's FIO inventory was last synced from game
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
 }
 
 interface CreateSellOrderRequest {
@@ -222,6 +555,7 @@ interface CreateSellOrderRequest {
   locationId: string
   price: number
   currency: Currency
+  priceListCode?: string | null
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -230,6 +564,7 @@ interface CreateSellOrderRequest {
 interface UpdateSellOrderRequest {
   price?: number
   currency?: Currency
+  priceListCode?: string | null
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -243,11 +578,17 @@ interface BuyOrderResponse {
   quantity: number
   price: number
   currency: Currency
+  priceListCode: string | null
   orderType: OrderType
   activeReservationCount: number
   reservedQuantity: number
   fulfilledQuantity: number
   remainingQuantity: number
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
 }
 
 interface CreateBuyOrderRequest {
@@ -256,6 +597,7 @@ interface CreateBuyOrderRequest {
   quantity: number
   price: number
   currency: Currency
+  priceListCode?: string | null
   orderType?: OrderType
 }
 
@@ -263,6 +605,7 @@ interface UpdateBuyOrderRequest {
   quantity?: number
   price?: number
   currency?: Currency
+  priceListCode?: string | null
   orderType?: OrderType
 }
 
@@ -274,6 +617,11 @@ interface MarketListing {
   locationId: string
   price: number
   currency: Currency
+  priceListCode: string | null
+  effectivePrice: number | null
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean
@@ -292,6 +640,11 @@ interface MarketBuyRequest {
   quantity: number
   price: number
   currency: Currency
+  priceListCode: string | null
+  effectivePrice: number | null
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode
   orderType: OrderType
   isOwn: boolean
   jumpCount: number | null
@@ -1615,6 +1968,114 @@ const realApi = {
     return response.json()
   },
 
+  // Admin Global Defaults methods
+  getGlobalDefaults: async (): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging('/api/admin/global-defaults', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get global defaults: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateGlobalDefaults: async (
+    request: UpdateGlobalDefaultsRequest
+  ): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging('/api/admin/global-defaults', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || 'Failed to update global defaults')
+    }
+
+    return response.json()
+  },
+
+  resetGlobalDefault: async (key: string): Promise<GlobalDefaultsResponse> => {
+    const response = await fetchWithLogging(
+      `/api/admin/global-defaults/${encodeURIComponent(key)}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || 'Failed to reset global default')
+    }
+
+    return response.json()
+  },
+
+  getGlobalDefaultHistory: async (key: string): Promise<SettingHistoryEntry[]> => {
+    const response = await fetchWithLogging(
+      `/api/admin/global-defaults/history/${encodeURIComponent(key)}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get global default history: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   // User Discord methods
   getDiscordAuthUrl: async (): Promise<{ url: string; state: string }> => {
     const response = await fetchWithLogging('/api/discord/auth-url', {
@@ -1830,7 +2291,7 @@ const realApi = {
     return response.json()
   },
 
-  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
+  getSyncState: async (): Promise<SyncState> => {
     const response = await fetchWithLogging('/api/notifications/unread-count', {
       method: 'GET',
       headers: getAuthHeaders(),
@@ -1845,10 +2306,16 @@ const realApi = {
         window.location.href = '/login'
         throw new Error('Unauthorized')
       }
-      throw new Error(`Failed to get unread count: ${response.statusText}`)
+      throw new Error(`Failed to get sync state: ${response.statusText}`)
     }
 
     return response.json()
+  },
+
+  // Legacy wrapper for backward compatibility
+  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
+    const syncState = await realApi.getSyncState()
+    return { count: syncState.unreadCount }
   },
 
   markNotificationAsRead: async (id: number): Promise<void> => {
@@ -2176,6 +2643,967 @@ const realApi = {
 
     return response.json()
   },
+
+  // Price List methods
+  getPrices: async (
+    exchange?: string,
+    location?: string,
+    commodity?: string,
+    currency?: Currency
+  ): Promise<PriceListResponse[]> => {
+    const params = new URLSearchParams()
+    if (exchange) params.append('exchange', exchange)
+    if (location) params.append('location', location)
+    if (commodity) params.append('commodity', commodity)
+    if (currency) params.append('currency', currency)
+
+    const url = `/api/prices${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPricesByExchange: async (exchange: string): Promise<PriceListResponse[]> => {
+    const response = await fetchWithLogging(`/api/prices/${exchange}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPrice: async (request: CreatePriceRequest): Promise<PriceListResponse> => {
+    const response = await fetchWithLogging('/api/prices', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 409) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to create price: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePrice: async (id: number, request: UpdatePriceRequest): Promise<PriceListResponse> => {
+    const response = await fetchWithLogging(`/api/prices/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Price not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to update price: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePrice: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/prices/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Price not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to delete price: ${response.statusText}`)
+    }
+  },
+
+  getEffectivePrices: async (
+    exchange: string,
+    locationId: string,
+    currency: Currency,
+    options?: { commodity?: string; fallback?: boolean }
+  ): Promise<EffectivePrice[]> => {
+    const params = new URLSearchParams({ currency })
+    if (options?.commodity) {
+      params.set('commodity', options.commodity)
+    }
+    // Fallback defaults to true on backend, only send if explicitly false
+    if (options?.fallback === false) {
+      params.set('fallback', 'false')
+    }
+    const response = await fetchWithLogging(
+      `/api/prices/effective/${exchange}/${locationId}?${params}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get effective prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Price Adjustments methods
+  getPriceAdjustments: async (
+    exchange?: string,
+    location?: string,
+    activeOnly?: boolean
+  ): Promise<PriceAdjustmentResponse[]> => {
+    const params = new URLSearchParams()
+    if (exchange) params.append('exchange', exchange)
+    if (location) params.append('location', location)
+    if (activeOnly !== undefined) params.append('activeOnly', String(activeOnly))
+
+    const url = `/api/price-adjustments${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetchWithLogging(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get price adjustments: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPriceAdjustment: async (id: number): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      throw new Error(`Failed to get adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPriceAdjustment: async (
+    request: CreatePriceAdjustmentRequest
+  ): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging('/api/price-adjustments', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to create adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePriceAdjustment: async (
+    id: number,
+    request: UpdatePriceAdjustmentRequest
+  ): Promise<PriceAdjustmentResponse> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid request')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to update adjustment: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePriceAdjustment: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/price-adjustments/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Adjustment not found')
+      }
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to delete adjustment: ${response.statusText}`)
+    }
+  },
+
+  // FIO Exchanges methods
+  getFioExchanges: async (): Promise<FioExchangeResponse[]> => {
+    const response = await fetchWithLogging('/api/fio-exchanges', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get FIO exchanges: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // FIO Price Sync methods
+  getFioPriceSyncStatus: async (): Promise<ExchangeSyncStatus[]> => {
+    const response = await fetchWithLogging('/api/prices/sync/fio/status', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get sync status: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  syncFioPrices: async (
+    exchangeCode?: string,
+    priceField?: string
+  ): Promise<SyncPricesResponse> => {
+    const url = exchangeCode
+      ? `/api/prices/sync/fio/${exchangeCode}${priceField ? '?priceField=' + priceField : ''}`
+      : '/api/prices/sync/fio'
+
+    const response = await fetchWithLogging(url, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: exchangeCode ? undefined : JSON.stringify({ priceField }),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to sync prices: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // CSV Import methods
+  previewCsvImport: async (file: File, config: CsvImportRequest): Promise<CsvPreviewResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('config', JSON.stringify(config))
+
+    const response = await fetchWithLogging('/api/import-configs/csv/preview', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('jwt')}`,
+      },
+      body: formData,
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview CSV: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  importCsv: async (file: File, config: CsvImportRequest): Promise<CsvImportResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('config', JSON.stringify(config))
+
+    const response = await fetchWithLogging('/api/import-configs/csv', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('jwt')}`,
+      },
+      body: formData,
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to import CSV: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Google Sheets Import methods
+  previewGoogleSheetsImport: async (
+    request: GoogleSheetsImportRequest
+  ): Promise<CsvPreviewResult> => {
+    const response = await fetchWithLogging('/api/import-configs/google-sheets/preview', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview Google Sheets: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  importGoogleSheets: async (request: GoogleSheetsImportRequest): Promise<CsvImportResult> => {
+    const response = await fetchWithLogging('/api/import-configs/google-sheets', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(
+        error.message || `Failed to import from Google Sheets: ${response.statusText}`
+      )
+    }
+
+    return response.json()
+  },
+
+  // Price Lists methods
+  getPriceLists: async (): Promise<PriceListDefinition[]> => {
+    const response = await fetchWithLogging('/api/price-lists', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to get price lists: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getPriceList: async (code: string): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      throw new Error(`Failed to get price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createPriceList: async (request: CreatePriceListRequest): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging('/api/price-lists', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 409) {
+        throw new Error(`Price list '${request.code}' already exists`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to create price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updatePriceList: async (
+    code: string,
+    request: UpdatePriceListRequest
+  ): Promise<PriceListDefinition> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to update price list: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deletePriceList: async (code: string): Promise<void> => {
+    const response = await fetchWithLogging(`/api/price-lists/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Price list '${code}' not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to delete price list: ${response.statusText}`)
+    }
+  },
+
+  // Import Configs methods
+  getImportConfigs: async (): Promise<ImportConfigResponse[]> => {
+    const response = await fetchWithLogging('/api/import-configs', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      throw new Error(`Failed to get import configs: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getImportConfig: async (id: number): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      throw new Error(`Failed to get import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  createImportConfig: async (request: CreateImportConfigRequest): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging('/api/import-configs', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to create import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateImportConfig: async (
+    id: number,
+    request: UpdateImportConfigRequest
+  ): Promise<ImportConfigResponse> => {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to update import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteImportConfig: async (id: number): Promise<void> => {
+    const response = await fetchWithLogging(`/api/import-configs/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to delete import config: ${response.statusText}`)
+    }
+  },
+
+  syncImportConfig: async (id: number): Promise<CsvImportResult | PivotImportResult> => {
+    const response = await fetchWithLogging(`/api/import-configs/${id}/sync`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to sync import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  previewImportConfig: async (id: number): Promise<CsvPreviewResult | PivotImportResult> => {
+    const response = await fetchWithLogging(`/api/import-configs/${id}/preview`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Permission denied')
+      }
+      if (response.status === 404) {
+        throw new Error(`Import config not found`)
+      }
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.message || `Failed to preview import config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // Admin Price Settings methods
+  getPriceSettings: async (): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get price settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateFioSettings: async (request: UpdateFioSettingsRequest): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/fio', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid FIO settings')
+      }
+      throw new Error(`Failed to update FIO settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateGoogleSettings: async (
+    request: UpdateGoogleSettingsRequest
+  ): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/google', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to update Google settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateKawaSheetSettings: async (
+    request: UpdateKawaSheetRequest
+  ): Promise<PriceSettingsResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid KAWA sheet settings')
+      }
+      throw new Error(`Failed to update KAWA sheet settings: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  previewKawaSheet: async (): Promise<KawaSheetPreviewResponse> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet/preview', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Failed to preview KAWA sheet')
+      }
+      throw new Error(`Failed to preview KAWA sheet: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  syncKawaSheet: async (request: KawaSheetSyncRequest): Promise<CsvImportResult> => {
+    const response = await fetchWithLogging('/api/admin/price-settings/kawa-sheet/sync', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Failed to sync KAWA sheet')
+      }
+      throw new Error(`Failed to sync KAWA sheet: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  // ==================== USER SETTINGS ====================
+
+  getUserSettings: async (): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error('Failed to get user settings')
+    }
+
+    return response.json()
+  },
+
+  updateUserSettings: async (settings: Record<string, unknown>): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ settings }),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid settings')
+      }
+      throw new Error('Failed to update user settings')
+    }
+
+    return response.json()
+  },
+
+  resetUserSetting: async (key: string): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging(`/api/user-settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 400) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Invalid setting key')
+      }
+      throw new Error('Failed to reset user setting')
+    }
+
+    return response.json()
+  },
+
+  resetAllUserSettings: async (): Promise<UserSettingsResponse> => {
+    const response = await fetchWithLogging('/api/user-settings', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error('Failed to reset user settings')
+    }
+
+    return response.json()
+  },
+}
+
+// Types for KAWA sheet preview and sync
+interface KawaSheetPreviewResponse {
+  headers: string[]
+  rows: string[][]
+}
+
+interface KawaSheetSyncRequest {
+  tickerColumn: string | number
+  priceColumn: string | number
+  locationColumn?: string | number
+  locationDefault?: string
+  currencyColumn?: string | number
+  currencyDefault?: 'ICA' | 'CIS' | 'AIC' | 'NCC'
 }
 
 // Export the API interface that automatically uses mock or real based on configuration
@@ -2284,6 +3712,9 @@ export const api = {
     markAllAsRead: () => realApi.markAllNotificationsAsRead(),
     delete: (id: number) => realApi.deleteNotification(id),
   },
+  sync: {
+    getSyncState: () => realApi.getSyncState(),
+  },
   reservations: {
     list: (role?: 'owner' | 'counterparty' | 'all', status?: ReservationStatus) =>
       realApi.getReservations(role, status),
@@ -2307,6 +3738,78 @@ export const api = {
   locations: {
     getDistance: (from: string, to: string) => realApi.getLocationDistance(from, to),
   },
+  prices: {
+    list: (exchange?: string, location?: string, commodity?: string, currency?: Currency) =>
+      realApi.getPrices(exchange, location, commodity, currency),
+    getByExchange: (exchange: string) => realApi.getPricesByExchange(exchange),
+    create: (request: CreatePriceRequest) => realApi.createPrice(request),
+    update: (id: number, request: UpdatePriceRequest) => realApi.updatePrice(id, request),
+    delete: (id: number) => realApi.deletePrice(id),
+    getEffective: (exchange: string, locationId: string, currency: Currency) =>
+      realApi.getEffectivePrices(exchange, locationId, currency),
+  },
+  priceAdjustments: {
+    list: (exchange?: string, location?: string, activeOnly?: boolean) =>
+      realApi.getPriceAdjustments(exchange, location, activeOnly),
+    get: (id: number) => realApi.getPriceAdjustment(id),
+    create: (request: CreatePriceAdjustmentRequest) => realApi.createPriceAdjustment(request),
+    update: (id: number, request: UpdatePriceAdjustmentRequest) =>
+      realApi.updatePriceAdjustment(id, request),
+    delete: (id: number) => realApi.deletePriceAdjustment(id),
+  },
+  fioExchanges: {
+    list: () => realApi.getFioExchanges(),
+  },
+  fioPriceSync: {
+    getStatus: () => realApi.getFioPriceSyncStatus(),
+    syncAll: (priceField?: string) => realApi.syncFioPrices(undefined, priceField),
+    syncExchange: (exchangeCode: string, priceField?: string) =>
+      realApi.syncFioPrices(exchangeCode, priceField),
+  },
+  priceImport: {
+    previewCsv: (file: File, config: CsvImportRequest) => realApi.previewCsvImport(file, config),
+    importCsv: (file: File, config: CsvImportRequest) => realApi.importCsv(file, config),
+    previewGoogleSheets: (request: GoogleSheetsImportRequest) =>
+      realApi.previewGoogleSheetsImport(request),
+    importGoogleSheets: (request: GoogleSheetsImportRequest) => realApi.importGoogleSheets(request),
+  },
+  adminPriceSettings: {
+    get: () => realApi.getPriceSettings(),
+    updateFio: (request: UpdateFioSettingsRequest) => realApi.updateFioSettings(request),
+    updateGoogle: (request: UpdateGoogleSettingsRequest) => realApi.updateGoogleSettings(request),
+    updateKawaSheet: (request: UpdateKawaSheetRequest) => realApi.updateKawaSheetSettings(request),
+    previewKawaSheet: () => realApi.previewKawaSheet(),
+    syncKawaSheet: (request: KawaSheetSyncRequest) => realApi.syncKawaSheet(request),
+  },
+  adminGlobalDefaults: {
+    get: () => realApi.getGlobalDefaults(),
+    update: (request: UpdateGlobalDefaultsRequest) => realApi.updateGlobalDefaults(request),
+    reset: (key: string) => realApi.resetGlobalDefault(key),
+    getHistory: (key: string) => realApi.getGlobalDefaultHistory(key),
+  },
+  priceLists: {
+    list: () => realApi.getPriceLists(),
+    get: (code: string) => realApi.getPriceList(code),
+    create: (request: CreatePriceListRequest) => realApi.createPriceList(request),
+    update: (code: string, request: UpdatePriceListRequest) =>
+      realApi.updatePriceList(code, request),
+    delete: (code: string) => realApi.deletePriceList(code),
+  },
+  importConfigs: {
+    list: () => realApi.getImportConfigs(),
+    get: (id: number) => realApi.getImportConfig(id),
+    create: (request: CreateImportConfigRequest) => realApi.createImportConfig(request),
+    update: (id: number, request: UpdateImportConfigRequest) =>
+      realApi.updateImportConfig(id, request),
+    delete: (id: number) => realApi.deleteImportConfig(id),
+    sync: (id: number) => realApi.syncImportConfig(id),
+    preview: (id: number) => realApi.previewImportConfig(id),
+  },
+  // User Settings
+  getUserSettings: () => realApi.getUserSettings(),
+  updateUserSettings: (settings: Record<string, unknown>) => realApi.updateUserSettings(settings),
+  resetUserSetting: (key: string) => realApi.resetUserSetting(key),
+  resetAllUserSettings: () => realApi.resetAllUserSettings(),
 }
 
 // Export types for use in components
@@ -2320,6 +3823,7 @@ export type {
   UpdateBuyOrderRequest,
   MarketListing,
   MarketBuyRequest,
+  PricingMode,
   Notification,
   NotificationType,
   ReservationStatus,
@@ -2327,4 +3831,46 @@ export type {
   CreateSellOrderReservationRequest,
   CreateBuyOrderReservationRequest,
   UpdateReservationStatusRequest,
+  // Price types
+  PriceSource,
+  PriceListResponse,
+  CreatePriceRequest,
+  UpdatePriceRequest,
+  EffectivePrice,
+  AppliedAdjustment,
+  AdjustmentType,
+  PriceAdjustmentResponse,
+  CreatePriceAdjustmentRequest,
+  UpdatePriceAdjustmentRequest,
+  FioExchangeResponse,
+  ExchangeSyncStatus,
+  SyncPricesResponse,
+  // Import types
+  CsvFieldMapping,
+  CsvRowError,
+  ParsedPriceRow,
+  CsvImportResult,
+  CsvPreviewResult,
+  CsvImportRequest,
+  GoogleSheetsImportRequest,
+  // Admin Price Settings types
+  FioPriceField,
+  PriceSettingsResponse,
+  UpdateFioSettingsRequest,
+  UpdateGoogleSettingsRequest,
+  UpdateKawaSheetRequest,
+  // Price List types
+  PriceListType,
+  PriceListDefinition,
+  CreatePriceListRequest,
+  UpdatePriceListRequest,
+  // Import Config types
+  ImportSourceType,
+  ImportFormat,
+  ImportConfigResponse,
+  CreateImportConfigRequest,
+  UpdateImportConfigRequest,
+  PivotImportResult,
+  KawaSheetPreviewResponse,
+  KawaSheetSyncRequest,
 }

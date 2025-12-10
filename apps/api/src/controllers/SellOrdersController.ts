@@ -12,7 +12,7 @@ import {
   Request,
   SuccessResponse,
 } from 'tsoa'
-import type { Currency, OrderType } from '@kawakawa/types'
+import type { Currency, OrderType, PricingMode } from '@kawakawa/types'
 import {
   db,
   sellOrders,
@@ -26,6 +26,7 @@ import { eq, and, inArray, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
+import { calculateEffectivePriceWithFallback } from '../services/price-calculator.js'
 
 // Sell order limit modes
 type SellOrderLimitMode = 'none' | 'max_sell' | 'reserve'
@@ -37,6 +38,7 @@ interface SellOrderResponse {
   locationId: string
   price: number
   currency: Currency
+  priceListCode: string | null // null = custom/fixed price, set = dynamic pricing from price list
   orderType: OrderType
   limitMode: SellOrderLimitMode
   limitQuantity: number | null
@@ -46,6 +48,12 @@ interface SellOrderResponse {
   reservedQuantity: number // sum of quantities in active reservations
   fulfilledQuantity: number // sum of quantities in fulfilled reservations
   remainingQuantity: number // availableQuantity - reservedQuantity - fulfilledQuantity
+  fioUploadedAt: string | null // When seller's FIO inventory was last synced from game
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null // Calculated price from price list (null if not available)
+  isFallback: boolean // True if price came from price list's default location
+  priceLocationId: string | null // The location the price was fetched from (when isFallback)
 }
 
 interface CreateSellOrderRequest {
@@ -53,6 +61,7 @@ interface CreateSellOrderRequest {
   locationId: string
   price: number
   currency: Currency
+  priceListCode?: string | null // null or undefined = custom/fixed price, set = dynamic pricing
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -61,6 +70,7 @@ interface CreateSellOrderRequest {
 interface UpdateSellOrderRequest {
   price?: number
   currency?: Currency
+  priceListCode?: string | null // null = switch to custom pricing, string = switch to dynamic pricing
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -123,6 +133,7 @@ export class SellOrdersController extends Controller {
         quantity: fioInventory.quantity,
         locationId: fioUserStorage.locationId,
         lastSyncedAt: fioUserStorage.lastSyncedAt,
+        fioUploadedAt: fioUserStorage.fioUploadedAt,
       })
       .from(fioInventory)
       .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
@@ -131,8 +142,10 @@ export class SellOrdersController extends Controller {
     // Build lookup maps:
     // - inventoryMap: "ticker:locationId" -> total quantity
     // - syncTimeMap: locationId -> most recent lastSyncedAt
+    // - fioUploadedAtMap: locationId -> most recent fioUploadedAt
     const inventoryMap = new Map<string, number>()
     const syncTimeMap = new Map<string, Date>()
+    const fioUploadedAtMap = new Map<string, Date>()
     for (const item of inventory) {
       if (item.locationId) {
         const key = `${item.commodityTicker}:${item.locationId}`
@@ -142,6 +155,14 @@ export class SellOrdersController extends Controller {
         const existingSync = syncTimeMap.get(item.locationId)
         if (!existingSync || item.lastSyncedAt > existingSync) {
           syncTimeMap.set(item.locationId, item.lastSyncedAt)
+        }
+
+        // Track the most recent FIO upload time per location
+        if (item.fioUploadedAt) {
+          const existingUpload = fioUploadedAtMap.get(item.locationId)
+          if (!existingUpload || item.fioUploadedAt > existingUpload) {
+            fioUploadedAtMap.set(item.locationId, item.fioUploadedAt)
+          }
         }
       }
     }
@@ -235,41 +256,70 @@ export class SellOrdersController extends Controller {
       // They'll get default values in the map lookup below
     }
 
-    return orders.map(order => {
-      const key = `${order.commodityTicker}:${order.locationId}`
-      const fioQuantity = inventoryMap.get(key) ?? 0
-      const availableQuantity = calculateAvailableQuantity(
-        fioQuantity,
-        order.limitMode,
-        order.limitQuantity
-      )
-      const reservationData = reservationMap.get(order.id) ?? {
-        count: 0,
-        quantity: 0,
-        fulfilledQuantity: 0,
-      }
-      const remainingQuantity = Math.max(
-        0,
-        availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
-      )
+    return Promise.all(
+      orders.map(async order => {
+        const key = `${order.commodityTicker}:${order.locationId}`
+        const fioQuantity = inventoryMap.get(key) ?? 0
+        const availableQuantity = calculateAvailableQuantity(
+          fioQuantity,
+          order.limitMode,
+          order.limitQuantity
+        )
+        const reservationData = reservationMap.get(order.id) ?? {
+          count: 0,
+          quantity: 0,
+          fulfilledQuantity: 0,
+        }
+        const remainingQuantity = Math.max(
+          0,
+          availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
+        )
+        const fioUploadedAt = fioUploadedAtMap.get(order.locationId)
 
-      return {
-        id: order.id,
-        commodityTicker: order.commodityTicker,
-        locationId: order.locationId,
-        price: parseFloat(order.price),
-        currency: order.currency,
-        orderType: order.orderType,
-        limitMode: order.limitMode,
-        limitQuantity: order.limitQuantity,
-        fioQuantity,
-        availableQuantity,
-        activeReservationCount: reservationData.count,
-        reservedQuantity: reservationData.quantity,
-        fulfilledQuantity: reservationData.fulfilledQuantity,
-        remainingQuantity,
-      }
-    })
+        // Calculate effective price for dynamic pricing orders
+        const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
+        let effectivePrice: number | null = null
+        let isFallback = false
+        let priceLocationId: string | null = null
+
+        if (order.priceListCode) {
+          const priceResult = await calculateEffectivePriceWithFallback(
+            order.priceListCode,
+            order.commodityTicker,
+            order.locationId,
+            order.currency
+          )
+          if (priceResult) {
+            effectivePrice = priceResult.finalPrice
+            isFallback = priceResult.isFallback ?? false
+            priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+          }
+        }
+
+        return {
+          id: order.id,
+          commodityTicker: order.commodityTicker,
+          locationId: order.locationId,
+          price: parseFloat(order.price),
+          currency: order.currency,
+          priceListCode: order.priceListCode,
+          orderType: order.orderType,
+          limitMode: order.limitMode,
+          limitQuantity: order.limitQuantity,
+          fioQuantity,
+          availableQuantity,
+          activeReservationCount: reservationData.count,
+          reservedQuantity: reservationData.quantity,
+          fulfilledQuantity: reservationData.fulfilledQuantity,
+          remainingQuantity,
+          fioUploadedAt: fioUploadedAt?.toISOString() ?? null,
+          pricingMode,
+          effectivePrice,
+          isFallback,
+          priceLocationId,
+        }
+      })
+    )
   }
 
   /**
@@ -293,11 +343,11 @@ export class SellOrdersController extends Controller {
     }
 
     // Get FIO inventory and sync time for this commodity/location
-    const { quantity: fioQuantity, lastSyncedAt } = await this.getInventoryWithSyncTime(
-      userId,
-      order.commodityTicker,
-      order.locationId
-    )
+    const {
+      quantity: fioQuantity,
+      lastSyncedAt,
+      fioUploadedAt,
+    } = await this.getInventoryWithSyncTime(userId, order.commodityTicker, order.locationId)
 
     const availableQuantity = calculateAvailableQuantity(
       fioQuantity,
@@ -312,12 +362,33 @@ export class SellOrdersController extends Controller {
       availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
     )
 
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (order.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        order.priceListCode,
+        order.commodityTicker,
+        order.locationId,
+        order.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
+
     return {
       id: order.id,
       commodityTicker: order.commodityTicker,
       locationId: order.locationId,
       price: parseFloat(order.price),
       currency: order.currency,
+      priceListCode: order.priceListCode,
       orderType: order.orderType,
       limitMode: order.limitMode,
       limitQuantity: order.limitQuantity,
@@ -327,6 +398,11 @@ export class SellOrdersController extends Controller {
       reservedQuantity: reservationData.quantity,
       fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
+      fioUploadedAt: fioUploadedAt?.toISOString() ?? null,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 
@@ -337,11 +413,12 @@ export class SellOrdersController extends Controller {
     userId: number,
     commodityTicker: string,
     locationId: string
-  ): Promise<{ quantity: number; lastSyncedAt: Date | null }> {
+  ): Promise<{ quantity: number; lastSyncedAt: Date | null; fioUploadedAt: Date | null }> {
     const items = await db
       .select({
         quantity: fioInventory.quantity,
         lastSyncedAt: fioUserStorage.lastSyncedAt,
+        fioUploadedAt: fioUserStorage.fioUploadedAt,
       })
       .from(fioInventory)
       .innerJoin(fioUserStorage, eq(fioInventory.userStorageId, fioUserStorage.id))
@@ -355,14 +432,25 @@ export class SellOrdersController extends Controller {
 
     let totalQuantity = 0
     let latestSyncTime: Date | null = null
+    let latestFioUploadedAt: Date | null = null
     for (const item of items) {
       totalQuantity += item.quantity
       if (!latestSyncTime || item.lastSyncedAt > latestSyncTime) {
         latestSyncTime = item.lastSyncedAt
       }
+      if (
+        item.fioUploadedAt &&
+        (!latestFioUploadedAt || item.fioUploadedAt > latestFioUploadedAt)
+      ) {
+        latestFioUploadedAt = item.fioUploadedAt
+      }
     }
 
-    return { quantity: totalQuantity, lastSyncedAt: latestSyncTime }
+    return {
+      quantity: totalQuantity,
+      lastSyncedAt: latestSyncTime,
+      fioUploadedAt: latestFioUploadedAt,
+    }
   }
 
   /**
@@ -495,6 +583,22 @@ export class SellOrdersController extends Controller {
       )
     }
 
+    // Validate price based on pricing mode
+    const priceListCode = body.priceListCode ?? null
+    if (priceListCode) {
+      // Dynamic pricing: price must be 0
+      if (body.price !== 0) {
+        this.setStatus(400)
+        throw BadRequest('Price must be 0 when using a price list for dynamic pricing')
+      }
+    } else {
+      // Custom pricing: price must be > 0
+      if (body.price <= 0) {
+        this.setStatus(400)
+        throw BadRequest('Price must be greater than 0 for custom pricing')
+      }
+    }
+
     // Create sell order
     const [newOrder] = await db
       .insert(sellOrders)
@@ -504,6 +608,7 @@ export class SellOrdersController extends Controller {
         locationId: body.locationId,
         price: body.price.toString(),
         currency: body.currency,
+        priceListCode,
         orderType,
         limitMode: body.limitMode ?? 'none',
         limitQuantity: body.limitQuantity ?? null,
@@ -513,7 +618,7 @@ export class SellOrdersController extends Controller {
     this.setStatus(201)
 
     // Get FIO inventory for this commodity/location
-    const { quantity: fioQuantity } = await this.getInventoryWithSyncTime(
+    const { quantity: fioQuantity, fioUploadedAt } = await this.getInventoryWithSyncTime(
       userId,
       body.commodityTicker,
       body.locationId
@@ -525,12 +630,33 @@ export class SellOrdersController extends Controller {
       newOrder.limitQuantity
     )
 
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = newOrder.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (newOrder.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        newOrder.priceListCode,
+        newOrder.commodityTicker,
+        newOrder.locationId,
+        newOrder.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
+
     return {
       id: newOrder.id,
       commodityTicker: newOrder.commodityTicker,
       locationId: newOrder.locationId,
       price: parseFloat(newOrder.price),
       currency: newOrder.currency,
+      priceListCode: newOrder.priceListCode,
       orderType: newOrder.orderType,
       limitMode: newOrder.limitMode,
       limitQuantity: newOrder.limitQuantity,
@@ -540,6 +666,11 @@ export class SellOrdersController extends Controller {
       reservedQuantity: 0,
       fulfilledQuantity: 0,
       remainingQuantity: availableQuantity,
+      fioUploadedAt: fioUploadedAt?.toISOString() ?? null,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 
@@ -578,12 +709,34 @@ export class SellOrdersController extends Controller {
       }
     }
 
+    // Determine final priceListCode (use existing if not provided)
+    const finalPriceListCode =
+      body.priceListCode !== undefined ? body.priceListCode : existing.priceListCode
+
+    // Validate price based on pricing mode if price is being updated
+    if (body.price !== undefined) {
+      if (finalPriceListCode) {
+        // Dynamic pricing: price must be 0
+        if (body.price !== 0) {
+          this.setStatus(400)
+          throw BadRequest('Price must be 0 when using a price list for dynamic pricing')
+        }
+      } else {
+        // Custom pricing: price must be > 0
+        if (body.price <= 0) {
+          this.setStatus(400)
+          throw BadRequest('Price must be greater than 0 for custom pricing')
+        }
+      }
+    }
+
     // Build update object
     const updateData: Partial<typeof sellOrders.$inferInsert> = {
       updatedAt: new Date(),
     }
     if (body.price !== undefined) updateData.price = body.price.toString()
     if (body.currency !== undefined) updateData.currency = body.currency
+    if (body.priceListCode !== undefined) updateData.priceListCode = body.priceListCode
     if (body.orderType !== undefined) updateData.orderType = body.orderType
     if (body.limitMode !== undefined) updateData.limitMode = body.limitMode
     if (body.limitQuantity !== undefined) updateData.limitQuantity = body.limitQuantity
@@ -596,11 +749,11 @@ export class SellOrdersController extends Controller {
       .returning()
 
     // Get FIO inventory and sync time
-    const { quantity: fioQuantity, lastSyncedAt } = await this.getInventoryWithSyncTime(
-      userId,
-      updated.commodityTicker,
-      updated.locationId
-    )
+    const {
+      quantity: fioQuantity,
+      lastSyncedAt,
+      fioUploadedAt,
+    } = await this.getInventoryWithSyncTime(userId, updated.commodityTicker, updated.locationId)
 
     const availableQuantity = calculateAvailableQuantity(
       fioQuantity,
@@ -619,12 +772,33 @@ export class SellOrdersController extends Controller {
       availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
     )
 
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = updated.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (updated.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        updated.priceListCode,
+        updated.commodityTicker,
+        updated.locationId,
+        updated.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
+
     return {
       id: updated.id,
       commodityTicker: updated.commodityTicker,
       locationId: updated.locationId,
       price: parseFloat(updated.price),
       currency: updated.currency,
+      priceListCode: updated.priceListCode,
       orderType: updated.orderType,
       limitMode: updated.limitMode,
       limitQuantity: updated.limitQuantity,
@@ -634,6 +808,11 @@ export class SellOrdersController extends Controller {
       reservedQuantity: reservationData.quantity,
       fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
+      fioUploadedAt: fioUploadedAt?.toISOString() ?? null,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 

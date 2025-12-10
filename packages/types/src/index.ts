@@ -31,14 +31,6 @@ export interface Role {
 export interface User {
   profileName: string
   displayName: string
-  fioUsername: string
-  hasFioApiKey: boolean // Indicates if FIO API key is configured (never expose actual key)
-  preferredCurrency: Currency
-  locationDisplayMode?: LocationDisplayMode // Optional, defaults to 'both'
-  commodityDisplayMode?: CommodityDisplayMode // Optional, defaults to 'both'
-  // FIO sync preferences
-  fioAutoSync: boolean // Auto-sync inventory on schedule (default: true)
-  fioExcludedLocations: string[] // Location NaturalIds or Names to exclude from sync
   roles: Role[] // One user to many roles
   permissions: string[] // Permission IDs granted to this user based on their roles
 }
@@ -53,6 +45,14 @@ export const PERMISSIONS = {
   RESERVATIONS_PLACE_PARTNER: 'reservations.place_partner',
   ADMIN_MANAGE_USERS: 'admin.manage_users',
   ADMIN_MANAGE_ROLES: 'admin.manage_roles',
+  // Price management
+  PRICES_VIEW: 'prices.view',
+  PRICES_MANAGE: 'prices.manage',
+  PRICES_IMPORT: 'prices.import',
+  PRICES_SYNC_FIO: 'prices.sync_fio',
+  ADJUSTMENTS_VIEW: 'adjustments.view',
+  ADJUSTMENTS_MANAGE: 'adjustments.manage',
+  IMPORT_CONFIGS_MANAGE: 'import_configs.manage',
 } as const
 
 // FIO inventory synced from game
@@ -66,6 +66,9 @@ export interface FioInventoryItem {
 
 // Sell order limit modes
 export type SellOrderLimitMode = 'none' | 'max_sell' | 'reserve'
+
+// Pricing mode for orders - 'fixed' = user-specified price, 'dynamic' = price from price list
+export type PricingMode = 'fixed' | 'dynamic'
 
 // Order types - shared between sell and buy orders
 export type OrderType = 'internal' | 'partner'
@@ -318,6 +321,24 @@ export interface NotificationUnreadCount {
   count: number
 }
 
+// ==================== SYNC STATE ====================
+
+/** Data version keys that can be tracked for cache invalidation */
+export type SyncDataKey = 'locations' | 'commodities' | 'priceLists' | 'globalDefaults'
+
+/** Data versions - timestamps (ms) of last modification */
+export type DataVersions = Partial<Record<SyncDataKey, number>>
+
+/** Sync state returned by the polling endpoint */
+export interface SyncState {
+  /** Unread notification count */
+  unreadCount: number
+  /** App build/commit hash - changes trigger "new version" banner */
+  appVersion: string
+  /** Data version timestamps for cache invalidation */
+  dataVersions: DataVersions
+}
+
 // ==================== ORDER RESERVATIONS ====================
 
 export type ReservationStatus =
@@ -392,4 +413,48 @@ export type CreateReservationRequest =
 // Request to update reservation status
 export interface UpdateReservationStatusRequest {
   notes?: string
+}
+
+// ==================== USER SETTINGS ====================
+
+// Setting value types
+export type SettingValueType = 'string' | 'boolean' | 'number' | 'enum' | 'string[]'
+
+// Setting definition (compile-time metadata)
+export interface SettingDefinition<T = unknown> {
+  key: string
+  type: SettingValueType
+  defaultValue: T
+  category: string
+  label: string
+  description: string
+  enumOptions?: readonly string[] // For enum type
+  sensitive?: boolean // If true, value is never returned in API responses (write-only)
+}
+
+// User settings response from API
+export interface UserSettingsResponse {
+  values: Record<string, unknown>
+  definitions: Record<string, SettingDefinition>
+}
+
+// ==================== ADMIN GLOBAL DEFAULTS ====================
+
+// Individual setting with code default, admin default, and effective value
+export interface GlobalDefaultSetting {
+  key: string
+  codeDefault: unknown
+  adminDefault: unknown | null // null = no admin override
+  effectiveDefault: unknown // adminDefault ?? codeDefault
+  definition: SettingDefinition
+}
+
+// Response from GET /admin/global-defaults
+export interface GlobalDefaultsResponse {
+  settings: GlobalDefaultSetting[]
+}
+
+// Request body for PUT /admin/global-defaults
+export interface UpdateGlobalDefaultsRequest {
+  settings: Record<string, unknown>
 }

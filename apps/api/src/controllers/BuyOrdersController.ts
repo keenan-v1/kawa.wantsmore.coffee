@@ -12,12 +12,13 @@ import {
   Request,
   SuccessResponse,
 } from 'tsoa'
-import type { Currency, OrderType } from '@kawakawa/types'
+import type { Currency, OrderType, PricingMode } from '@kawakawa/types'
 import { db, buyOrders, fioCommodities, fioLocations, orderReservations } from '../db/index.js'
 import { eq, and, inArray, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
+import { calculateEffectivePriceWithFallback } from '../services/price-calculator.js'
 
 interface BuyOrderResponse {
   id: number
@@ -26,11 +27,17 @@ interface BuyOrderResponse {
   quantity: number
   price: number
   currency: Currency
+  priceListCode: string | null // null = custom/fixed price, set = dynamic pricing from price list
   orderType: OrderType
   activeReservationCount: number // count of pending/confirmed reservations
   reservedQuantity: number // sum of quantities in active reservations
   fulfilledQuantity: number // sum of quantities in fulfilled reservations
   remainingQuantity: number // quantity - reservedQuantity - fulfilledQuantity
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null // Calculated price from price list (null if not available)
+  isFallback: boolean // True if price came from price list's default location
+  priceLocationId: string | null // The location the price was fetched from (when isFallback)
 }
 
 interface CreateBuyOrderRequest {
@@ -39,6 +46,7 @@ interface CreateBuyOrderRequest {
   quantity: number
   price: number
   currency: Currency
+  priceListCode?: string | null // null or undefined = custom/fixed price, set = dynamic pricing
   orderType?: OrderType
 }
 
@@ -46,6 +54,7 @@ interface UpdateBuyOrderRequest {
   quantity?: number
   price?: number
   currency?: Currency
+  priceListCode?: string | null // null = switch to custom pricing, string = switch to dynamic pricing
   orderType?: OrderType
 }
 
@@ -107,31 +116,58 @@ export class BuyOrdersController extends Controller {
       }
     }
 
-    return orders.map(order => {
-      const reservationData = reservationMap.get(order.id) ?? {
-        count: 0,
-        quantity: 0,
-        fulfilledQuantity: 0,
-      }
-      const remainingQuantity = Math.max(
-        0,
-        order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
-      )
+    return Promise.all(
+      orders.map(async order => {
+        const reservationData = reservationMap.get(order.id) ?? {
+          count: 0,
+          quantity: 0,
+          fulfilledQuantity: 0,
+        }
+        const remainingQuantity = Math.max(
+          0,
+          order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
+        )
 
-      return {
-        id: order.id,
-        commodityTicker: order.commodityTicker,
-        locationId: order.locationId,
-        quantity: order.quantity,
-        price: parseFloat(order.price),
-        currency: order.currency,
-        orderType: order.orderType,
-        activeReservationCount: reservationData.count,
-        reservedQuantity: reservationData.quantity,
-        fulfilledQuantity: reservationData.fulfilledQuantity,
-        remainingQuantity,
-      }
-    })
+        // Calculate effective price for dynamic pricing orders
+        const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
+        let effectivePrice: number | null = null
+        let isFallback = false
+        let priceLocationId: string | null = null
+
+        if (order.priceListCode) {
+          const priceResult = await calculateEffectivePriceWithFallback(
+            order.priceListCode,
+            order.commodityTicker,
+            order.locationId,
+            order.currency
+          )
+          if (priceResult) {
+            effectivePrice = priceResult.finalPrice
+            isFallback = priceResult.isFallback ?? false
+            priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+          }
+        }
+
+        return {
+          id: order.id,
+          commodityTicker: order.commodityTicker,
+          locationId: order.locationId,
+          quantity: order.quantity,
+          price: parseFloat(order.price),
+          currency: order.currency,
+          priceListCode: order.priceListCode,
+          orderType: order.orderType,
+          activeReservationCount: reservationData.count,
+          reservedQuantity: reservationData.quantity,
+          fulfilledQuantity: reservationData.fulfilledQuantity,
+          remainingQuantity,
+          pricingMode,
+          effectivePrice,
+          isFallback,
+          priceLocationId,
+        }
+      })
+    )
   }
 
   /**
@@ -161,6 +197,26 @@ export class BuyOrdersController extends Controller {
       order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
     )
 
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (order.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        order.priceListCode,
+        order.commodityTicker,
+        order.locationId,
+        order.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
+
     return {
       id: order.id,
       commodityTicker: order.commodityTicker,
@@ -168,11 +224,16 @@ export class BuyOrdersController extends Controller {
       quantity: order.quantity,
       price: parseFloat(order.price),
       currency: order.currency,
+      priceListCode: order.priceListCode,
       orderType: order.orderType,
       activeReservationCount: reservationData.count,
       reservedQuantity: reservationData.quantity,
       fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 
@@ -266,6 +327,22 @@ export class BuyOrdersController extends Controller {
       )
     }
 
+    // Validate price based on pricing mode
+    const priceListCode = body.priceListCode ?? null
+    if (priceListCode) {
+      // Dynamic pricing: price must be 0
+      if (body.price !== 0) {
+        this.setStatus(400)
+        throw BadRequest('Price must be 0 when using a price list for dynamic pricing')
+      }
+    } else {
+      // Custom pricing: price must be > 0
+      if (body.price <= 0) {
+        this.setStatus(400)
+        throw BadRequest('Price must be greater than 0 for custom pricing')
+      }
+    }
+
     // Create buy order
     const [newOrder] = await db
       .insert(buyOrders)
@@ -276,11 +353,32 @@ export class BuyOrdersController extends Controller {
         quantity: body.quantity,
         price: body.price.toString(),
         currency: body.currency,
+        priceListCode,
         orderType,
       })
       .returning()
 
     this.setStatus(201)
+
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = newOrder.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (newOrder.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        newOrder.priceListCode,
+        newOrder.commodityTicker,
+        newOrder.locationId,
+        newOrder.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
 
     return {
       id: newOrder.id,
@@ -289,11 +387,16 @@ export class BuyOrdersController extends Controller {
       quantity: newOrder.quantity,
       price: parseFloat(newOrder.price),
       currency: newOrder.currency,
+      priceListCode: newOrder.priceListCode,
       orderType: newOrder.orderType,
       activeReservationCount: 0, // New order has no reservations
       reservedQuantity: 0,
       fulfilledQuantity: 0,
       remainingQuantity: newOrder.quantity,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 
@@ -338,6 +441,27 @@ export class BuyOrdersController extends Controller {
       throw BadRequest('Quantity must be greater than 0')
     }
 
+    // Determine final priceListCode (use existing if not provided)
+    const finalPriceListCode =
+      body.priceListCode !== undefined ? body.priceListCode : existing.priceListCode
+
+    // Validate price based on pricing mode if price is being updated
+    if (body.price !== undefined) {
+      if (finalPriceListCode) {
+        // Dynamic pricing: price must be 0
+        if (body.price !== 0) {
+          this.setStatus(400)
+          throw BadRequest('Price must be 0 when using a price list for dynamic pricing')
+        }
+      } else {
+        // Custom pricing: price must be > 0
+        if (body.price <= 0) {
+          this.setStatus(400)
+          throw BadRequest('Price must be greater than 0 for custom pricing')
+        }
+      }
+    }
+
     // Build update object
     const updateData: Partial<typeof buyOrders.$inferInsert> = {
       updatedAt: new Date(),
@@ -345,6 +469,7 @@ export class BuyOrdersController extends Controller {
     if (body.quantity !== undefined) updateData.quantity = body.quantity
     if (body.price !== undefined) updateData.price = body.price.toString()
     if (body.currency !== undefined) updateData.currency = body.currency
+    if (body.priceListCode !== undefined) updateData.priceListCode = body.priceListCode
     if (body.orderType !== undefined) updateData.orderType = body.orderType
 
     // Update
@@ -361,6 +486,26 @@ export class BuyOrdersController extends Controller {
       updated.quantity - reservationData.quantity - reservationData.fulfilledQuantity
     )
 
+    // Calculate effective price for dynamic pricing orders
+    const pricingMode: PricingMode = updated.priceListCode ? 'dynamic' : 'fixed'
+    let effectivePrice: number | null = null
+    let isFallback = false
+    let priceLocationId: string | null = null
+
+    if (updated.priceListCode) {
+      const priceResult = await calculateEffectivePriceWithFallback(
+        updated.priceListCode,
+        updated.commodityTicker,
+        updated.locationId,
+        updated.currency
+      )
+      if (priceResult) {
+        effectivePrice = priceResult.finalPrice
+        isFallback = priceResult.isFallback ?? false
+        priceLocationId = priceResult.isFallback ? priceResult.locationId : null
+      }
+    }
+
     return {
       id: updated.id,
       commodityTicker: updated.commodityTicker,
@@ -368,11 +513,16 @@ export class BuyOrdersController extends Controller {
       quantity: updated.quantity,
       price: parseFloat(updated.price),
       currency: updated.currency,
+      priceListCode: updated.priceListCode,
       orderType: updated.orderType,
       activeReservationCount: reservationData.count,
       reservedQuantity: reservationData.quantity,
       fulfilledQuantity: reservationData.fulfilledQuantity,
       remainingQuantity,
+      pricingMode,
+      effectivePrice,
+      isFallback,
+      priceLocationId,
     }
   }
 

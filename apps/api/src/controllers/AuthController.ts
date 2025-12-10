@@ -1,15 +1,7 @@
 import { Body, Controller, Get, Post, Query, Route, Tags, SuccessResponse, Response } from 'tsoa'
 import { eq, and, inArray } from 'drizzle-orm'
 import type { Role } from '@kawakawa/types'
-import {
-  db,
-  users,
-  userSettings,
-  userRoles,
-  roles,
-  passwordResetTokens,
-  rolePermissions,
-} from '../db/index.js'
+import { db, users, userRoles, roles, passwordResetTokens, rolePermissions } from '../db/index.js'
 import { hashPassword, verifyPassword } from '../utils/password.js'
 import { generateToken } from '../utils/jwt.js'
 import { Unauthorized, Forbidden, BadRequest } from '../utils/errors.js'
@@ -170,10 +162,8 @@ export class AuthController extends Controller {
       })
       .returning()
 
-    // Create default user settings
-    await db.insert(userSettings).values({
-      userId: newUser.id,
-    })
+    // Note: User settings are now stored in a key-value table with defaults from code
+    // No need to create initial settings row - getAllSettings() returns defaults for new users
 
     // Assign default 'unverified' role - must be approved before gaining access
     await db.insert(userRoles).values({

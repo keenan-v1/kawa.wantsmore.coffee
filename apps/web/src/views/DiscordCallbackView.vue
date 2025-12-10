@@ -47,17 +47,11 @@ const loading = ref(true)
 const errorMessage = ref('')
 const infoMessage = ref('')
 
-// Convert Discord auth user to full User type with defaults
+// Convert Discord auth user to full User type
+// Note: Settings (preferredCurrency, FIO credentials, etc.) are now managed via user-settings API
 const discordAuthUserToUser = (authUser: DiscordAuthUser): User => ({
   profileName: authUser.username,
   displayName: authUser.displayName,
-  fioUsername: '',
-  hasFioApiKey: false,
-  preferredCurrency: 'CIS',
-  locationDisplayMode: 'both',
-  commodityDisplayMode: 'both',
-  fioAutoSync: true,
-  fioExcludedLocations: [],
   roles: authUser.roles,
   permissions: authUser.permissions,
 })

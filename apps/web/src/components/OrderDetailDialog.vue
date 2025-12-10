@@ -26,6 +26,9 @@
             <div class="text-body-2 text-medium-emphasis">
               {{ getCommodityDisplay(order.commodityTicker) }} at
               {{ getLocationDisplay(order.locationId) }}
+              <span v-if="!isOwnOrder && ownerName">
+                &bull; {{ orderType === 'sell' ? 'Seller' : 'Buyer' }}: {{ ownerName }}
+              </span>
             </div>
           </div>
           <v-spacer />
@@ -37,13 +40,52 @@
         <v-card-text class="pt-4">
           <!-- Order Info Grid -->
           <v-row dense>
+            <!-- Row 1: Commodity, Location, User/FIO Age, Visibility -->
             <v-col cols="6" sm="3">
-              <div class="text-caption text-medium-emphasis">Price</div>
+              <div class="text-caption text-medium-emphasis">Commodity</div>
               <div class="text-body-1 font-weight-medium">
-                {{ formatPrice(order.price) }}
-                <span class="text-caption text-medium-emphasis">{{ order.currency }}</span>
+                {{ getCommodityDisplay(order.commodityTicker) }}
+              </div>
+              <div
+                v-if="getCommodityCategory(order.commodityTicker)"
+                class="text-caption text-medium-emphasis"
+              >
+                {{ getCommodityCategory(order.commodityTicker) }}
               </div>
             </v-col>
+            <v-col cols="6" sm="3">
+              <div class="text-caption text-medium-emphasis">Location</div>
+              <div class="text-body-1 font-weight-medium">
+                {{ getLocationDisplay(order.locationId) }}
+              </div>
+            </v-col>
+            <!-- FIO Age column for sell orders only -->
+            <v-col v-if="orderType === 'sell'" cols="6" sm="3">
+              <div class="text-caption text-medium-emphasis">FIO Age</div>
+              <v-chip
+                v-if="(order as SellOrderData).fioUploadedAt"
+                size="small"
+                variant="tonal"
+                :color="getFioAgeColor((order as SellOrderData).fioUploadedAt!)"
+              >
+                {{ formatRelativeTime((order as SellOrderData).fioUploadedAt!) }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">—</span>
+            </v-col>
+            <!-- Empty placeholder column for buy orders to maintain grid alignment -->
+            <v-col v-else cols="6" sm="3" />
+            <v-col cols="6" sm="3">
+              <div class="text-caption text-medium-emphasis">Visibility</div>
+              <v-chip
+                :color="order.orderType === 'partner' ? 'primary' : 'default'"
+                size="small"
+                variant="tonal"
+              >
+                {{ order.orderType === 'partner' ? 'Partner' : 'Internal' }}
+              </v-chip>
+            </v-col>
+
+            <!-- Row 2: Quantity, Remaining, Price -->
             <v-col cols="6" sm="3">
               <div class="text-caption text-medium-emphasis">
                 {{ orderType === 'sell' ? 'Available' : 'Quantity' }}
@@ -65,25 +107,42 @@
                 </span>
               </div>
             </v-col>
-            <v-col cols="6" sm="3">
-              <div class="text-caption text-medium-emphasis">Type</div>
-              <v-chip
-                :color="order.orderType === 'partner' ? 'primary' : 'default'"
-                size="small"
-                variant="tonal"
-              >
-                {{ order.orderType === 'partner' ? 'Partner' : 'Internal' }}
-              </v-chip>
+            <v-col cols="6" sm="6">
+              <div class="text-caption text-medium-emphasis">Price</div>
+              <div class="d-flex align-center">
+                <div class="text-body-1 font-weight-medium">
+                  <template v-if="displayPrice !== null">
+                    {{ formatPrice(displayPrice) }}
+                    <span class="text-caption text-medium-emphasis">{{ order.currency }}</span>
+                  </template>
+                  <span v-else class="text-medium-emphasis">--</span>
+                </div>
+                <!-- Fallback location indicator -->
+                <v-tooltip v-if="order.isFallback && order.priceLocationId" location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                      mdi-map-marker-question
+                    </v-icon>
+                  </template>
+                  <span>
+                    Price from {{ getLocationDisplay(order.priceLocationId) }} (default location)
+                  </span>
+                </v-tooltip>
+                <v-chip
+                  v-if="order.priceListCode"
+                  size="x-small"
+                  color="info"
+                  variant="tonal"
+                  class="ml-2"
+                >
+                  {{ order.priceListCode }}
+                </v-chip>
+                <v-chip v-else size="x-small" color="default" variant="outlined" class="ml-2">
+                  Custom
+                </v-chip>
+              </div>
             </v-col>
           </v-row>
-
-          <!-- Owner Info (for other's orders) -->
-          <div v-if="!isOwnOrder && ownerName" class="mt-3">
-            <div class="text-caption text-medium-emphasis">
-              {{ orderType === 'sell' ? 'Seller' : 'Buyer' }}
-            </div>
-            <div class="text-body-1">{{ ownerName }}</div>
-          </div>
 
           <!-- Reservations Section (for own orders) -->
           <template v-if="isOwnOrder">
@@ -261,6 +320,7 @@
             </v-btn>
             <v-spacer />
             <v-btn variant="text" @click="close">Close</v-btn>
+            <v-btn color="primary" prepend-icon="mdi-pencil" @click="editOrder"> Edit </v-btn>
           </template>
           <template v-else>
             <v-spacer />
@@ -351,12 +411,31 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useFormatters } from '../composables'
 import { formatRelativeDate, formatDateTime } from '../utils/dateFormat'
 import ReservationStatusChip from './ReservationStatusChip.vue'
 
-// Types for normalized order data
-type SellOrderData = SellOrderResponse & { sellerName?: string }
-type BuyOrderData = BuyOrderResponse & { buyerName?: string }
+// Pricing mode type
+type PricingMode = 'fixed' | 'dynamic'
+
+// Types for normalized order data with price list info
+type SellOrderData = SellOrderResponse & {
+  sellerName?: string
+  priceListCode?: string | null
+  effectivePrice?: number | null
+  isFallback?: boolean
+  priceLocationId?: string | null
+  pricingMode?: PricingMode
+  fioUploadedAt?: string | null
+}
+type BuyOrderData = BuyOrderResponse & {
+  buyerName?: string
+  priceListCode?: string | null
+  effectivePrice?: number | null
+  isFallback?: boolean
+  priceLocationId?: string | null
+  pricingMode?: PricingMode
+}
 type OrderData = SellOrderData | BuyOrderData
 
 const props = defineProps<{
@@ -369,9 +448,11 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'deleted'): void
   (e: 'updated'): void
+  (e: 'edit', orderType: 'sell' | 'buy', orderId: number): void
 }>()
 
 const userStore = useUserStore()
+const { formatRelativeTime, getFioAgeColor } = useFormatters()
 
 const dialog = computed({
   get: () => props.modelValue,
@@ -398,6 +479,15 @@ const filteredReservations = computed(() => {
     return reservations.value
   }
   return reservations.value.filter(r => activeStatuses.includes(r.status))
+})
+
+// Get display price - effective price for dynamic, regular price for fixed
+const displayPrice = computed((): number | null => {
+  if (!order.value) return null
+  if (order.value.pricingMode === 'dynamic') {
+    return order.value.effectivePrice ?? null
+  }
+  return order.value.price
 })
 
 const toggleReservationExpanded = (id: number) => {
@@ -430,6 +520,10 @@ const getLocationDisplay = (locationId: string): string => {
 
 const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
+}
+
+const getCommodityCategory = (ticker: string): string | null => {
+  return commodityService.getCommodityCategory(ticker)
 }
 
 const formatPrice = (price: number): string => {
@@ -483,6 +577,12 @@ async function loadOrder() {
             limitQuantity: null,
             fioQuantity: listing.availableQuantity,
             sellerName: listing.sellerName,
+            priceListCode: listing.priceListCode,
+            effectivePrice: listing.effectivePrice,
+            isFallback: listing.isFallback,
+            priceLocationId: listing.priceLocationId,
+            pricingMode: listing.pricingMode,
+            fioUploadedAt: listing.fioUploadedAt,
           } as SellOrderData
           ownerName.value = listing.sellerName
           isOwnOrder.value = false
@@ -511,6 +611,11 @@ async function loadOrder() {
             reservedQuantity: request.reservedQuantity,
             remainingQuantity: request.remainingQuantity,
             buyerName: request.buyerName,
+            priceListCode: request.priceListCode,
+            effectivePrice: request.effectivePrice,
+            isFallback: request.isFallback,
+            priceLocationId: request.priceLocationId,
+            pricingMode: request.pricingMode,
           } as BuyOrderData
           ownerName.value = request.buyerName
           isOwnOrder.value = false
@@ -547,6 +652,11 @@ async function loadReservations() {
 
 function close() {
   dialog.value = false
+}
+
+function editOrder() {
+  emit('edit', props.orderType, props.orderId)
+  close()
 }
 
 function confirmDelete() {

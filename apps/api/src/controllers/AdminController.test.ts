@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AdminController } from './AdminController.js'
 import { db } from '../db/index.js'
+import * as userSettingsService from '../services/userSettingsService.js'
 
 vi.mock('../db/index.js', () => ({
   db: {
@@ -17,10 +18,6 @@ vi.mock('../db/index.js', () => ({
     isActive: 'isActive',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
-  },
-  userSettings: {
-    userId: 'userId',
-    fioUsername: 'fioUsername',
   },
   userRoles: {
     userId: 'userId',
@@ -70,6 +67,10 @@ vi.mock('../utils/permissionService.js', () => ({
   invalidatePermissionCache: vi.fn(),
 }))
 
+vi.mock('../services/userSettingsService.js', () => ({
+  getFioCredentials: vi.fn(),
+}))
+
 // Note: Authorization (admin role check) is handled by TSOA's @Security decorator
 // via expressAuthentication middleware, not by the controller methods themselves.
 
@@ -105,9 +106,12 @@ describe('AdminController', () => {
           createdAt: new Date(),
         },
       ]
-      const _mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const _mockSettings = [{ fioUsername: 'fiouser' }]
-      const _mockLastSync = [{ lastSyncedAt: new Date() }]
+
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValue({
+        fioUsername: 'fiouser',
+        fioApiKey: null,
+      })
 
       // Setup mock chain for count query
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 2 }]) }
@@ -118,21 +122,16 @@ describe('AdminController', () => {
         limit: vi.fn().mockReturnThis(),
         offset: vi.fn().mockResolvedValue(mockUsers),
       }
-      // Setup mock for other queries (roles, settings, lastSync)
-      // Use mockResolvedValue instead of mockResolvedValueOnce to handle Promise.all non-deterministic ordering
-      // Each query type gets its own mock to avoid ordering issues
+      // Setup mock for other queries (roles, lastSync, discord)
       const genericMock = {
         innerJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockImplementation(() => {
-          // Every 3rd query is roles (after innerJoin), then settings, then lastSync per user
-          // But with Promise.all, order is non-deterministic, so return a combined mock
-          // that works for any query type (controller only reads fields it needs)
+          // Return a combined mock that works for any query type
           return Promise.resolve([
             {
               roleId: 'member',
               roleName: 'Member',
               roleColor: 'blue',
-              fioUsername: 'fiouser',
               lastSyncedAt: new Date(),
             },
           ])
@@ -168,9 +167,14 @@ describe('AdminController', () => {
         },
       ]
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
       const mockDiscordProfile: unknown[] = [] // No Discord connected
+
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValue({
+        fioUsername: null,
+        fioApiKey: null,
+      })
 
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 1 }]) }
       const usersMock = {
@@ -184,7 +188,6 @@ describe('AdminController', () => {
         where: vi
           .fn()
           .mockResolvedValueOnce(mockRoles)
-          .mockResolvedValueOnce(mockSettings)
           .mockResolvedValueOnce(mockLastSync)
           .mockResolvedValueOnce(mockDiscordProfile),
       }
@@ -218,11 +221,16 @@ describe('AdminController', () => {
         { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
         { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
       ]
-      const mockSettings = [{ fioUsername: 'fiouser' }]
       const mockLastSync = [{ lastSyncedAt: new Date() }]
       const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // getUser makes 5 queries: user, roles, settings, lastSync, discord
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: 'fiouser',
+        fioApiKey: null,
+      })
+
+      // getUser makes 4 queries: user, roles, lastSync, discord (settings via service)
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -230,7 +238,6 @@ describe('AdminController', () => {
           .fn()
           .mockResolvedValueOnce([mockUser]) // user query
           .mockResolvedValueOnce(mockRoles) // roles query
-          .mockResolvedValueOnce(mockSettings) // settings query
           .mockResolvedValueOnce(mockLastSync) // lastSync query
           .mockResolvedValueOnce(mockDiscordProfile), // discord query
       }
@@ -268,11 +275,16 @@ describe('AdminController', () => {
         createdAt: new Date(),
       }
       const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
       const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // updateUser: existence check, then getUser (user, roles, settings, lastSync, discord)
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: null,
+        fioApiKey: null,
+      })
+
+      // updateUser: existence check, then getUser (user, roles, lastSync, discord)
       const selectMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -281,7 +293,6 @@ describe('AdminController', () => {
           .mockResolvedValueOnce([{ id: 5 }]) // existence check
           .mockResolvedValueOnce([mockUser]) // getUser - user
           .mockResolvedValueOnce(mockRoles) // getUser - roles
-          .mockResolvedValueOnce(mockSettings) // getUser - settings
           .mockResolvedValueOnce(mockLastSync) // getUser - lastSync
           .mockResolvedValueOnce(mockDiscordProfile), // getUser - discord
       }
@@ -316,7 +327,6 @@ describe('AdminController', () => {
         { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
         { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
       ]
-      const mockSettings = [{ fioUsername: null }]
       const mockLastSync = [{ lastSyncedAt: null }]
       const mockDiscordProfile: unknown[] = [] // No Discord connected
       const validRoles = [
@@ -325,6 +335,12 @@ describe('AdminController', () => {
         { id: 'lead' },
         { id: 'administrator' },
       ]
+
+      // Mock FIO credentials from userSettingsService
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
+        fioUsername: null,
+        fioApiKey: null,
+      })
 
       // Existence check
       const existenceCheckMock = {
@@ -335,7 +351,7 @@ describe('AdminController', () => {
       const validRolesMock = {
         from: vi.fn().mockResolvedValue(validRoles),
       }
-      // getUser queries (user, roles, settings, lastSync, discord)
+      // getUser queries (user, roles, lastSync, discord)
       const getUserMock = {
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
@@ -343,7 +359,6 @@ describe('AdminController', () => {
           .fn()
           .mockResolvedValueOnce([mockUser])
           .mockResolvedValueOnce(mockRoles)
-          .mockResolvedValueOnce(mockSettings)
           .mockResolvedValueOnce(mockLastSync)
           .mockResolvedValueOnce(mockDiscordProfile),
       }

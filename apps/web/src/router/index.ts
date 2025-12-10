@@ -12,6 +12,8 @@ import MyOrdersView from '../views/MyOrdersView.vue'
 import AccountView from '../views/AccountView.vue'
 import AdminView from '../views/AdminView.vue'
 import NotificationsView from '../views/NotificationsView.vue'
+import PriceListView from '../views/PriceListView.vue'
+import PriceAdjustmentsView from '../views/PriceAdjustmentsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -91,6 +93,18 @@ const router = createRouter({
       name: 'admin',
       component: AdminView,
       meta: { requiresAuth: true, requiresVerified: true, requiresAdmin: true },
+    },
+    {
+      path: '/prices',
+      name: 'prices',
+      component: PriceListView,
+      meta: { requiresAuth: true, requiresVerified: true },
+    },
+    {
+      path: '/prices/adjustments',
+      name: 'price-adjustments',
+      component: PriceAdjustmentsView,
+      meta: { requiresAuth: true, requiresVerified: true },
     },
     {
       path: '/:pathMatch(.*)*',

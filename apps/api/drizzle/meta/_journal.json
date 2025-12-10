@@ -22,6 +22,13 @@
       "when": 1765073421722,
       "tag": "0002_wet_sheva_callister",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1765302654572,
+      "tag": "0003_motionless_namorita",
+      "breakpoints": true
     }
   ]
 }

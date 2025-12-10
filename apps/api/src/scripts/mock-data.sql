@@ -2,16 +2,21 @@
 -- Run with: psql $DATABASE_URL -f apps/api/src/scripts/mock-data.sql
 -- Password for all users: password123 (bcrypt hash with 12 rounds)
 
--- Clear existing mock data (preserving admin users created via script)
+-- Clear existing mock data (including admin for full mock reset)
 DELETE FROM order_reservations;
 DELETE FROM notifications;
 DELETE FROM buy_orders;
 DELETE FROM sell_orders;
 DELETE FROM fio_inventory;
 DELETE FROM fio_user_storage;
-DELETE FROM user_roles WHERE user_id > 1;
-DELETE FROM user_settings WHERE user_id > 1;
-DELETE FROM users WHERE id > 1;
+DELETE FROM user_roles;
+DELETE FROM user_settings;
+DELETE FROM users;
+DELETE FROM prices;
+DELETE FROM price_adjustments;
+DELETE FROM import_configs;
+-- Clear TEST price list if it exists (seeded ones are protected by onConflictDoNothing)
+DELETE FROM price_lists WHERE code = 'TEST';
 
 -- Reset sequences
 SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 0) + 1, false);
@@ -25,56 +30,100 @@ SELECT setval(pg_get_serial_sequence('order_reservations', 'id'), COALESCE((SELE
 SELECT setval(pg_get_serial_sequence('notifications', 'id'), COALESCE((SELECT MAX(id) FROM notifications), 0) + 1, false);
 
 -- ==================== USERS ====================
--- Password: password123 (bcrypt hash)
+-- Password: password123 (bcrypt hash with $2b$ prefix from bcryptjs)
 INSERT INTO users (id, username, email, display_name, password_hash, is_active) VALUES
-  (2, 'alice', 'alice@example.com', 'Alice Chen', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (3, 'bob', 'bob@example.com', 'Bob Williams', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (4, 'charlie', 'charlie@example.com', 'Charlie Davis', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (5, 'diana', 'diana@example.com', 'Diana Foster', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (6, 'ethan', 'ethan@example.com', 'Ethan Grant', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (7, 'fiona', 'fiona@example.com', 'Fiona Harper', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (8, 'george', 'george@example.com', 'George Irving', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (9, 'hannah', 'hannah@example.com', 'Hannah Jones', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (10, 'ivan', 'ivan@example.com', 'Ivan Kim', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (11, 'julia', 'julia@example.com', 'Julia Lee', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (12, 'kevin', 'kevin@example.com', 'Kevin Moore', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (13, 'luna', 'luna@example.com', 'Luna Nelson', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (14, 'mike', 'mike@example.com', 'Mike O''Brien', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (15, 'nora', 'nora@example.com', 'Nora Patel', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (16, 'oscar', 'oscar@example.com', 'Oscar Quinn', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (17, 'petra', 'petra@example.com', 'Petra Russo', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (18, 'quinn', 'quinn@example.com', 'Quinn Smith', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (19, 'rachel', 'rachel@example.com', 'Rachel Torres', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (20, 'steve', 'steve@example.com', 'Steve Upton', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true),
-  (21, 'tara', 'tara@example.com', 'Tara Vance', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.K1vC8CQvmhj6Aq', true);
+  (1, 'admin', 'admin@kawakawa.local', 'Administrator', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (2, 'alice', 'alice@example.com', 'Alice Chen', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (3, 'bob', 'bob@example.com', 'Bob Williams', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (4, 'charlie', 'charlie@example.com', 'Charlie Davis', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (5, 'diana', 'diana@example.com', 'Diana Foster', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (6, 'ethan', 'ethan@example.com', 'Ethan Grant', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (7, 'fiona', 'fiona@example.com', 'Fiona Harper', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (8, 'george', 'george@example.com', 'George Irving', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (9, 'hannah', 'hannah@example.com', 'Hannah Jones', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (10, 'ivan', 'ivan@example.com', 'Ivan Kim', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (11, 'julia', 'julia@example.com', 'Julia Lee', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (12, 'kevin', 'kevin@example.com', 'Kevin Moore', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (13, 'luna', 'luna@example.com', 'Luna Nelson', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (14, 'mike', 'mike@example.com', 'Mike O''Brien', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (15, 'nora', 'nora@example.com', 'Nora Patel', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (16, 'oscar', 'oscar@example.com', 'Oscar Quinn', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (17, 'petra', 'petra@example.com', 'Petra Russo', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (18, 'quinn', 'quinn@example.com', 'Quinn Smith', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (19, 'rachel', 'rachel@example.com', 'Rachel Torres', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (20, 'steve', 'steve@example.com', 'Steve Upton', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true),
+  (21, 'tara', 'tara@example.com', 'Tara Vance', '$2b$12$abfEy/SNGi.jJ8mfri7LjuqzrQ0sZHbeRCW9fC7nLasrc0UqXAQ8.', true);
 
 -- Update sequence after explicit ID inserts
 SELECT setval(pg_get_serial_sequence('users', 'id'), 21, true);
 
--- ==================== USER SETTINGS ====================
-INSERT INTO user_settings (user_id, preferred_currency, location_display_mode, commodity_display_mode) VALUES
-  (2, 'CIS', 'both', 'both'),
-  (3, 'ICA', 'names-only', 'ticker-only'),
-  (4, 'CIS', 'both', 'both'),
-  (5, 'NCC', 'natural-ids-only', 'name-only'),
-  (6, 'AIC', 'both', 'ticker-only'),
-  (7, 'CIS', 'names-only', 'both'),
-  (8, 'ICA', 'both', 'both'),
-  (9, 'CIS', 'both', 'name-only'),
-  (10, 'NCC', 'natural-ids-only', 'both'),
-  (11, 'CIS', 'both', 'both'),
-  (12, 'AIC', 'names-only', 'ticker-only'),
-  (13, 'CIS', 'both', 'both'),
-  (14, 'ICA', 'both', 'name-only'),
-  (15, 'CIS', 'names-only', 'both'),
-  (16, 'NCC', 'both', 'both'),
-  (17, 'CIS', 'both', 'ticker-only'),
-  (18, 'AIC', 'natural-ids-only', 'both'),
-  (19, 'CIS', 'both', 'both'),
-  (20, 'ICA', 'names-only', 'name-only'),
-  (21, 'CIS', 'both', 'both');
+-- ==================== USER SETTINGS (Key-Value format) ====================
+-- Settings are now stored as key-value pairs with JSON-encoded values
+-- Users without explicit settings get defaults from code (SETTING_DEFINITIONS)
+
+-- Some users have custom display preferences
+INSERT INTO user_settings (user_id, setting_key, value, updated_at) VALUES
+  -- Bob has custom currency and display modes
+  (3, 'market.preferredCurrency', '"ICA"', NOW()),
+  (3, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (3, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Diana has NCC currency and custom modes
+  (5, 'market.preferredCurrency', '"NCC"', NOW()),
+  (5, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  (5, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Ethan has AIC currency
+  (6, 'market.preferredCurrency', '"AIC"', NOW()),
+  (6, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Fiona has names-only location display
+  (7, 'display.locationDisplayMode', '"names-only"', NOW()),
+  -- George has ICA currency
+  (8, 'market.preferredCurrency', '"ICA"', NOW()),
+  -- Hannah has name-only commodity display
+  (9, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Ivan has NCC and natural-ids-only
+  (10, 'market.preferredCurrency', '"NCC"', NOW()),
+  (10, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  -- Kevin has AIC and names-only
+  (12, 'market.preferredCurrency', '"AIC"', NOW()),
+  (12, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (12, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Mike has ICA and name-only commodity
+  (14, 'market.preferredCurrency', '"ICA"', NOW()),
+  (14, 'display.commodityDisplayMode', '"name-only"', NOW()),
+  -- Nora has names-only location
+  (15, 'display.locationDisplayMode', '"names-only"', NOW()),
+  -- Oscar has NCC currency
+  (16, 'market.preferredCurrency', '"NCC"', NOW()),
+  -- Petra has ticker-only commodity
+  (17, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
+  -- Quinn has AIC and natural-ids-only
+  (18, 'market.preferredCurrency', '"AIC"', NOW()),
+  (18, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
+  -- Steve has ICA and names-only
+  (20, 'market.preferredCurrency', '"ICA"', NOW()),
+  (20, 'display.locationDisplayMode', '"names-only"', NOW()),
+  (20, 'display.commodityDisplayMode', '"name-only"', NOW());
+
+-- FIO credentials for some users (for testing FIO sync)
+INSERT INTO user_settings (user_id, setting_key, value, updated_at) VALUES
+  -- Alice (Lead) has FIO credentials
+  (2, 'fio.username', '"alice_fio"', NOW()),
+  (2, 'fio.apiKey', '"alice-test-api-key-12345"', NOW()),
+  -- Bob (Lead) has FIO credentials
+  (3, 'fio.username', '"bob_fio"', NOW()),
+  (3, 'fio.apiKey', '"bob-test-api-key-67890"', NOW()),
+  -- Charlie (Lead + Admin) has FIO username only (no key)
+  (4, 'fio.username', '"charlie_fio"', NOW()),
+  -- Diana has auto-sync disabled
+  (5, 'fio.autoSync', 'false', NOW()),
+  -- Ethan has excluded locations
+  (6, 'fio.excludedLocations', '["HUB", "ARC"]', NOW());
 
 -- ==================== USER ROLES ====================
+-- Admin user (full access)
+INSERT INTO user_roles (user_id, role_id) VALUES
+  (1, 'administrator');  -- admin - Full admin
+
 -- Leads (can do everything members can + partner orders)
 INSERT INTO user_roles (user_id, role_id) VALUES
   (2, 'lead'),      -- Alice - Lead
@@ -470,44 +519,45 @@ SELECT setval(pg_get_serial_sequence('buy_orders', 'id'), 100, true);
 
 -- ==================== ORDER RESERVATIONS ====================
 -- Create various reservations linking buy and sell orders
-INSERT INTO order_reservations (id, buy_order_id, sell_order_id, quantity, status, notes, expires_at) VALUES
+-- counterparty_user_id is the user making the reservation (buyer reserving from sell order)
+INSERT INTO order_reservations (id, buy_order_id, sell_order_id, counterparty_user_id, quantity, status, notes, expires_at) VALUES
   -- Pending reservations
-  (1, 1, 4, 1500, 'pending', 'Urgent need for production', NOW() + INTERVAL '7 days'),
-  (2, 5, 1, 2000, 'pending', NULL, NOW() + INTERVAL '5 days'),
-  (3, 13, 81, 1500, 'pending', 'Monthly restocking', NOW() + INTERVAL '14 days'),
-  (4, 34, 42, 3000, 'pending', 'Partner deal', NOW() + INTERVAL '10 days'),
-  (5, 16, 76, 500, 'pending', NULL, NOW() + INTERVAL '3 days'),
+  (1, 1, 4, 3, 1500, 'pending', 'Urgent need for production', NOW() + INTERVAL '7 days'),
+  (2, 5, 1, 5, 2000, 'pending', NULL, NOW() + INTERVAL '5 days'),
+  (3, 13, 81, 6, 1500, 'pending', 'Monthly restocking', NOW() + INTERVAL '14 days'),
+  (4, 34, 42, 7, 3000, 'pending', 'Partner deal', NOW() + INTERVAL '10 days'),
+  (5, 16, 76, 8, 500, 'pending', NULL, NOW() + INTERVAL '3 days'),
   -- Confirmed reservations
-  (6, 6, 2, 1000, 'confirmed', 'Confirmed, will deliver next week', NULL),
-  (7, 9, 65, 800, 'confirmed', NULL, NULL),
-  (8, 22, 10, 500, 'confirmed', 'Waiting for pickup', NULL),
-  (9, 37, 51, 2000, 'confirmed', 'Partner confirmed', NULL),
-  (10, 25, 18, 1500, 'confirmed', NULL, NULL),
+  (6, 6, 2, 4, 1000, 'confirmed', 'Confirmed, will deliver next week', NULL),
+  (7, 9, 65, 9, 800, 'confirmed', NULL, NULL),
+  (8, 22, 10, 10, 500, 'confirmed', 'Waiting for pickup', NULL),
+  (9, 37, 51, 11, 2000, 'confirmed', 'Partner confirmed', NULL),
+  (10, 25, 18, 12, 1500, 'confirmed', NULL, NULL),
   -- Fulfilled reservations (completed trades)
-  (11, 19, 96, 3000, 'fulfilled', 'Trade completed successfully', NULL),
-  (12, 28, 99, 1000, 'fulfilled', NULL, NULL),
-  (13, 31, 30, 400, 'fulfilled', 'Great trade!', NULL),
-  (14, 46, 54, 200, 'fulfilled', NULL, NULL),
-  (15, 50, 36, 2000, 'fulfilled', 'Bulk deal completed', NULL),
+  (11, 19, 96, 13, 3000, 'fulfilled', 'Trade completed successfully', NULL),
+  (12, 28, 99, 14, 1000, 'fulfilled', NULL, NULL),
+  (13, 31, 30, 15, 400, 'fulfilled', 'Great trade!', NULL),
+  (14, 46, 54, 16, 200, 'fulfilled', NULL, NULL),
+  (15, 50, 36, 17, 2000, 'fulfilled', 'Bulk deal completed', NULL),
   -- Rejected reservations
-  (16, 17, 12, 100, 'rejected', 'Price too low', NULL),
-  (17, 41, 14, 500, 'rejected', 'Not available anymore', NULL),
-  (18, 64, 59, 1500, 'rejected', NULL, NULL),
+  (16, 17, 12, 18, 100, 'rejected', 'Price too low', NULL),
+  (17, 41, 14, 19, 500, 'rejected', 'Not available anymore', NULL),
+  (18, 64, 59, 20, 1500, 'rejected', NULL, NULL),
   -- Cancelled reservations
-  (19, 7, 3, 800, 'cancelled', 'Changed my mind', NULL),
-  (20, 26, 19, 600, 'cancelled', 'Found better deal', NULL),
-  (21, 54, 39, 200, 'cancelled', NULL, NULL),
+  (19, 7, 3, 5, 800, 'cancelled', 'Changed my mind', NULL),
+  (20, 26, 19, 6, 600, 'cancelled', 'Found better deal', NULL),
+  (21, 54, 39, 7, 200, 'cancelled', NULL, NULL),
   -- Expired reservations
-  (22, 3, 7, 2000, 'expired', NULL, NOW() - INTERVAL '2 days'),
-  (23, 14, 6, 1000, 'expired', 'Never confirmed', NOW() - INTERVAL '5 days'),
-  (24, 40, 79, 1500, 'expired', NULL, NOW() - INTERVAL '1 day'),
+  (22, 3, 7, 8, 2000, 'expired', NULL, NOW() - INTERVAL '2 days'),
+  (23, 14, 6, 9, 1000, 'expired', 'Never confirmed', NOW() - INTERVAL '5 days'),
+  (24, 40, 79, 10, 1500, 'expired', NULL, NOW() - INTERVAL '1 day'),
   -- More pending for active trading
-  (25, 2, 5, 1500, 'pending', NULL, NOW() + INTERVAL '6 days'),
-  (26, 10, 66, 1000, 'pending', 'Need for new project', NOW() + INTERVAL '8 days'),
-  (27, 35, 47, 2000, 'pending', NULL, NOW() + INTERVAL '4 days'),
-  (28, 43, 52, 800, 'pending', 'Partner request', NOW() + INTERVAL '12 days'),
-  (29, 55, 41, 1000, 'pending', NULL, NOW() + INTERVAL '9 days'),
-  (30, 74, 28, 150, 'pending', 'Rare materials needed', NOW() + INTERVAL '7 days');
+  (25, 2, 5, 11, 1500, 'pending', NULL, NOW() + INTERVAL '6 days'),
+  (26, 10, 66, 12, 1000, 'pending', 'Need for new project', NOW() + INTERVAL '8 days'),
+  (27, 35, 47, 13, 2000, 'pending', NULL, NOW() + INTERVAL '4 days'),
+  (28, 43, 52, 14, 800, 'pending', 'Partner request', NOW() + INTERVAL '12 days'),
+  (29, 55, 41, 15, 1000, 'pending', NULL, NOW() + INTERVAL '9 days'),
+  (30, 74, 28, 16, 150, 'pending', 'Rare materials needed', NOW() + INTERVAL '7 days');
 
 SELECT setval(pg_get_serial_sequence('order_reservations', 'id'), 30, true);
 
@@ -515,25 +565,61 @@ SELECT setval(pg_get_serial_sequence('order_reservations', 'id'), 30, true);
 -- Sample notifications for various events
 INSERT INTO notifications (user_id, type, title, message, data, is_read) VALUES
   -- Reservation notifications for sellers
-  (2, 'reservation_placed', 'New Reservation', 'Bob reserved 1500 FE from your order', '{"sellOrderId": 4, "buyOrderId": 1, "reservationId": 1, "quantity": 1500}', false),
-  (2, 'reservation_placed', 'New Reservation', 'Bob reserved 2000 H2O from your order', '{"sellOrderId": 1, "buyOrderId": 5, "reservationId": 2, "quantity": 2000}', false),
-  (4, 'reservation_placed', 'New Reservation', 'Diana reserved 1500 C from your order', '{"sellOrderId": 81, "buyOrderId": 13, "reservationId": 3, "quantity": 1500}', true),
+  (2, 'reservation_placed', 'New Reservation', 'Bob wants to reserve 1500 FE', '{"sellOrderId": 4, "buyOrderId": 1, "reservationId": 1, "quantity": 1500}', false),
+  (2, 'reservation_placed', 'New Reservation', 'Bob wants to reserve 2000 H2O', '{"sellOrderId": 1, "buyOrderId": 5, "reservationId": 2, "quantity": 2000}', false),
+  (4, 'reservation_placed', 'New Reservation', 'Diana wants to reserve 1500 C', '{"sellOrderId": 81, "buyOrderId": 13, "reservationId": 3, "quantity": 1500}', true),
   -- Reservation notifications for buyers
-  (3, 'reservation_confirmed', 'Reservation Confirmed', 'Alice confirmed your reservation for 1000 RAT', '{"sellOrderId": 2, "buyOrderId": 6, "reservationId": 6, "quantity": 1000}', true),
-  (4, 'reservation_confirmed', 'Reservation Confirmed', 'Your PE reservation was confirmed', '{"sellOrderId": 65, "buyOrderId": 9, "reservationId": 7, "quantity": 800}', false),
+  (3, 'reservation_confirmed', 'Confirmed', 'Alice confirmed 1000 RAT', '{"sellOrderId": 2, "buyOrderId": 6, "reservationId": 6, "quantity": 1000}', true),
+  (4, 'reservation_confirmed', 'Confirmed', 'Your 800 PE reservation confirmed', '{"sellOrderId": 65, "buyOrderId": 9, "reservationId": 7, "quantity": 800}', false),
   -- Fulfilled notifications
-  (7, 'reservation_fulfilled', 'Trade Completed', 'Your reservation for 3000 H has been fulfilled', '{"sellOrderId": 96, "buyOrderId": 19, "reservationId": 11, "quantity": 3000}', true),
-  (10, 'reservation_fulfilled', 'Trade Completed', 'Your BSE trade is complete', '{"sellOrderId": 99, "buyOrderId": 28, "reservationId": 12, "quantity": 1000}', true),
+  (7, 'reservation_fulfilled', 'Fulfilled', 'Your 3000 H reservation fulfilled', '{"sellOrderId": 96, "buyOrderId": 19, "reservationId": 11, "quantity": 3000}', true),
+  (10, 'reservation_fulfilled', 'Fulfilled', 'Your 1000 BSE trade complete', '{"sellOrderId": 99, "buyOrderId": 28, "reservationId": 12, "quantity": 1000}', true),
   -- Rejected notifications
-  (6, 'reservation_rejected', 'Reservation Rejected', 'Your AU reservation was rejected: Price too low', '{"sellOrderId": 12, "buyOrderId": 17, "reservationId": 16, "quantity": 100}', true),
-  (17, 'reservation_rejected', 'Reservation Rejected', 'CU reservation rejected', '{"sellOrderId": 14, "buyOrderId": 41, "reservationId": 17, "quantity": 500}', false),
+  (6, 'reservation_rejected', 'Rejected', 'Your 100 AU reservation rejected', '{"sellOrderId": 12, "buyOrderId": 17, "reservationId": 16, "quantity": 100}', true),
+  (17, 'reservation_rejected', 'Rejected', 'Your 500 CU reservation rejected', '{"sellOrderId": 14, "buyOrderId": 41, "reservationId": 17, "quantity": 500}', false),
   -- User approval notifications
-  (12, 'user_approved', 'Application Approved', 'Your application to join Kawakawa has been approved!', '{"roles": ["applicant"]}', true),
-  (13, 'user_approved', 'Application Approved', 'Welcome to Kawakawa!', '{"roles": ["applicant"]}', false),
+  (12, 'user_approved', 'Account Approved', 'Welcome to Kawakawa!', '{"roles": ["applicant"]}', true),
+  (13, 'user_approved', 'Account Approved', 'Your account is now active', '{"roles": ["applicant"]}', false),
   -- Admin notifications about pending approvals
   (4, 'user_needs_approval', 'New Registration', 'Rachel Torres needs approval', '{"userId": 19, "username": "rachel"}', false),
   (4, 'user_needs_approval', 'New Registration', 'Steve Upton needs approval', '{"userId": 20, "username": "steve"}', false),
   (4, 'user_needs_approval', 'New Registration', 'Tara Vance needs approval', '{"userId": 21, "username": "tara"}', true);
+
+-- ==================== TEST PRICE LIST ====================
+-- Custom price list for testing purposes
+INSERT INTO price_lists (code, name, description, type, currency, default_location_id, is_active) VALUES
+  ('TEST', 'Test Price List', 'Custom price list for testing', 'custom', 'CIS', 'BEN', true);
+
+-- ==================== TEST PRICES ====================
+-- Sample prices for TEST price list
+INSERT INTO prices (price_list_code, commodity_ticker, location_id, price, source, source_reference) VALUES
+  ('TEST', 'H2O', 'BEN', '50.00', 'manual', 'Mock data'),
+  ('TEST', 'RAT', 'BEN', '95.00', 'manual', 'Mock data'),
+  ('TEST', 'DW', 'BEN', '120.00', 'manual', 'Mock data'),
+  ('TEST', 'OVE', 'BEN', '185.00', 'manual', 'Mock data'),
+  ('TEST', 'COF', 'BEN', '380.00', 'manual', 'Mock data'),
+  ('TEST', 'FE', 'BEN', '85.00', 'manual', 'Mock data'),
+  ('TEST', 'AL', 'BEN', '220.00', 'manual', 'Mock data'),
+  ('TEST', 'SI', 'BEN', '175.00', 'manual', 'Mock data'),
+  ('TEST', 'C', 'BEN', '72.00', 'manual', 'Mock data'),
+  ('TEST', 'PE', 'BEN', '650.00', 'manual', 'Mock data'),
+  ('TEST', 'PG', 'BEN', '420.00', 'manual', 'Mock data'),
+  ('TEST', 'LST', 'BEN', '35.00', 'manual', 'Mock data'),
+  ('TEST', 'MCG', 'BEN', '420.00', 'manual', 'Mock data'),
+  ('TEST', 'GL', 'BEN', '95.00', 'manual', 'Mock data'),
+  ('TEST', 'CU', 'BEN', '450.00', 'manual', 'Mock data'),
+  ('TEST', 'TI', 'BEN', '3200.00', 'manual', 'Mock data'),
+  ('TEST', 'AU', 'BEN', '8500.00', 'manual', 'Mock data'),
+  ('TEST', 'AUO', 'BEN', '1200.00', 'manual', 'Mock data'),
+  ('TEST', 'O', 'BEN', '25.00', 'manual', 'Mock data'),
+  ('TEST', 'N', 'BEN', '32.00', 'manual', 'Mock data');
+
+-- ==================== TEST PRICE ADJUSTMENTS ====================
+-- Sample adjustments for TEST price list
+INSERT INTO price_adjustments (price_list_code, commodity_ticker, location_id, adjustment_type, adjustment_value, description, priority, is_active) VALUES
+  ('TEST', NULL, NULL, 'percentage', '10.00', 'Global 10% markup for TEST', 0, true),
+  ('TEST', 'AU', NULL, 'percentage', '5.00', 'Additional 5% for gold', 10, true),
+  ('TEST', 'AUO', NULL, 'percentage', '5.00', 'Additional 5% for gold ore', 10, true);
 
 -- Summary
 SELECT 'Mock data loaded successfully!' as status;
@@ -543,3 +629,4 @@ SELECT 'Buy Orders: ' || COUNT(*) FROM buy_orders;
 SELECT 'Reservations: ' || COUNT(*) FROM order_reservations;
 SELECT 'Inventory Items: ' || COUNT(*) FROM fio_inventory;
 SELECT 'Notifications: ' || COUNT(*) FROM notifications;
+SELECT 'Test Prices: ' || COUNT(*) FROM prices WHERE price_list_code = 'TEST';

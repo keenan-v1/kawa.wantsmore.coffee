@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NotificationsController } from './NotificationsController.js'
 import { notificationService } from '../services/notificationService.js'
-import type { Notification } from '@kawakawa/types'
+import { syncService } from '../services/syncService.js'
+import type { Notification, SyncState } from '@kawakawa/types'
 
 vi.mock('../services/notificationService.js', () => ({
   notificationService: {
@@ -11,6 +12,12 @@ vi.mock('../services/notificationService.js', () => ({
     markAsRead: vi.fn(),
     markAllAsRead: vi.fn(),
     remove: vi.fn(),
+  },
+}))
+
+vi.mock('../services/syncService.js', () => ({
+  syncService: {
+    getSyncState: vi.fn(),
   },
 }))
 
@@ -68,22 +75,36 @@ describe('NotificationsController', () => {
     })
   })
 
-  describe('getUnreadCount', () => {
-    it('should return unread count', async () => {
-      vi.mocked(notificationService.getUnreadCount).mockResolvedValue(5)
+  describe('getSyncState', () => {
+    const mockSyncState: SyncState = {
+      unreadCount: 5,
+      appVersion: 'abc123',
+      dataVersions: {
+        locations: 1704844800000,
+        commodities: 1704844800000,
+      },
+    }
 
-      const result = await controller.getUnreadCount(mockRequest)
+    it('should return sync state with unread count and data versions', async () => {
+      vi.mocked(syncService.getSyncState).mockResolvedValue(mockSyncState)
 
-      expect(notificationService.getUnreadCount).toHaveBeenCalledWith(1)
-      expect(result).toEqual({ count: 5 })
+      const result = await controller.getSyncState(mockRequest)
+
+      expect(syncService.getSyncState).toHaveBeenCalledWith(1)
+      expect(result).toEqual(mockSyncState)
     })
 
-    it('should return zero when no unread notifications', async () => {
-      vi.mocked(notificationService.getUnreadCount).mockResolvedValue(0)
+    it('should return zero unread count when no notifications', async () => {
+      const emptyState: SyncState = {
+        unreadCount: 0,
+        appVersion: 'abc123',
+        dataVersions: {},
+      }
+      vi.mocked(syncService.getSyncState).mockResolvedValue(emptyState)
 
-      const result = await controller.getUnreadCount(mockRequest)
+      const result = await controller.getSyncState(mockRequest)
 
-      expect(result).toEqual({ count: 0 })
+      expect(result.unreadCount).toBe(0)
     })
   })
 

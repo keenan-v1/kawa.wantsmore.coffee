@@ -19,7 +19,6 @@ import {
   userRoles,
   roles,
   passwordResetTokens,
-  userSettings,
   permissions,
   rolePermissions,
   fioUserStorage,
@@ -33,6 +32,7 @@ import { invalidatePermissionCache } from '../utils/permissionService.js'
 import crypto from 'crypto'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
 import { notificationService } from '../services/notificationService.js'
+import * as userSettingsService from '../services/userSettingsService.js'
 
 interface FioSyncInfo {
   fioUsername: string | null
@@ -118,7 +118,7 @@ interface SetRolePermissionRequest {
 
 @Route('admin')
 @Tags('Admin')
-@Security('jwt', ['administrator'])
+@Security('jwt', ['admin.manage_users'])
 export class AdminController extends Controller {
   /**
    * List all users with pagination and optional search
@@ -178,11 +178,8 @@ export class AdminController extends Controller {
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, user.id))
 
-        // Get FIO sync info
-        const [settings] = await db
-          .select({ fioUsername: userSettings.fioUsername })
-          .from(userSettings)
-          .where(eq(userSettings.userId, user.id))
+        // Get FIO sync info from settings service
+        const { fioUsername } = await userSettingsService.getFioCredentials(user.id)
 
         const [lastSync] = await db
           .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
@@ -207,7 +204,7 @@ export class AdminController extends Controller {
             color: r.roleColor,
           })),
           fioSync: {
-            fioUsername: settings?.fioUsername || null,
+            fioUsername: fioUsername || null,
             lastSyncedAt: lastSync?.lastSyncedAt || null,
           },
           discord: {
@@ -276,10 +273,8 @@ export class AdminController extends Controller {
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, user.id))
 
-        const [settings] = await db
-          .select({ fioUsername: userSettings.fioUsername })
-          .from(userSettings)
-          .where(eq(userSettings.userId, user.id))
+        // Get FIO sync info from settings service
+        const { fioUsername } = await userSettingsService.getFioCredentials(user.id)
 
         const [lastSync] = await db
           .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
@@ -304,7 +299,7 @@ export class AdminController extends Controller {
             color: r.roleColor,
           })),
           fioSync: {
-            fioUsername: settings?.fioUsername || null,
+            fioUsername: fioUsername || null,
             lastSyncedAt: lastSync?.lastSyncedAt || null,
           },
           discord: {
@@ -425,11 +420,8 @@ export class AdminController extends Controller {
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId))
 
-    // Get FIO sync info
-    const [settings] = await db
-      .select({ fioUsername: userSettings.fioUsername })
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
+    // Get FIO sync info from settings service
+    const { fioUsername } = await userSettingsService.getFioCredentials(userId)
 
     const [lastSync] = await db
       .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
@@ -454,7 +446,7 @@ export class AdminController extends Controller {
         color: r.roleColor,
       })),
       fioSync: {
-        fioUsername: settings?.fioUsername || null,
+        fioUsername: fioUsername || null,
         lastSyncedAt: lastSync?.lastSyncedAt || null,
       },
       discord: {
@@ -649,21 +641,16 @@ export class AdminController extends Controller {
       throw NotFound('User not found')
     }
 
-    const [settings] = await db
-      .select({
-        fioUsername: userSettings.fioUsername,
-        fioApiKey: userSettings.fioApiKey,
-      })
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
+    // Get FIO credentials from settings service
+    const { fioUsername, fioApiKey } = await userSettingsService.getFioCredentials(userId)
 
-    if (!settings?.fioUsername || !settings?.fioApiKey) {
+    if (!fioUsername || !fioApiKey) {
       this.setStatus(400)
       throw BadRequest('User does not have FIO credentials configured')
     }
 
     // Perform sync
-    const result = await syncUserInventory(userId, settings.fioApiKey, settings.fioUsername)
+    const result = await syncUserInventory(userId, fioApiKey, fioUsername)
 
     return {
       success: result.success,
@@ -702,7 +689,7 @@ export class AdminController extends Controller {
     }
 
     // Delete the user - cascade will handle all related data:
-    // - userSettings
+    // - userSettings (key-value settings including FIO credentials)
     // - userRoles
     // - passwordResetTokens
     // - fioUserStorage (and fioInventory through it)
