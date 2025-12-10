@@ -22,7 +22,7 @@ describe('UserSettingsController', () => {
   describe('getSettings', () => {
     it('should return settings with values and definitions', async () => {
       const mockValues = {
-        'display.preferredCurrency': 'ICA',
+        'market.preferredCurrency': 'ICA',
         'display.locationDisplayMode': 'both',
         'notifications.browserEnabled': true,
       }
@@ -32,7 +32,7 @@ describe('UserSettingsController', () => {
 
       expect(result.values).toEqual(mockValues)
       expect(result.definitions).toBeDefined()
-      expect(result.definitions['display.preferredCurrency']).toBeDefined()
+      expect(result.definitions['market.preferredCurrency']).toBeDefined()
       expect(userSettingsService.getAllSettings).toHaveBeenCalledWith(1)
     })
 
@@ -51,11 +51,11 @@ describe('UserSettingsController', () => {
   describe('updateSettings', () => {
     it('should update settings and return updated values', async () => {
       const settingsToUpdate = {
-        'display.preferredCurrency': 'NCC',
+        'market.preferredCurrency': 'NCC',
         'notifications.browserEnabled': true,
       }
       const updatedValues = {
-        'display.preferredCurrency': 'NCC',
+        'market.preferredCurrency': 'NCC',
         'display.locationDisplayMode': 'both',
         'notifications.browserEnabled': true,
       }
@@ -88,7 +88,7 @@ describe('UserSettingsController', () => {
 
       await expect(
         controller.updateSettings(
-          { settings: { 'display.preferredCurrency': 'INVALID' } },
+          { settings: { 'market.preferredCurrency': 'INVALID' } },
           mockRequest
         )
       ).rejects.toThrow('display.preferredCurrency must be one of: ICA, CIS, AIC, NCC')
@@ -100,16 +100,16 @@ describe('UserSettingsController', () => {
   describe('resetSetting', () => {
     it('should reset setting and return updated values', async () => {
       const resetValues = {
-        'display.preferredCurrency': 'CIS', // back to default
+        'market.preferredCurrency': 'CIS', // back to default
         'display.locationDisplayMode': 'both',
       }
 
       vi.mocked(userSettingsService.resetSetting).mockResolvedValueOnce()
       vi.mocked(userSettingsService.getAllSettings).mockResolvedValueOnce(resetValues)
 
-      const result = await controller.resetSetting('display.preferredCurrency', mockRequest)
+      const result = await controller.resetSetting('market.preferredCurrency', mockRequest)
 
-      expect(userSettingsService.resetSetting).toHaveBeenCalledWith(1, 'display.preferredCurrency')
+      expect(userSettingsService.resetSetting).toHaveBeenCalledWith(1, 'market.preferredCurrency')
       expect(result.values).toEqual(resetValues)
     })
 
@@ -131,7 +131,7 @@ describe('UserSettingsController', () => {
   describe('resetAllSettings', () => {
     it('should reset all settings and return defaults', async () => {
       const defaultValues = {
-        'display.preferredCurrency': 'CIS',
+        'market.preferredCurrency': 'CIS',
         'display.locationDisplayMode': 'both',
         'display.commodityDisplayMode': 'both',
         'notifications.browserEnabled': false,

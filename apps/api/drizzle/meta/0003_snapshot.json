@@ -1,5 +1,5 @@
 {
-  "id": "77369b92-c789-4f95-8b26-667e4a19502d",
+  "id": "5b854fed-fd27-4460-81a3-0012a6b2c028",
   "prevId": "bc1f5d97-04bf-4219-b35a-732e90774d2a",
   "version": "7",
   "dialect": "postgresql",
@@ -50,6 +50,12 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
+        },
+        "price_list_code": {
+          "name": "price_list_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
         },
         "order_type": {
           "name": "order_type",
@@ -120,12 +126,8 @@
           "name": "buy_orders_user_id_users_id_fk",
           "tableFrom": "buy_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -133,12 +135,8 @@
           "name": "buy_orders_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "buy_orders",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -146,12 +144,8 @@
           "name": "buy_orders_location_id_fio_locations_natural_id_fk",
           "tableFrom": "buy_orders",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -234,12 +228,8 @@
           "name": "discord_role_mappings_app_role_id_roles_id_fk",
           "tableFrom": "discord_role_mappings",
           "tableTo": "roles",
-          "columnsFrom": [
-            "app_role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["app_role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -368,12 +358,8 @@
           "name": "fio_inventory_user_storage_id_fio_user_storage_id_fk",
           "tableFrom": "fio_inventory",
           "tableTo": "fio_user_storage",
-          "columnsFrom": [
-            "user_storage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_storage_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -381,12 +367,8 @@
           "name": "fio_inventory_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "fio_inventory",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -551,12 +533,8 @@
           "name": "fio_user_storage_user_id_users_id_fk",
           "tableFrom": "fio_user_storage",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -564,12 +542,8 @@
           "name": "fio_user_storage_location_id_fio_locations_natural_id_fk",
           "tableFrom": "fio_user_storage",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -671,12 +645,8 @@
           "name": "import_configs_price_list_code_price_lists_code_fk",
           "tableFrom": "import_configs",
           "tableTo": "price_lists",
-          "columnsFrom": [
-            "price_list_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["price_list_code"],
+          "columnsTo": ["code"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -777,12 +747,8 @@
           "name": "notifications_user_id_users_id_fk",
           "tableFrom": "notifications",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -914,12 +880,8 @@
           "name": "order_reservations_sell_order_id_sell_orders_id_fk",
           "tableFrom": "order_reservations",
           "tableTo": "sell_orders",
-          "columnsFrom": [
-            "sell_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sell_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -927,12 +889,8 @@
           "name": "order_reservations_buy_order_id_buy_orders_id_fk",
           "tableFrom": "order_reservations",
           "tableTo": "buy_orders",
-          "columnsFrom": [
-            "buy_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["buy_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -940,12 +898,8 @@
           "name": "order_reservations_counterparty_user_id_users_id_fk",
           "tableFrom": "order_reservations",
           "tableTo": "users",
-          "columnsFrom": [
-            "counterparty_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["counterparty_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1005,12 +959,8 @@
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1020,9 +970,7 @@
         "password_reset_tokens_token_unique": {
           "name": "password_reset_tokens_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -1210,12 +1158,8 @@
           "name": "price_adjustments_price_list_code_price_lists_code_fk",
           "tableFrom": "price_adjustments",
           "tableTo": "price_lists",
-          "columnsFrom": [
-            "price_list_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["price_list_code"],
+          "columnsTo": ["code"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1223,12 +1167,8 @@
           "name": "price_adjustments_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "price_adjustments",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1236,12 +1176,8 @@
           "name": "price_adjustments_location_id_fio_locations_natural_id_fk",
           "tableFrom": "price_adjustments",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1249,12 +1185,8 @@
           "name": "price_adjustments_created_by_user_id_users_id_fk",
           "tableFrom": "price_adjustments",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1335,12 +1267,8 @@
           "name": "price_lists_default_location_id_fio_locations_natural_id_fk",
           "tableFrom": "price_lists",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "default_location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["default_location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1462,12 +1390,8 @@
           "name": "prices_price_list_code_price_lists_code_fk",
           "tableFrom": "prices",
           "tableTo": "price_lists",
-          "columnsFrom": [
-            "price_list_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["price_list_code"],
+          "columnsTo": ["code"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1475,12 +1399,8 @@
           "name": "prices_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "prices",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1488,12 +1408,8 @@
           "name": "prices_location_id_fio_locations_natural_id_fk",
           "tableFrom": "prices",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1554,12 +1470,8 @@
           "name": "role_permissions_role_id_roles_id_fk",
           "tableFrom": "role_permissions",
           "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1567,12 +1479,8 @@
           "name": "role_permissions_permission_id_permissions_id_fk",
           "tableFrom": "role_permissions",
           "tableTo": "permissions",
-          "columnsFrom": [
-            "permission_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["permission_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1670,6 +1578,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "price_list_code": {
+          "name": "price_list_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "order_type": {
           "name": "order_type",
           "type": "order_type",
@@ -1753,12 +1667,8 @@
           "name": "sell_orders_user_id_users_id_fk",
           "tableFrom": "sell_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1766,12 +1676,8 @@
           "name": "sell_orders_commodity_ticker_fio_commodities_ticker_fk",
           "tableFrom": "sell_orders",
           "tableTo": "fio_commodities",
-          "columnsFrom": [
-            "commodity_ticker"
-          ],
-          "columnsTo": [
-            "ticker"
-          ],
+          "columnsFrom": ["commodity_ticker"],
+          "columnsTo": ["ticker"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1779,12 +1685,8 @@
           "name": "sell_orders_location_id_fio_locations_natural_id_fk",
           "tableFrom": "sell_orders",
           "tableTo": "fio_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "natural_id"
-          ],
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["natural_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1866,12 +1768,8 @@
           "name": "settings_changed_by_user_id_users_id_fk",
           "tableFrom": "settings",
           "tableTo": "users",
-          "columnsFrom": [
-            "changed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["changed_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1978,12 +1876,8 @@
           "name": "user_discord_profiles_user_id_users_id_fk",
           "tableFrom": "user_discord_profiles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1993,16 +1887,12 @@
         "user_discord_profiles_user_id_unique": {
           "name": "user_discord_profiles_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         },
         "user_discord_profiles_discord_id_unique": {
           "name": "user_discord_profiles_discord_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "discord_id"
-          ]
+          "columns": ["discord_id"]
         }
       },
       "policies": {},
@@ -2045,12 +1935,8 @@
           "name": "user_roles_user_id_users_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2058,12 +1944,8 @@
           "name": "user_roles_role_id_roles_id_fk",
           "tableFrom": "user_roles",
           "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2138,12 +2020,8 @@
           "name": "user_settings_user_id_users_id_fk",
           "tableFrom": "user_settings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2217,9 +2095,7 @@
         "users_username_unique": {
           "name": "users_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},
@@ -2231,63 +2107,37 @@
     "public.adjustment_type": {
       "name": "adjustment_type",
       "schema": "public",
-      "values": [
-        "percentage",
-        "fixed"
-      ]
+      "values": ["percentage", "fixed"]
     },
     "public.commodity_display_mode": {
       "name": "commodity_display_mode",
       "schema": "public",
-      "values": [
-        "ticker-only",
-        "name-only",
-        "both"
-      ]
+      "values": ["ticker-only", "name-only", "both"]
     },
     "public.currency": {
       "name": "currency",
       "schema": "public",
-      "values": [
-        "ICA",
-        "CIS",
-        "AIC",
-        "NCC"
-      ]
+      "values": ["ICA", "CIS", "AIC", "NCC"]
     },
     "public.import_format": {
       "name": "import_format",
       "schema": "public",
-      "values": [
-        "flat",
-        "pivot",
-        "kawa"
-      ]
+      "values": ["flat", "pivot", "kawa"]
     },
     "public.import_source_type": {
       "name": "import_source_type",
       "schema": "public",
-      "values": [
-        "csv",
-        "google_sheets"
-      ]
+      "values": ["csv", "google_sheets"]
     },
     "public.location_display_mode": {
       "name": "location_display_mode",
       "schema": "public",
-      "values": [
-        "names-only",
-        "natural-ids-only",
-        "both"
-      ]
+      "values": ["names-only", "natural-ids-only", "both"]
     },
     "public.location_type": {
       "name": "location_type",
       "schema": "public",
-      "values": [
-        "Station",
-        "Planet"
-      ]
+      "values": ["Station", "Planet"]
     },
     "public.notification_type": {
       "name": "notification_type",
@@ -2308,49 +2158,27 @@
     "public.order_type": {
       "name": "order_type",
       "schema": "public",
-      "values": [
-        "internal",
-        "partner"
-      ]
+      "values": ["internal", "partner"]
     },
     "public.price_list_type": {
       "name": "price_list_type",
       "schema": "public",
-      "values": [
-        "fio",
-        "custom"
-      ]
+      "values": ["fio", "custom"]
     },
     "public.price_source": {
       "name": "price_source",
       "schema": "public",
-      "values": [
-        "manual",
-        "csv_import",
-        "google_sheets",
-        "fio_exchange"
-      ]
+      "values": ["manual", "csv_import", "google_sheets", "fio_exchange"]
     },
     "public.reservation_status": {
       "name": "reservation_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "confirmed",
-        "rejected",
-        "fulfilled",
-        "expired",
-        "cancelled"
-      ]
+      "values": ["pending", "confirmed", "rejected", "fulfilled", "expired", "cancelled"]
     },
     "public.sell_order_limit_mode": {
       "name": "sell_order_limit_mode",
       "schema": "public",
-      "values": [
-        "none",
-        "max_sell",
-        "reserve"
-      ]
+      "values": ["none", "max_sell", "reserve"]
     }
   },
   "schemas": {},

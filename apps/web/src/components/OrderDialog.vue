@@ -36,22 +36,31 @@
                 <v-form ref="buyFormRef" @submit.prevent="submitOrder">
                   <!-- Commodity -->
                   <KeyValueAutocomplete
+                    ref="buyCommodityRef"
                     v-model="buyForm.commodityTicker"
                     :items="commodities"
+                    :favorites="settingsStore.favoritedCommodities.value"
                     label="Commodity"
                     :rules="[v => !!v || 'Commodity is required']"
                     :loading="loadingCommodities"
                     required
+                    @update:favorites="
+                      settingsStore.updateSetting('market.favoritedCommodities', $event)
+                    "
                   />
 
                   <!-- Location -->
                   <KeyValueAutocomplete
                     v-model="buyForm.locationId"
                     :items="locations"
+                    :favorites="settingsStore.favoritedLocations.value"
                     label="Location"
                     :rules="[v => !!v || 'Location is required']"
                     :loading="loadingLocations"
                     required
+                    @update:favorites="
+                      settingsStore.updateSetting('market.favoritedLocations', $event)
+                    "
                   />
 
                   <!-- Quantity -->
@@ -64,92 +73,171 @@
                     required
                   />
 
-                  <!-- Price -->
-                  <v-row>
-                    <v-col cols="8">
-                      <v-text-field
-                        v-model.number="buyForm.price"
-                        label="Price"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        :rules="[
-                          v => remainingBuyOrderQuantity <= 0 || v > 0 || 'Price must be positive',
-                        ]"
-                        :required="remainingBuyOrderQuantity > 0"
-                        :hint="
-                          remainingBuyOrderQuantity <= 0
-                            ? 'Not required - no order will be placed'
-                            : ''
-                        "
-                        :persistent-hint="remainingBuyOrderQuantity <= 0"
-                      />
-                    </v-col>
-                    <v-col cols="4">
-                      <v-select v-model="buyForm.currency" :items="currencies" label="Currency" />
-                    </v-col>
-                  </v-row>
-
-                  <!-- Price Suggestion -->
-                  <div v-if="suggestedPrice || loadingSuggestedPrice" class="price-suggestion mb-3">
-                    <div class="d-flex align-center text-caption">
-                      <v-progress-circular
-                        v-if="loadingSuggestedPrice"
-                        indeterminate
-                        size="14"
-                        width="2"
-                        class="mr-2"
-                      />
-                      <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
-                      <template v-if="suggestedPrice">
-                        <span class="text-medium-emphasis">KAWA list price:</span>
-                        <span class="font-weight-medium ml-1">
-                          {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
-                        </span>
-                        <!-- Currency mismatch indicator -->
-                        <v-tooltip
-                          v-if="suggestedPrice.currency !== buyForm.currency"
-                          location="top"
-                        >
-                          <template #activator="{ props: tooltipProps }">
-                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                              mdi-swap-horizontal
-                            </v-icon>
-                          </template>
-                          <span
-                            >Price is in {{ suggestedPrice.currency }} (will update currency when
-                            used)</span
-                          >
-                        </v-tooltip>
-                        <!-- Fallback location indicator -->
-                        <v-tooltip v-if="suggestedPrice.isFallback" location="top">
-                          <template #activator="{ props: tooltipProps }">
-                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                              mdi-map-marker-question
-                            </v-icon>
-                          </template>
-                          <span
-                            >No price at
-                            {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
-                            using default location
-                            {{ getLocationDisplay(suggestedPrice.locationId) }}</span
-                          >
-                        </v-tooltip>
-                        <v-btn
-                          variant="text"
-                          size="x-small"
-                          color="primary"
-                          class="ml-2"
-                          @click="useSuggestedPrice"
-                        >
-                          Use
-                        </v-btn>
-                      </template>
-                      <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
-                        Loading suggested price...
-                      </span>
-                    </div>
+                  <!-- Automatic Pricing Status -->
+                  <div class="d-flex align-center mb-3 text-body-2">
+                    <span class="text-medium-emphasis">Automatic Pricing:</span>
+                    <a
+                      v-if="buyForm.usePriceList"
+                      href="#"
+                      tabindex="-1"
+                      class="ml-2 font-weight-medium text-primary"
+                      @click.prevent="toggleAutomaticPricing(false)"
+                    >
+                      ON
+                    </a>
+                    <a
+                      v-else-if="canUseDynamicPricing"
+                      href="#"
+                      tabindex="-1"
+                      class="ml-2 font-weight-medium text-primary"
+                      @click.prevent="toggleAutomaticPricing(true)"
+                    >
+                      OFF
+                    </a>
+                    <span v-else class="ml-2 text-medium-emphasis">
+                      OFF
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                            mdi-alert-circle-outline
+                          </v-icon>
+                        </template>
+                        <span>Set a default price list in Account Settings to enable</span>
+                      </v-tooltip>
+                    </span>
+                    <v-chip
+                      v-if="buyForm.usePriceList"
+                      size="x-small"
+                      color="info"
+                      variant="tonal"
+                      class="ml-2"
+                    >
+                      {{ settingsStore.defaultPriceList.value }}
+                    </v-chip>
                   </div>
+
+                  <!-- Dynamic Pricing Display (when using price list) -->
+                  <PriceListDisplay
+                    v-if="buyForm.usePriceList"
+                    :loading="loadingSuggestedPrice"
+                    :price="suggestedPrice"
+                    :price-list-code="settingsStore.defaultPriceList.value ?? ''"
+                    :requested-currency="buyForm.currency"
+                    :fallback-location-display="
+                      suggestedPrice?.locationId
+                        ? getLocationDisplay(suggestedPrice.locationId)
+                        : ''
+                    "
+                    :requested-location-display="
+                      suggestedPrice?.requestedLocationId
+                        ? getLocationDisplay(suggestedPrice.requestedLocationId)
+                        : ''
+                    "
+                    class="mb-3"
+                  />
+
+                  <!-- Custom Price (when not using price list) -->
+                  <template v-else>
+                    <v-row>
+                      <v-col cols="8">
+                        <v-text-field
+                          v-model.number="buyForm.price"
+                          label="Price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          :rules="[
+                            v =>
+                              remainingBuyOrderQuantity <= 0 || v > 0 || 'Price must be positive',
+                          ]"
+                          :required="remainingBuyOrderQuantity > 0"
+                          :hint="
+                            remainingBuyOrderQuantity <= 0
+                              ? 'Not required - no order will be placed'
+                              : ''
+                          "
+                          :persistent-hint="remainingBuyOrderQuantity <= 0"
+                        />
+                      </v-col>
+                      <v-col cols="4">
+                        <v-select v-model="buyForm.currency" :items="currencies" label="Currency" />
+                      </v-col>
+                    </v-row>
+
+                    <!-- Price Suggestion (only when not using price list) -->
+                    <div
+                      v-if="suggestedPrice || loadingSuggestedPrice"
+                      class="price-suggestion mb-3"
+                    >
+                      <div class="d-flex align-center text-caption">
+                        <v-progress-circular
+                          v-if="loadingSuggestedPrice"
+                          indeterminate
+                          size="14"
+                          width="2"
+                          class="mr-2"
+                        />
+                        <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
+                        <template v-if="suggestedPrice">
+                          <span class="text-medium-emphasis">Suggested price:</span>
+                          <span class="font-weight-medium ml-1">
+                            {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
+                          </span>
+                          <!-- Currency mismatch indicator -->
+                          <v-tooltip
+                            v-if="suggestedPrice.currency !== buyForm.currency"
+                            location="top"
+                          >
+                            <template #activator="{ props: tooltipProps }">
+                              <v-icon
+                                v-bind="tooltipProps"
+                                size="small"
+                                color="warning"
+                                class="ml-1"
+                              >
+                                mdi-swap-horizontal
+                              </v-icon>
+                            </template>
+                            <span
+                              >Price is in {{ suggestedPrice.currency }} (will update currency when
+                              used)</span
+                            >
+                          </v-tooltip>
+                          <!-- Fallback location indicator -->
+                          <v-tooltip v-if="suggestedPrice.isFallback" location="top">
+                            <template #activator="{ props: tooltipProps }">
+                              <v-icon
+                                v-bind="tooltipProps"
+                                size="small"
+                                color="warning"
+                                class="ml-1"
+                              >
+                                mdi-map-marker-question
+                              </v-icon>
+                            </template>
+                            <span
+                              >No price at
+                              {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
+                              using default location
+                              {{ getLocationDisplay(suggestedPrice.locationId) }}</span
+                            >
+                          </v-tooltip>
+                          <v-btn
+                            variant="text"
+                            size="x-small"
+                            color="primary"
+                            class="ml-2"
+                            @click="useSuggestedPrice"
+                          >
+                            Use
+                          </v-btn>
+                        </template>
+                        <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
+                          Loading suggested price...
+                        </span>
+                      </div>
+                    </div>
+                  </template>
 
                   <!-- Order Type -->
                   <v-select
@@ -188,102 +276,193 @@
                   <!-- Commodity/Location (when no inventoryItem) -->
                   <template v-if="!inventoryItem">
                     <KeyValueAutocomplete
+                      ref="sellCommodityRef"
                       v-model="sellForm.commodityTicker"
                       :items="commodities"
+                      :favorites="settingsStore.favoritedCommodities.value"
                       label="Commodity"
                       :rules="[v => !!v || 'Commodity is required']"
                       :loading="loadingCommodities"
                       required
+                      @update:favorites="
+                        settingsStore.updateSetting('market.favoritedCommodities', $event)
+                      "
                     />
 
                     <KeyValueAutocomplete
                       v-model="sellForm.locationId"
                       :items="locations"
+                      :favorites="settingsStore.favoritedLocations.value"
                       label="Location"
                       :rules="[v => !!v || 'Location is required']"
                       :loading="loadingLocations"
                       required
+                      @update:favorites="
+                        settingsStore.updateSetting('market.favoritedLocations', $event)
+                      "
                     />
                   </template>
 
-                  <!-- Price -->
-                  <v-row>
-                    <v-col cols="8">
-                      <v-text-field
-                        v-model.number="sellForm.price"
-                        label="Price"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        :rules="[v => v > 0 || 'Price must be positive']"
-                        required
-                      />
-                    </v-col>
-                    <v-col cols="4">
-                      <v-select v-model="sellForm.currency" :items="currencies" label="Currency" />
-                    </v-col>
-                  </v-row>
-
-                  <!-- Price Suggestion -->
-                  <div v-if="suggestedPrice || loadingSuggestedPrice" class="price-suggestion mb-3">
-                    <div class="d-flex align-center text-caption">
-                      <v-progress-circular
-                        v-if="loadingSuggestedPrice"
-                        indeterminate
-                        size="14"
-                        width="2"
-                        class="mr-2"
-                      />
-                      <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
-                      <template v-if="suggestedPrice">
-                        <span class="text-medium-emphasis">KAWA list price:</span>
-                        <span class="font-weight-medium ml-1">
-                          {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
-                        </span>
-                        <!-- Currency mismatch indicator -->
-                        <v-tooltip
-                          v-if="suggestedPrice.currency !== sellForm.currency"
-                          location="top"
-                        >
-                          <template #activator="{ props: tooltipProps }">
-                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                              mdi-swap-horizontal
-                            </v-icon>
-                          </template>
-                          <span
-                            >Price is in {{ suggestedPrice.currency }} (will update currency when
-                            used)</span
-                          >
-                        </v-tooltip>
-                        <!-- Fallback location indicator -->
-                        <v-tooltip v-if="suggestedPrice.isFallback" location="top">
-                          <template #activator="{ props: tooltipProps }">
-                            <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                              mdi-map-marker-question
-                            </v-icon>
-                          </template>
-                          <span
-                            >No price at
-                            {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
-                            using default location
-                            {{ getLocationDisplay(suggestedPrice.locationId) }}</span
-                          >
-                        </v-tooltip>
-                        <v-btn
-                          variant="text"
-                          size="x-small"
-                          color="primary"
-                          class="ml-2"
-                          @click="useSuggestedPrice"
-                        >
-                          Use
-                        </v-btn>
-                      </template>
-                      <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
-                        Loading suggested price...
-                      </span>
-                    </div>
+                  <!-- Automatic Pricing Status -->
+                  <div class="d-flex align-center mb-3 text-body-2">
+                    <span class="text-medium-emphasis">Automatic Pricing:</span>
+                    <a
+                      v-if="sellForm.usePriceList"
+                      href="#"
+                      tabindex="-1"
+                      class="ml-2 font-weight-medium text-primary"
+                      @click.prevent="toggleAutomaticPricing(false)"
+                    >
+                      ON
+                    </a>
+                    <a
+                      v-else-if="canUseDynamicPricing"
+                      href="#"
+                      tabindex="-1"
+                      class="ml-2 font-weight-medium text-primary"
+                      @click.prevent="toggleAutomaticPricing(true)"
+                    >
+                      OFF
+                    </a>
+                    <span v-else class="ml-2 text-medium-emphasis">
+                      OFF
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
+                            mdi-alert-circle-outline
+                          </v-icon>
+                        </template>
+                        <span>Set a default price list in Account Settings to enable</span>
+                      </v-tooltip>
+                    </span>
+                    <v-chip
+                      v-if="sellForm.usePriceList"
+                      size="x-small"
+                      color="info"
+                      variant="tonal"
+                      class="ml-2"
+                    >
+                      {{ settingsStore.defaultPriceList.value }}
+                    </v-chip>
                   </div>
+
+                  <!-- Dynamic Pricing Display (when using price list) -->
+                  <PriceListDisplay
+                    v-if="sellForm.usePriceList"
+                    :loading="loadingSuggestedPrice"
+                    :price="suggestedPrice"
+                    :price-list-code="settingsStore.defaultPriceList.value ?? ''"
+                    :requested-currency="sellForm.currency"
+                    :fallback-location-display="
+                      suggestedPrice?.locationId
+                        ? getLocationDisplay(suggestedPrice.locationId)
+                        : ''
+                    "
+                    :requested-location-display="
+                      suggestedPrice?.requestedLocationId
+                        ? getLocationDisplay(suggestedPrice.requestedLocationId)
+                        : ''
+                    "
+                    class="mb-3"
+                  />
+
+                  <!-- Custom Price (when not using price list) -->
+                  <template v-else>
+                    <v-row>
+                      <v-col cols="8">
+                        <v-text-field
+                          v-model.number="sellForm.price"
+                          label="Price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          :rules="[v => v > 0 || 'Price must be positive']"
+                          required
+                        />
+                      </v-col>
+                      <v-col cols="4">
+                        <v-select
+                          v-model="sellForm.currency"
+                          :items="currencies"
+                          label="Currency"
+                        />
+                      </v-col>
+                    </v-row>
+
+                    <!-- Price Suggestion (only when not using price list) -->
+                    <div
+                      v-if="suggestedPrice || loadingSuggestedPrice"
+                      class="price-suggestion mb-3"
+                    >
+                      <div class="d-flex align-center text-caption">
+                        <v-progress-circular
+                          v-if="loadingSuggestedPrice"
+                          indeterminate
+                          size="14"
+                          width="2"
+                          class="mr-2"
+                        />
+                        <v-icon v-else size="small" class="mr-1" color="info">mdi-lightbulb</v-icon>
+                        <template v-if="suggestedPrice">
+                          <span class="text-medium-emphasis">Suggested price:</span>
+                          <span class="font-weight-medium ml-1">
+                            {{ suggestedPrice.finalPrice.toFixed(2) }} {{ suggestedPrice.currency }}
+                          </span>
+                          <!-- Currency mismatch indicator -->
+                          <v-tooltip
+                            v-if="suggestedPrice.currency !== sellForm.currency"
+                            location="top"
+                          >
+                            <template #activator="{ props: tooltipProps }">
+                              <v-icon
+                                v-bind="tooltipProps"
+                                size="small"
+                                color="warning"
+                                class="ml-1"
+                              >
+                                mdi-swap-horizontal
+                              </v-icon>
+                            </template>
+                            <span
+                              >Price is in {{ suggestedPrice.currency }} (will update currency when
+                              used)</span
+                            >
+                          </v-tooltip>
+                          <!-- Fallback location indicator -->
+                          <v-tooltip v-if="suggestedPrice.isFallback" location="top">
+                            <template #activator="{ props: tooltipProps }">
+                              <v-icon
+                                v-bind="tooltipProps"
+                                size="small"
+                                color="warning"
+                                class="ml-1"
+                              >
+                                mdi-map-marker-question
+                              </v-icon>
+                            </template>
+                            <span
+                              >No price at
+                              {{ getLocationDisplay(suggestedPrice.requestedLocationId || '') }},
+                              using default location
+                              {{ getLocationDisplay(suggestedPrice.locationId) }}</span
+                            >
+                          </v-tooltip>
+                          <v-btn
+                            variant="text"
+                            size="x-small"
+                            color="primary"
+                            class="ml-2"
+                            @click="useSuggestedPrice"
+                          >
+                            Use
+                          </v-btn>
+                        </template>
+                        <span v-else-if="loadingSuggestedPrice" class="text-medium-emphasis">
+                          Loading suggested price...
+                        </span>
+                      </div>
+                    </div>
+                  </template>
 
                   <!-- Limit Mode -->
                   <v-select
@@ -561,8 +740,11 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
+import { useDisplayHelpers } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from './KeyValueAutocomplete.vue'
 import DurationDisplay from './DurationDisplay.vue'
+import PriceListDisplay from './PriceListDisplay.vue'
 
 type OrderTab = 'buy' | 'sell'
 
@@ -590,6 +772,8 @@ const emit = defineEmits<{
 }>()
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+const { getLocationDisplay, getCommodityDisplay } = useDisplayHelpers()
 
 const dialog = computed({
   get: () => props.modelValue,
@@ -601,6 +785,8 @@ const activeTab = ref<OrderTab>(props.initialTab)
 // Form refs
 const buyFormRef = ref()
 const sellFormRef = ref()
+const buyCommodityRef = ref<{ focus: () => void } | null>(null)
+const sellCommodityRef = ref<{ focus: () => void } | null>(null)
 const saving = ref(false)
 const errorMessage = ref('')
 
@@ -625,16 +811,6 @@ const limitModes = [
 // Tab visibility
 const canShowBuyTab = computed(() => !props.inventoryItem)
 const canShowSellTab = computed(() => true)
-
-// Display helpers
-const getLocationDisplay = (locationId: string | null): string => {
-  if (!locationId) return 'Unknown'
-  return locationService.getLocationDisplay(locationId, userStore.getLocationDisplayMode())
-}
-
-const getCommodityDisplay = (ticker: string): string => {
-  return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
-}
 
 // Check permissions for order creation
 const canCreateInternalOrders = computed(() =>
@@ -669,6 +845,8 @@ const buyForm = ref({
   price: 0,
   currency: userStore.getPreferredCurrency(),
   orderType: 'internal' as OrderType,
+  usePriceList: false, // Toggle for dynamic pricing
+  priceListCode: null as string | null,
 })
 
 // Sell form
@@ -680,6 +858,18 @@ const sellForm = ref({
   limitMode: 'none' as SellOrderLimitMode,
   limitQuantity: 0,
   orderType: 'internal' as OrderType,
+  usePriceList: false, // Toggle for dynamic pricing
+  priceListCode: null as string | null,
+})
+
+// Check if user can use dynamic pricing (has a default price list configured)
+const canUseDynamicPricing = computed(() => {
+  return !!settingsStore.defaultPriceList.value
+})
+
+// Current form's usePriceList state
+const currentUsePriceList = computed(() => {
+  return activeTab.value === 'buy' ? buyForm.value.usePriceList : sellForm.value.usePriceList
 })
 
 const limitQuantityHint = computed(() => {
@@ -838,21 +1028,22 @@ const loadMatchingOrders = async () => {
   }
 }
 
-// Load suggested price from KAWA price list
+// Load suggested price from user's default price list
 const loadSuggestedPrice = async () => {
   const commodity = currentCommodity.value
   const location = currentLocation.value
   const currency = currentCurrency.value
+  const priceList = settingsStore.defaultPriceList.value
 
-  if (!commodity || !location || !currency) {
+  if (!commodity || !location || !currency || !priceList) {
     suggestedPrice.value = null
     return
   }
 
   try {
     loadingSuggestedPrice.value = true
-    // Fetch effective prices from KAWA exchange for this location/currency
-    const prices = await api.prices.getEffective('KAWA', location, currency)
+    // Fetch effective prices from user's default price list for this location/currency
+    const prices = await api.prices.getEffective(priceList, location, currency)
     // Find the price for the selected commodity
     const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
     suggestedPrice.value = price ?? null
@@ -909,27 +1100,69 @@ const loadLocations = async () => {
   }
 }
 
+// Get initial usePriceList value based on settings
+const getInitialUsePriceList = (): boolean => {
+  return canUseDynamicPricing.value && settingsStore.automaticPricing.value
+}
+
 const resetBuyForm = () => {
+  const usePriceList = getInitialUsePriceList()
   buyForm.value = {
     commodityTicker: '',
     locationId: '',
     quantity: 1,
-    price: 0,
+    price: usePriceList ? 0 : 0,
     currency: userStore.getPreferredCurrency(),
     orderType: defaultOrderType.value,
+    usePriceList,
+    priceListCode: usePriceList ? settingsStore.defaultPriceList.value : null,
   }
 }
 
 const resetSellForm = () => {
+  const usePriceList = getInitialUsePriceList()
   sellForm.value = {
     commodityTicker: props.inventoryItem?.commodityTicker ?? '',
     locationId: props.inventoryItem?.locationId ?? '',
-    price: 0,
+    price: usePriceList ? 0 : 0,
     currency: userStore.getPreferredCurrency(),
     limitMode: 'none',
     limitQuantity: 0,
     orderType: defaultOrderType.value,
+    usePriceList,
+    priceListCode: usePriceList ? settingsStore.defaultPriceList.value : null,
   }
+}
+
+// Toggle automatic pricing for current form and save setting
+const toggleAutomaticPricing = async (enable: boolean) => {
+  const priceListCode = enable ? settingsStore.defaultPriceList.value : null
+
+  // Update local form state
+  if (activeTab.value === 'buy') {
+    buyForm.value.usePriceList = enable
+    buyForm.value.priceListCode = priceListCode
+    if (enable) {
+      buyForm.value.price = 0
+      // Update currency from price list's effective price if available
+      if (suggestedPrice.value) {
+        buyForm.value.currency = suggestedPrice.value.currency
+      }
+    }
+  } else {
+    sellForm.value.usePriceList = enable
+    sellForm.value.priceListCode = priceListCode
+    if (enable) {
+      sellForm.value.price = 0
+      // Update currency from price list's effective price if available
+      if (suggestedPrice.value) {
+        sellForm.value.currency = suggestedPrice.value.currency
+      }
+    }
+  }
+
+  // Persist setting to backend
+  await settingsStore.updateSetting('market.automaticPricing', enable)
 }
 
 const clearForm = () => {
@@ -971,6 +1204,8 @@ const syncFormsOnTabChange = (newTab: OrderTab, oldTab: OrderTab) => {
     sellForm.value.price = buyForm.value.price
     sellForm.value.currency = buyForm.value.currency
     sellForm.value.orderType = buyForm.value.orderType
+    sellForm.value.usePriceList = buyForm.value.usePriceList
+    sellForm.value.priceListCode = buyForm.value.priceListCode
   } else if (newTab === 'buy' && oldTab === 'sell') {
     // Copy from sell to buy
     buyForm.value.commodityTicker = sellForm.value.commodityTicker
@@ -978,6 +1213,8 @@ const syncFormsOnTabChange = (newTab: OrderTab, oldTab: OrderTab) => {
     buyForm.value.price = sellForm.value.price
     buyForm.value.currency = sellForm.value.currency
     buyForm.value.orderType = sellForm.value.orderType
+    buyForm.value.usePriceList = sellForm.value.usePriceList
+    buyForm.value.priceListCode = sellForm.value.priceListCode
   }
 }
 
@@ -1001,6 +1238,7 @@ const submitOrder = async () => {
           price: buyForm.value.price,
           currency: buyForm.value.currency,
           orderType: buyForm.value.orderType,
+          priceListCode: buyForm.value.priceListCode,
         })
       }
 
@@ -1048,6 +1286,7 @@ const submitOrder = async () => {
         orderType: sellForm.value.orderType,
         limitMode: sellForm.value.limitMode,
         limitQuantity: adjustedLimitQuantity,
+        priceListCode: sellForm.value.priceListCode,
       })
 
       // Create reservations for selected buy orders (user wants to fill/sell to them)
@@ -1095,6 +1334,30 @@ watch(
   { immediate: false }
 )
 
+// Auto-fill price when a suggested price is loaded (only in custom pricing mode)
+watch(suggestedPrice, newPrice => {
+  if (!newPrice) return
+
+  // When using price list (dynamic pricing), update the currency from the price list
+  if (currentUsePriceList.value) {
+    if (activeTab.value === 'buy') {
+      buyForm.value.currency = newPrice.currency
+    } else {
+      sellForm.value.currency = newPrice.currency
+    }
+    return
+  }
+
+  // In custom pricing mode, optionally auto-fill if price is still 0
+  // (only if automaticPricing setting is enabled, indicating user preference)
+  if (!settingsStore.automaticPricing.value) return
+
+  const currentPrice = activeTab.value === 'buy' ? buyForm.value.price : sellForm.value.price
+  if (currentPrice !== 0) return
+
+  useSuggestedPrice()
+})
+
 // Watch for tab changes to sync form values
 watch(activeTab, (newTab, oldTab) => {
   if (newTab !== oldTab) {
@@ -1126,6 +1389,14 @@ watch(dialog, open => {
       loadMatchingOrders()
       loadSuggestedPrice()
     }
+    // Focus the commodity field after dialog animation
+    setTimeout(() => {
+      if (activeTab.value === 'buy') {
+        buyCommodityRef.value?.focus()
+      } else if (!props.inventoryItem) {
+        sellCommodityRef.value?.focus()
+      }
+    }, 100)
   }
 })
 

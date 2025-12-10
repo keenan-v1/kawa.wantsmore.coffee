@@ -64,43 +64,43 @@ SELECT setval(pg_get_serial_sequence('users', 'id'), 21, true);
 -- Some users have custom display preferences
 INSERT INTO user_settings (user_id, setting_key, value, updated_at) VALUES
   -- Bob has custom currency and display modes
-  (3, 'display.preferredCurrency', '"ICA"', NOW()),
+  (3, 'market.preferredCurrency', '"ICA"', NOW()),
   (3, 'display.locationDisplayMode', '"names-only"', NOW()),
   (3, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
   -- Diana has NCC currency and custom modes
-  (5, 'display.preferredCurrency', '"NCC"', NOW()),
+  (5, 'market.preferredCurrency', '"NCC"', NOW()),
   (5, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
   (5, 'display.commodityDisplayMode', '"name-only"', NOW()),
   -- Ethan has AIC currency
-  (6, 'display.preferredCurrency', '"AIC"', NOW()),
+  (6, 'market.preferredCurrency', '"AIC"', NOW()),
   (6, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
   -- Fiona has names-only location display
   (7, 'display.locationDisplayMode', '"names-only"', NOW()),
   -- George has ICA currency
-  (8, 'display.preferredCurrency', '"ICA"', NOW()),
+  (8, 'market.preferredCurrency', '"ICA"', NOW()),
   -- Hannah has name-only commodity display
   (9, 'display.commodityDisplayMode', '"name-only"', NOW()),
   -- Ivan has NCC and natural-ids-only
-  (10, 'display.preferredCurrency', '"NCC"', NOW()),
+  (10, 'market.preferredCurrency', '"NCC"', NOW()),
   (10, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
   -- Kevin has AIC and names-only
-  (12, 'display.preferredCurrency', '"AIC"', NOW()),
+  (12, 'market.preferredCurrency', '"AIC"', NOW()),
   (12, 'display.locationDisplayMode', '"names-only"', NOW()),
   (12, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
   -- Mike has ICA and name-only commodity
-  (14, 'display.preferredCurrency', '"ICA"', NOW()),
+  (14, 'market.preferredCurrency', '"ICA"', NOW()),
   (14, 'display.commodityDisplayMode', '"name-only"', NOW()),
   -- Nora has names-only location
   (15, 'display.locationDisplayMode', '"names-only"', NOW()),
   -- Oscar has NCC currency
-  (16, 'display.preferredCurrency', '"NCC"', NOW()),
+  (16, 'market.preferredCurrency', '"NCC"', NOW()),
   -- Petra has ticker-only commodity
   (17, 'display.commodityDisplayMode', '"ticker-only"', NOW()),
   -- Quinn has AIC and natural-ids-only
-  (18, 'display.preferredCurrency', '"AIC"', NOW()),
+  (18, 'market.preferredCurrency', '"AIC"', NOW()),
   (18, 'display.locationDisplayMode', '"natural-ids-only"', NOW()),
   -- Steve has ICA and names-only
-  (20, 'display.preferredCurrency', '"ICA"', NOW()),
+  (20, 'market.preferredCurrency', '"ICA"', NOW()),
   (20, 'display.locationDisplayMode', '"names-only"', NOW()),
   (20, 'display.commodityDisplayMode', '"name-only"', NOW());
 
@@ -565,21 +565,21 @@ SELECT setval(pg_get_serial_sequence('order_reservations', 'id'), 30, true);
 -- Sample notifications for various events
 INSERT INTO notifications (user_id, type, title, message, data, is_read) VALUES
   -- Reservation notifications for sellers
-  (2, 'reservation_placed', 'New Reservation', 'Bob reserved 1500 FE from your order', '{"sellOrderId": 4, "buyOrderId": 1, "reservationId": 1, "quantity": 1500}', false),
-  (2, 'reservation_placed', 'New Reservation', 'Bob reserved 2000 H2O from your order', '{"sellOrderId": 1, "buyOrderId": 5, "reservationId": 2, "quantity": 2000}', false),
-  (4, 'reservation_placed', 'New Reservation', 'Diana reserved 1500 C from your order', '{"sellOrderId": 81, "buyOrderId": 13, "reservationId": 3, "quantity": 1500}', true),
+  (2, 'reservation_placed', 'New Reservation', 'Bob wants to reserve 1500 FE', '{"sellOrderId": 4, "buyOrderId": 1, "reservationId": 1, "quantity": 1500}', false),
+  (2, 'reservation_placed', 'New Reservation', 'Bob wants to reserve 2000 H2O', '{"sellOrderId": 1, "buyOrderId": 5, "reservationId": 2, "quantity": 2000}', false),
+  (4, 'reservation_placed', 'New Reservation', 'Diana wants to reserve 1500 C', '{"sellOrderId": 81, "buyOrderId": 13, "reservationId": 3, "quantity": 1500}', true),
   -- Reservation notifications for buyers
-  (3, 'reservation_confirmed', 'Reservation Confirmed', 'Alice confirmed your reservation for 1000 RAT', '{"sellOrderId": 2, "buyOrderId": 6, "reservationId": 6, "quantity": 1000}', true),
-  (4, 'reservation_confirmed', 'Reservation Confirmed', 'Your PE reservation was confirmed', '{"sellOrderId": 65, "buyOrderId": 9, "reservationId": 7, "quantity": 800}', false),
+  (3, 'reservation_confirmed', 'Confirmed', 'Alice confirmed 1000 RAT', '{"sellOrderId": 2, "buyOrderId": 6, "reservationId": 6, "quantity": 1000}', true),
+  (4, 'reservation_confirmed', 'Confirmed', 'Your 800 PE reservation confirmed', '{"sellOrderId": 65, "buyOrderId": 9, "reservationId": 7, "quantity": 800}', false),
   -- Fulfilled notifications
-  (7, 'reservation_fulfilled', 'Trade Completed', 'Your reservation for 3000 H has been fulfilled', '{"sellOrderId": 96, "buyOrderId": 19, "reservationId": 11, "quantity": 3000}', true),
-  (10, 'reservation_fulfilled', 'Trade Completed', 'Your BSE trade is complete', '{"sellOrderId": 99, "buyOrderId": 28, "reservationId": 12, "quantity": 1000}', true),
+  (7, 'reservation_fulfilled', 'Fulfilled', 'Your 3000 H reservation fulfilled', '{"sellOrderId": 96, "buyOrderId": 19, "reservationId": 11, "quantity": 3000}', true),
+  (10, 'reservation_fulfilled', 'Fulfilled', 'Your 1000 BSE trade complete', '{"sellOrderId": 99, "buyOrderId": 28, "reservationId": 12, "quantity": 1000}', true),
   -- Rejected notifications
-  (6, 'reservation_rejected', 'Reservation Rejected', 'Your AU reservation was rejected: Price too low', '{"sellOrderId": 12, "buyOrderId": 17, "reservationId": 16, "quantity": 100}', true),
-  (17, 'reservation_rejected', 'Reservation Rejected', 'CU reservation rejected', '{"sellOrderId": 14, "buyOrderId": 41, "reservationId": 17, "quantity": 500}', false),
+  (6, 'reservation_rejected', 'Rejected', 'Your 100 AU reservation rejected', '{"sellOrderId": 12, "buyOrderId": 17, "reservationId": 16, "quantity": 100}', true),
+  (17, 'reservation_rejected', 'Rejected', 'Your 500 CU reservation rejected', '{"sellOrderId": 14, "buyOrderId": 41, "reservationId": 17, "quantity": 500}', false),
   -- User approval notifications
-  (12, 'user_approved', 'Application Approved', 'Your application to join Kawakawa has been approved!', '{"roles": ["applicant"]}', true),
-  (13, 'user_approved', 'Application Approved', 'Welcome to Kawakawa!', '{"roles": ["applicant"]}', false),
+  (12, 'user_approved', 'Account Approved', 'Welcome to Kawakawa!', '{"roles": ["applicant"]}', true),
+  (13, 'user_approved', 'Account Approved', 'Your account is now active', '{"roles": ["applicant"]}', false),
   -- Admin notifications about pending approvals
   (4, 'user_needs_approval', 'New Registration', 'Rachel Torres needs approval', '{"userId": 19, "username": "rachel"}', false),
   (4, 'user_needs_approval', 'New Registration', 'Steve Upton needs approval', '{"userId": 20, "username": "steve"}', false),

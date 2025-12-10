@@ -62,10 +62,12 @@
             <KeyValueAutocomplete
               v-model="filters.commodity"
               :items="commodityOptions"
+              :favorites="settingsStore.favoritedCommodities.value"
               label="Commodity"
               density="compact"
               clearable
               hide-details
+              @update:favorites="settingsStore.updateSetting('market.favoritedCommodities', $event)"
             />
           </v-col>
           <v-col cols="12" sm="6" md="4" lg="2">
@@ -82,10 +84,12 @@
             <KeyValueAutocomplete
               v-model="filters.location"
               :items="locationOptions"
+              :favorites="settingsStore.favoritedLocations.value"
               label="Location"
               density="compact"
               clearable
               hide-details
+              @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
             />
           </v-col>
           <v-col cols="12" sm="6" md="4" lg="2">
@@ -361,15 +365,17 @@
 import { ref, computed, onMounted } from 'vue'
 import { PERMISSIONS } from '@kawakawa/types'
 import { api, type FioInventoryItem } from '../services/api'
-import { locationService } from '../services/locationService'
-import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
+import { useSnackbar, useDisplayHelpers, useFormatters } from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
+const { snackbar, showSnackbar } = useSnackbar()
+const { getLocationDisplay, getCommodityDisplay } = useDisplayHelpers()
+const { formatDateTime, formatRelativeTime, getSyncStatusColor } = useFormatters()
 
 // Check if FIO is configured
 const fioConfigured = computed(() => {
@@ -400,16 +406,6 @@ interface Filters {
   location: string | null
   locationType: string | null
   storageType: string | null
-}
-
-// Display helpers that respect user preferences
-const getLocationDisplay = (locationId: string | null): string => {
-  if (!locationId) return 'Unknown'
-  return locationService.getLocationDisplay(locationId, userStore.getLocationDisplayMode())
-}
-
-const getCommodityDisplay = (ticker: string): string => {
-  return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
 const headers = [
@@ -492,16 +488,6 @@ const setFilter = (key: keyof Filters, value: string | null) => {
   }
 }
 
-const snackbar = ref({
-  show: false,
-  message: '',
-  color: 'success',
-})
-
-const showSnackbar = (message: string, color: 'success' | 'error' | 'warning' = 'success') => {
-  snackbar.value = { show: true, message, color }
-}
-
 const filteredInventory = computed(() => {
   let result = inventory.value
 
@@ -536,34 +522,6 @@ const filteredInventory = computed(() => {
 
   return result
 })
-
-const formatDateTime = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleString()
-}
-
-const formatRelativeTime = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffHours < 1) return 'Just now'
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return new Date(dateStr).toLocaleDateString()
-}
-
-const getSyncStatusColor = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHours = diffMs / (1000 * 60 * 60)
-
-  if (diffHours > 48) return 'error'
-  if (diffHours > 24) return 'warning'
-  return 'success'
-}
 
 const loadInventory = async () => {
   try {

@@ -301,6 +301,7 @@ export const sellOrders = pgTable(
       .references(() => fioLocations.naturalId),
     price: decimal('price', { precision: 12, scale: 2 }).notNull(),
     currency: currencyEnum('currency').notNull(),
+    priceListCode: varchar('price_list_code', { length: 20 }), // null = custom/fixed price, set = dynamic pricing from price list
     orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
     limitMode: sellOrderLimitModeEnum('limit_mode').notNull().default('none'),
     limitQuantity: integer('limit_quantity'), // Only used when limitMode is 'max_sell' or 'reserve'
@@ -332,6 +333,7 @@ export const buyOrders = pgTable(
     quantity: integer('quantity').notNull(),
     price: decimal('price', { precision: 12, scale: 2 }).notNull(),
     currency: currencyEnum('currency').notNull(),
+    priceListCode: varchar('price_list_code', { length: 20 }), // null = custom/fixed price, set = dynamic pricing from price list
     orderType: orderTypeEnum('order_type').notNull().default('internal'), // internal = members only, partner = trade partners
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -181,14 +181,7 @@
 
         <template #item.price="{ item }">
           <div class="d-flex align-center justify-end">
-            <span class="font-weight-medium">
-              {{
-                parseFloat(item.price).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-              }}
-            </span>
+            <span class="font-weight-medium">{{ formatPrice(parseFloat(item.price)) }}</span>
             <span class="text-caption text-medium-emphasis ml-1">{{ item.currency }}</span>
             <v-tooltip v-if="hasAdjustments(item)" location="left">
               <template #activator="{ props }">
@@ -350,9 +343,15 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
+import { useSnackbar, useDisplayHelpers, useFormatters } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+const { snackbar, showSnackbar } = useSnackbar()
+const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
+const { formatDate, formatPrice } = useFormatters()
 
 // State
 const loading = ref(false)
@@ -361,7 +360,7 @@ const deleting = ref(false)
 const search = ref('')
 
 const exchanges = ref<FioExchangeResponse[]>([])
-const selectedExchange = ref<string>('KAWA')
+const selectedExchange = ref<string>('')
 const prices = ref<PriceListResponse[]>([])
 const activeAdjustments = ref<PriceAdjustmentResponse[]>([])
 
@@ -394,15 +393,10 @@ const priceForm = ref({
   currency: 'CIS' as Currency,
 })
 
-const snackbar = ref({
-  show: false,
-  message: '',
-  color: 'success',
-})
-
-// Computed
+// Computed - Check if this is a FIO exchange (has a locationId) vs internal price list
 const isFioExchange = computed(() => {
-  return selectedExchange.value !== 'KAWA'
+  const exchange = exchanges.value.find(e => e.code === selectedExchange.value)
+  return exchange?.locationId != null
 })
 
 const canManagePrices = computed(() => userStore.hasPermission(PERMISSIONS.PRICES_MANAGE))
@@ -469,19 +463,6 @@ const headers = computed(() => {
 const hasActiveFilters = computed(() => {
   return Object.values(filters.value).some(v => v !== null)
 })
-
-// Display helpers
-const getLocationDisplay = (locationId: string): string => {
-  return locationService.getLocationDisplay(locationId, userStore.getLocationDisplayMode())
-}
-
-const getCommodityDisplay = (ticker: string): string => {
-  return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
-}
-
-const getCommodityCategory = (ticker: string): string | null => {
-  return commodityService.getCommodityCategory(ticker)
-}
 
 // Filter options from loaded prices
 const locationOptions = computed((): KeyValueItem[] => {
@@ -555,14 +536,6 @@ const filteredPrices = computed(() => {
 })
 
 // Methods
-const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
-  snackbar.value = { show: true, message, color }
-}
-
-const formatDate = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleString()
-}
-
 const formatSource = (source: string): string => {
   const map: Record<string, string> = {
     manual: 'Manual',
@@ -608,9 +581,16 @@ const clearFilters = () => {
 const loadExchanges = async () => {
   try {
     exchanges.value = await api.fioExchanges.list()
-    // Default to KAWA
-    if (!exchanges.value.find(e => e.code === selectedExchange.value)) {
-      selectedExchange.value = exchanges.value[0]?.code ?? 'KAWA'
+    // Use user's default price list if valid, otherwise use first exchange
+    const userDefault = settingsStore.defaultPriceList.value
+    if (!selectedExchange.value) {
+      if (userDefault && exchanges.value.find(e => e.code === userDefault)) {
+        selectedExchange.value = userDefault
+      } else {
+        selectedExchange.value = exchanges.value[0]?.code ?? ''
+      }
+    } else if (!exchanges.value.find(e => e.code === selectedExchange.value)) {
+      selectedExchange.value = exchanges.value[0]?.code ?? ''
     }
   } catch (error) {
     console.error('Failed to load exchanges:', error)

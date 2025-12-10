@@ -12,7 +12,9 @@ import type {
 
 // Categories for grouping settings in the UI
 export const SETTING_CATEGORIES = {
+  GENERAL: 'general',
   DISPLAY: 'display',
+  MARKET: 'market',
   NOTIFICATIONS: 'notifications',
   FIO: 'fio',
 } as const
@@ -24,9 +26,17 @@ export const SETTING_CATEGORY_INFO: Record<
   SettingCategory,
   { label: string; description: string }
 > = {
+  [SETTING_CATEGORIES.GENERAL]: {
+    label: 'General',
+    description: 'Timezone, formatting, and display preferences',
+  },
   [SETTING_CATEGORIES.DISPLAY]: {
     label: 'Display',
-    description: 'Customize how information is displayed',
+    description: 'How names and identifiers are shown',
+  },
+  [SETTING_CATEGORIES.MARKET]: {
+    label: 'Market',
+    description: 'Trading preferences and favorites',
   },
   [SETTING_CATEGORIES.NOTIFICATIONS]: {
     label: 'Notifications',
@@ -43,17 +53,35 @@ type SettingDef<T, VT extends SettingValueType> = SettingDefinition<T> & { type:
 
 // All setting definitions
 export const SETTING_DEFINITIONS = {
-  // ==================== DISPLAY SETTINGS ====================
-  'display.preferredCurrency': {
-    key: 'display.preferredCurrency',
-    type: 'enum',
-    defaultValue: 'CIS' as Currency,
-    category: SETTING_CATEGORIES.DISPLAY,
-    label: 'Preferred Currency',
-    description: 'Default currency for displaying prices',
-    enumOptions: ['ICA', 'CIS', 'AIC', 'NCC'] as const,
-  } satisfies SettingDef<Currency, 'enum'>,
+  // ==================== GENERAL SETTINGS ====================
+  'general.timezone': {
+    key: 'general.timezone',
+    type: 'string',
+    defaultValue: 'auto',
+    category: SETTING_CATEGORIES.GENERAL,
+    label: 'Timezone',
+    description: 'Your preferred timezone for displaying dates and times',
+  } satisfies SettingDef<string, 'string'>,
 
+  'general.datetimeFormat': {
+    key: 'general.datetimeFormat',
+    type: 'string',
+    defaultValue: 'auto',
+    category: SETTING_CATEGORIES.GENERAL,
+    label: 'Datetime Format',
+    description: 'How dates and times are displayed (preset or custom pattern)',
+  } satisfies SettingDef<string, 'string'>,
+
+  'general.numberFormat': {
+    key: 'general.numberFormat',
+    type: 'string',
+    defaultValue: 'auto',
+    category: SETTING_CATEGORIES.GENERAL,
+    label: 'Number Format',
+    description: 'How numbers are formatted (preset or custom pattern)',
+  } satisfies SettingDef<string, 'string'>,
+
+  // ==================== DISPLAY SETTINGS ====================
   'display.locationDisplayMode': {
     key: 'display.locationDisplayMode',
     type: 'enum',
@@ -73,6 +101,53 @@ export const SETTING_DEFINITIONS = {
     description: 'How to display commodity names in the UI',
     enumOptions: ['ticker-only', 'name-only', 'both'] as const,
   } satisfies SettingDef<CommodityDisplayMode, 'enum'>,
+
+  // ==================== MARKET SETTINGS ====================
+  'market.preferredCurrency': {
+    key: 'market.preferredCurrency',
+    type: 'enum',
+    defaultValue: 'CIS' as Currency,
+    category: SETTING_CATEGORIES.MARKET,
+    label: 'Preferred Currency',
+    description: 'Default currency for displaying and entering prices',
+    enumOptions: ['ICA', 'CIS', 'AIC', 'NCC'] as const,
+  } satisfies SettingDef<Currency, 'enum'>,
+
+  'market.defaultPriceList': {
+    key: 'market.defaultPriceList',
+    type: 'string',
+    defaultValue: null,
+    category: SETTING_CATEGORIES.MARKET,
+    label: 'Default Price List',
+    description: 'Price list used for price suggestions in order forms',
+  } satisfies SettingDef<string | null, 'string'>,
+
+  'market.automaticPricing': {
+    key: 'market.automaticPricing',
+    type: 'boolean',
+    defaultValue: false,
+    category: SETTING_CATEGORIES.MARKET,
+    label: 'Automatic Pricing',
+    description: 'Use your default price list for new orders instead of entering a fixed price',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
+  'market.favoritedLocations': {
+    key: 'market.favoritedLocations',
+    type: 'string[]',
+    defaultValue: [] as string[],
+    category: SETTING_CATEGORIES.MARKET,
+    label: 'Favorite Locations',
+    description: 'Locations that appear first in dropdown menus',
+  } satisfies SettingDef<string[], 'string[]'>,
+
+  'market.favoritedCommodities': {
+    key: 'market.favoritedCommodities',
+    type: 'string[]',
+    defaultValue: [] as string[],
+    category: SETTING_CATEGORIES.MARKET,
+    label: 'Favorite Commodities',
+    description: 'Commodities that appear first in dropdown menus',
+  } satisfies SettingDef<string[], 'string[]'>,
 
   // ==================== NOTIFICATION SETTINGS ====================
   'notifications.browserEnabled': {

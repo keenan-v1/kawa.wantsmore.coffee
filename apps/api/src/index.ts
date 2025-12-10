@@ -9,6 +9,27 @@ import logger from './utils/logger.js'
 
 const app = express()
 
+// Extended request/response types for body capture
+interface RequestWithBody extends Request {
+  _reqBody?: unknown
+}
+interface ResponseWithBody extends Response {
+  _resBody?: unknown
+}
+
+// Parse body BEFORE logging so we can capture it
+app.use(json())
+app.use(urlencoded({ extended: true }))
+
+// Capture request body immediately after parsing (before any processing)
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  // Store a copy of the body for logging (will be redacted by logger formatter)
+  if (req.body && Object.keys(req.body).length > 0) {
+    ;(req as RequestWithBody)._reqBody = req.body
+  }
+  next()
+})
+
 // HTTP request logging with PII redaction
 const httpLoggerOptions: PinoHttpOptions = {
   logger,
@@ -25,30 +46,34 @@ const httpLoggerOptions: PinoHttpOptions = {
   },
   // Redact sensitive headers
   redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-auth-token"]'],
-  // Customize serializers
+  // Add custom properties including request/response bodies
+  // Note: redaction happens in logger formatter, not here (to avoid double-redaction)
+  customProps: (req, res) => {
+    const props: Record<string, unknown> = {}
+    const reqBody = (req as RequestWithBody)._reqBody
+    const resBody = (res as ResponseWithBody)._resBody
+    if (reqBody !== undefined) props.reqBody = reqBody
+    if (resBody !== undefined) props.resBody = resBody
+    return props
+  },
+  // Customize serializers to use pino's defaults + our additions
   serializers: {
-    req: req => ({
-      method: req.method,
-      url: req.url,
-      query: req.query,
-    }),
-    res: res => ({
-      statusCode: res.statusCode,
-    }),
+    req: pinoHttp.stdSerializers.req,
+    res: pinoHttp.stdSerializers.res,
   },
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 app.use((pinoHttp as any)(httpLoggerOptions))
 
-app.use(json())
-app.use(urlencoded({ extended: true }))
-
-// Wrap all requests in AsyncLocalStorage context (similar to Go's context.Context)
+// Wrap all requests in AsyncLocalStorage context + capture response body for logging
 app.use((_req: Request, res: Response, next: NextFunction) => {
   requestContext.run(new Map(), () => {
-    // Intercept json() to add refreshed token header before response is sent
+    // Intercept json() to capture body for logging and add refreshed token header
     const originalJson = res.json.bind(res)
     res.json = (body: unknown) => {
+      // Store body for logging (will be redacted by logger formatter)
+      ;(res as ResponseWithBody)._resBody = body
+      // Add refreshed token header if present
       const refreshedToken = getContextValue<string>('refreshedToken')
       if (refreshedToken) {
         res.setHeader('X-Refreshed-Token', refreshedToken)

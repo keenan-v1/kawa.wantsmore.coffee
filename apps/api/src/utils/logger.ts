@@ -1,6 +1,13 @@
 import pino from 'pino'
 
 /**
+ * Logging size limits to prevent excessive log output
+ */
+const MAX_STRING_LENGTH = 500
+const MAX_ARRAY_ITEMS = 10
+const MAX_OBJECT_DEPTH = 5
+
+/**
  * PII fields that should be redacted from logs
  */
 const PII_FIELDS = [
@@ -19,16 +26,32 @@ const PII_FIELDS = [
 ]
 
 /**
- * Redact PII from log objects
+ * Redact PII and truncate large content for logging
  */
-function redactPII(obj: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+export function redactObject(
+  obj: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+  depth: number = 0
+): unknown {
   if (obj === null || obj === undefined) {
     return obj
   }
 
+  // Truncate at max depth
+  if (depth > MAX_OBJECT_DEPTH) {
+    return '[Truncated: max depth]'
+  }
+
   if (typeof obj === 'string') {
     // Redact email patterns in strings
-    return obj.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL_REDACTED]')
+    let result = obj.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL_REDACTED]')
+    // Truncate long strings
+    if (result.length > MAX_STRING_LENGTH) {
+      result =
+        result.slice(0, MAX_STRING_LENGTH) +
+        `... [truncated ${obj.length - MAX_STRING_LENGTH} chars]`
+    }
+    return result
   }
 
   if (typeof obj !== 'object') {
@@ -42,7 +65,11 @@ function redactPII(obj: unknown, seen: WeakSet<object> = new WeakSet()): unknown
   seen.add(obj)
 
   if (Array.isArray(obj)) {
-    return obj.map(item => redactPII(item, seen))
+    const truncated = obj.slice(0, MAX_ARRAY_ITEMS).map(item => redactObject(item, seen, depth + 1))
+    if (obj.length > MAX_ARRAY_ITEMS) {
+      truncated.push(`[... ${obj.length - MAX_ARRAY_ITEMS} more items]`)
+    }
+    return truncated
   }
 
   const result: Record<string, unknown> = {}
@@ -51,7 +78,7 @@ function redactPII(obj: unknown, seen: WeakSet<object> = new WeakSet()): unknown
     if (PII_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
       result[key] = '[REDACTED]'
     } else {
-      result[key] = redactPII(value, seen)
+      result[key] = redactObject(value, seen, depth + 1)
     }
   }
   return result
@@ -64,7 +91,7 @@ const baseConfig: pino.LoggerOptions = {
   level: process.env.LOG_LEVEL || 'info',
   formatters: {
     level: label => ({ level: label }),
-    log: obj => redactPII(obj) as Record<string, unknown>,
+    log: obj => redactObject(obj) as Record<string, unknown>,
   },
   // Remove pino's default keys we don't need for ElasticSearch
   base: {
@@ -83,7 +110,7 @@ export const logger = pino(baseConfig)
  * Create a child logger with additional context
  */
 export function createLogger(context: Record<string, unknown>) {
-  return logger.child(redactPII(context) as Record<string, unknown>)
+  return logger.child(redactObject(context) as Record<string, unknown>)
 }
 
 /**

@@ -68,8 +68,12 @@
             "
           >
             <template #prepend>
-              <div class="d-flex align-center">
-                <v-icon v-if="group.count > 1" size="small" class="mr-1 expand-icon">
+              <div class="d-flex align-center" style="min-width: 48px">
+                <v-icon
+                  size="small"
+                  class="expand-icon"
+                  :style="{ visibility: group.count > 1 ? 'visible' : 'hidden' }"
+                >
                   {{ expandedGroups[group.contextKey] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
                 </v-icon>
                 <v-icon :color="getNotificationColor(group.latest.type)" size="large">
@@ -78,7 +82,7 @@
               </div>
             </template>
 
-            <v-list-item-title class="font-weight-medium d-flex align-center">
+            <v-list-item-title class="font-weight-medium d-flex align-center ml-2">
               {{ group.latest.title }}
               <v-badge
                 v-if="group.count > 1"
@@ -96,10 +100,10 @@
                 {{ group.unreadCount }} unread
               </v-chip>
             </v-list-item-title>
-            <v-list-item-subtitle>
+            <v-list-item-subtitle class="ml-2">
               {{ group.latest.message }}
             </v-list-item-subtitle>
-            <v-list-item-subtitle class="text-caption mt-1">
+            <v-list-item-subtitle class="text-caption mt-1 ml-4">
               {{ formatRelativeDate(group.latest.createdAt) }}
             </v-list-item-subtitle>
 
@@ -214,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { api } from '../services/api'
 import type { Notification, NotificationType } from '../services/api'
 import { formatRelativeDate } from '../utils/dateFormat'
@@ -444,17 +448,19 @@ async function deleteGroup(group: NotificationGroup) {
   }
 }
 
-function handleNotificationClick(notification: Notification) {
+async function handleNotificationClick(notification: Notification) {
   const data = notification.data as Record<string, unknown> | null
 
   if (data) {
     if (notification.type.startsWith('reservation_')) {
       if (data.sellOrderId) {
         selectedOrder.value = { type: 'sell', id: data.sellOrderId as number }
+        await nextTick() // Wait for OrderDetailDialog to mount
         orderDetailDialog.value = true
         return
       } else if (data.buyOrderId) {
         selectedOrder.value = { type: 'buy', id: data.buyOrderId as number }
+        await nextTick() // Wait for OrderDetailDialog to mount
         orderDetailDialog.value = true
         return
       }

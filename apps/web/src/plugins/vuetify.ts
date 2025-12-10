@@ -9,7 +9,7 @@ export default createVuetify({
   directives,
   defaults: {
     VTooltip: {
-      contentClass: 'bg-surface text-body-2',
+      contentClass: 'kawa-tooltip',
     },
   },
   theme: {

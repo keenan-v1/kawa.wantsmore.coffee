@@ -8,6 +8,7 @@ import type {
   CommodityDisplayMode,
   Role,
   SellOrderLimitMode,
+  PricingMode,
   OrderType,
   DiscordSettings,
   UpdateDiscordSettingsRequest,
@@ -528,6 +529,7 @@ interface SellOrderResponse {
   locationId: string
   price: number
   currency: Currency
+  priceListCode: string | null
   orderType: OrderType
   limitMode: SellOrderLimitMode
   limitQuantity: number | null
@@ -537,6 +539,12 @@ interface SellOrderResponse {
   reservedQuantity: number
   fulfilledQuantity: number
   remainingQuantity: number
+  fioUploadedAt: string | null // When seller's FIO inventory was last synced from game
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
 }
 
 interface CreateSellOrderRequest {
@@ -544,6 +552,7 @@ interface CreateSellOrderRequest {
   locationId: string
   price: number
   currency: Currency
+  priceListCode?: string | null
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -552,6 +561,7 @@ interface CreateSellOrderRequest {
 interface UpdateSellOrderRequest {
   price?: number
   currency?: Currency
+  priceListCode?: string | null
   orderType?: OrderType
   limitMode?: SellOrderLimitMode
   limitQuantity?: number | null
@@ -565,11 +575,17 @@ interface BuyOrderResponse {
   quantity: number
   price: number
   currency: Currency
+  priceListCode: string | null
   orderType: OrderType
   activeReservationCount: number
   reservedQuantity: number
   fulfilledQuantity: number
   remainingQuantity: number
+  // Dynamic pricing fields
+  pricingMode: PricingMode
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
 }
 
 interface CreateBuyOrderRequest {
@@ -578,6 +594,7 @@ interface CreateBuyOrderRequest {
   quantity: number
   price: number
   currency: Currency
+  priceListCode?: string | null
   orderType?: OrderType
 }
 
@@ -585,6 +602,7 @@ interface UpdateBuyOrderRequest {
   quantity?: number
   price?: number
   currency?: Currency
+  priceListCode?: string | null
   orderType?: OrderType
 }
 
@@ -596,6 +614,11 @@ interface MarketListing {
   locationId: string
   price: number
   currency: Currency
+  priceListCode: string | null
+  effectivePrice: number | null
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean
@@ -614,6 +637,11 @@ interface MarketBuyRequest {
   quantity: number
   price: number
   currency: Currency
+  priceListCode: string | null
+  effectivePrice: number | null
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode
   orderType: OrderType
   isOwn: boolean
   jumpCount: number | null
@@ -3669,6 +3697,7 @@ export type {
   UpdateBuyOrderRequest,
   MarketListing,
   MarketBuyRequest,
+  PricingMode,
   Notification,
   NotificationType,
   ReservationStatus,

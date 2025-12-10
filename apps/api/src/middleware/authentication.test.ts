@@ -20,8 +20,6 @@ vi.mock('../utils/requestContext.js', () => ({
 }))
 
 // Mock database to return proper permission results
-const mockDbSelect = vi.fn()
-const mockDbFrom = vi.fn()
 const mockDbWhere = vi.fn()
 
 vi.mock('../db/index.js', () => ({

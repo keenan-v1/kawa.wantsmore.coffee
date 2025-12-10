@@ -10,13 +10,7 @@
     <template #activator="{ props: menuProps }">
       <v-tooltip location="bottom">
         <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="{ ...menuProps, ...tooltipProps }"
-            icon
-            size="small"
-            class="mx-1"
-            @click="loadNotifications"
-          >
+          <v-btn v-bind="{ ...menuProps, ...tooltipProps }" icon size="small" class="mx-1">
             <v-badge
               v-if="unreadCount > 0"
               :content="unreadCount > 99 ? '99+' : unreadCount"
@@ -125,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api'
 import type { Notification, NotificationType } from '../services/api'
@@ -329,7 +323,7 @@ async function markAllAsRead() {
   }
 }
 
-function handleNotificationClick(group: NotificationGroup) {
+async function handleNotificationClick(group: NotificationGroup) {
   const notification = group.latest
   const data = notification.data as Record<string, unknown> | null
 
@@ -344,11 +338,13 @@ function handleNotificationClick(group: NotificationGroup) {
       // Open the order detail dialog
       if (data.sellOrderId) {
         selectedOrder.value = { type: 'sell', id: data.sellOrderId as number }
+        await nextTick() // Wait for OrderDetailDialog to mount
         orderDetailDialog.value = true
         closeMenu()
         return
       } else if (data.buyOrderId) {
         selectedOrder.value = { type: 'buy', id: data.buyOrderId as number }
+        await nextTick() // Wait for OrderDetailDialog to mount
         orderDetailDialog.value = true
         closeMenu()
         return
@@ -432,6 +428,13 @@ function getNotificationColor(type: NotificationType): string {
 const handleNotificationsUpdated = () => {
   loadUnreadCount()
 }
+
+// Load notifications when menu opens
+watch(menuOpen, newValue => {
+  if (newValue) {
+    loadNotifications()
+  }
+})
 
 onMounted(() => {
   loadUnreadCount()

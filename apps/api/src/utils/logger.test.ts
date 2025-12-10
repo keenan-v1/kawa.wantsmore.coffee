@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { logger, createLogger, stripEmoji } from './logger.js'
+import { logger, createLogger, stripEmoji, redactObject } from './logger.js'
 
 describe('logger', () => {
   describe('logger instance', () => {
@@ -100,5 +100,69 @@ describe('PII redaction', () => {
 
     // This should not throw - just verify createLogger handles it
     expect(() => createLogger(circular)).not.toThrow()
+  })
+})
+
+describe('content truncation', () => {
+  it('should truncate long strings', () => {
+    const longString = 'a'.repeat(1000)
+    const result = redactObject(longString) as string
+    expect(result.length).toBeLessThan(600) // 500 + truncation message
+    expect(result).toContain('[truncated')
+  })
+
+  it('should not truncate short strings', () => {
+    const shortString = 'hello world'
+    const result = redactObject(shortString)
+    expect(result).toBe('hello world')
+  })
+
+  it('should truncate large arrays', () => {
+    const largeArray = Array.from({ length: 50 }, (_, i) => `item${i}`)
+    const result = redactObject(largeArray) as string[]
+    expect(result.length).toBe(11) // 10 items + truncation message
+    expect(result[10]).toContain('40 more items')
+  })
+
+  it('should not truncate small arrays', () => {
+    const smallArray = ['a', 'b', 'c']
+    const result = redactObject(smallArray)
+    expect(result).toEqual(['a', 'b', 'c'])
+  })
+
+  it('should truncate deeply nested objects', () => {
+    // Create a deeply nested object (7 levels deep)
+    // With MAX_OBJECT_DEPTH=5, truncation happens at depth 6
+    const deep = { a: { b: { c: { d: { e: { f: { g: 'value' } } } } } } }
+    const result = redactObject(deep) as Record<string, unknown>
+    // Navigate to the truncation point (f should be truncated since it's at depth 6)
+    const a = result.a as Record<string, unknown>
+    const b = a.b as Record<string, unknown>
+    const c = b.c as Record<string, unknown>
+    const d = c.d as Record<string, unknown>
+    const e = d.e as Record<string, unknown>
+    expect(e.f).toBe('[Truncated: max depth]')
+  })
+
+  it('should redact PII in nested objects', () => {
+    const obj = {
+      user: {
+        name: 'John',
+        email: 'john@example.com',
+        settings: {
+          apiKey: 'secret123',
+        },
+      },
+    }
+    const result = redactObject(obj) as Record<string, unknown>
+    const user = result.user as Record<string, unknown>
+    expect(user.name).toBe('John')
+    expect(user.email).toBe('[REDACTED]')
+    expect((user.settings as Record<string, unknown>).apiKey).toBe('[REDACTED]')
+  })
+
+  it('should redact emails in string values', () => {
+    const result = redactObject('Contact me at test@example.com please')
+    expect(result).toBe('Contact me at [EMAIL_REDACTED] please')
   })
 })

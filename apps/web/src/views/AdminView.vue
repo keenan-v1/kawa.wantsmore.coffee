@@ -2571,7 +2571,6 @@ const loadImportConfigs = async () => {
   try {
     loadingImportConfigs.value = true
     const configs = await api.importConfigs.list()
-    console.log('Loaded import configs:', configs)
     importConfigs.value = configs
   } catch (error) {
     console.error('Failed to load import configs', error)

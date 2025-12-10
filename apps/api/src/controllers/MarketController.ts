@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Route, Security, Tags, Request } from 'tsoa'
-import type { Currency, OrderType } from '@kawakawa/types'
+import type { Currency, OrderType, PricingMode } from '@kawakawa/types'
 import {
   db,
   sellOrders,
@@ -8,13 +8,12 @@ import {
   fioUserStorage,
   users,
   orderReservations,
-  prices,
-  priceLists,
 } from '../db/index.js'
-import { eq, inArray, sql, and } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { hasPermission } from '../utils/permissionService.js'
 import { fioClient } from '../services/fio/client.js'
+import { calculateEffectivePriceWithFallback } from '../services/price-calculator.js'
 
 // Market listing with seller info and calculated availability
 interface MarketListing {
@@ -22,8 +21,13 @@ interface MarketListing {
   sellerName: string
   commodityTicker: string
   locationId: string
-  price: number
+  price: number // Fixed price (0 for dynamic pricing)
   currency: Currency
+  priceListCode: string | null // null = custom/fixed price, set = dynamic pricing
+  effectivePrice: number | null // Calculated price when using price list (null if unavailable)
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode // 'fixed' = custom price, 'dynamic' = from price list
   orderType: OrderType
   availableQuantity: number
   isOwn: boolean // true if this is the current user's listing
@@ -32,9 +36,6 @@ interface MarketListing {
   reservedQuantity: number // sum of quantities in active reservations
   remainingQuantity: number // availableQuantity - reservedQuantity
   fioUploadedAt: string | null // When seller's FIO inventory was last synced from game
-  referencePrice: number | null // Reference price from price lists (if requested)
-  priceDifference: number | null // Difference from reference: positive = above, negative = below
-  priceDifferencePercent: number | null // Percentage difference from reference
 }
 
 // Buy request from market (buy orders from all users)
@@ -44,8 +45,13 @@ interface MarketBuyRequest {
   commodityTicker: string
   locationId: string
   quantity: number
-  price: number
+  price: number // Fixed price (0 for dynamic pricing)
   currency: Currency
+  priceListCode: string | null // null = custom/fixed price, set = dynamic pricing
+  effectivePrice: number | null // Calculated price when using price list (null if unavailable)
+  isFallback: boolean // true if price came from price list's default location
+  priceLocationId: string | null // Location the price came from (different from locationId if fallback)
+  pricingMode: PricingMode // 'fixed' = custom price, 'dynamic' = from price list
   orderType: OrderType
   isOwn: boolean
   jumpCount: number | null // Jump count from destination (null if no destination specified)
@@ -53,9 +59,48 @@ interface MarketBuyRequest {
   reservedQuantity: number // sum of quantities in active reservations
   remainingQuantity: number // quantity - reservedQuantity
   fioUploadedAt: string | null // Not applicable for buy orders (always null)
-  referencePrice: number | null // Reference price from price lists (if requested)
-  priceDifference: number | null // Difference from reference: positive = above, negative = below
-  priceDifferencePercent: number | null // Percentage difference from reference
+}
+
+// Intermediate type for filtered sell orders (before final transformation)
+interface FilteredSellOrder {
+  id: number
+  userId: number
+  commodityTicker: string
+  locationId: string
+  price: string
+  currency: Currency
+  priceListCode: string | null
+  orderType: OrderType
+  limitMode: 'none' | 'max_sell' | 'reserve'
+  limitQuantity: number | null
+  sellerName: string
+  fioQuantity: number
+  availableQuantity: number
+  isOwn: boolean
+  fioUploadedAt: Date | null
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
+  pricingMode: PricingMode
+}
+
+// Intermediate type for filtered buy orders (before final transformation)
+interface FilteredBuyOrder {
+  id: number
+  userId: number
+  commodityTicker: string
+  locationId: string
+  quantity: number
+  price: string
+  currency: Currency
+  priceListCode: string | null
+  orderType: OrderType
+  buyerName: string
+  isOwn: boolean
+  effectivePrice: number | null
+  isFallback: boolean
+  priceLocationId: string | null
+  pricingMode: PricingMode
 }
 
 /**
@@ -86,17 +131,13 @@ export class MarketController extends Controller {
    * Get all available sell orders on the market (from other users)
    * Filters by order type based on user permissions
    * @param destination Location ID to calculate jump counts from (optional)
-   * @param includeReferencePrice Include reference prices from KAWA price list (default: false)
-   * @param referenceExchange Exchange to use for reference prices (default: KAWA)
    */
   @Get('listings')
   public async getMarketListings(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
     @Query() location?: string,
-    @Query() destination?: string,
-    @Query() includeReferencePrice?: boolean,
-    @Query() referenceExchange?: string
+    @Query() destination?: string
   ): Promise<MarketListing[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -118,6 +159,7 @@ export class MarketController extends Controller {
         locationId: sellOrders.locationId,
         price: sellOrders.price,
         currency: sellOrders.currency,
+        priceListCode: sellOrders.priceListCode,
         orderType: sellOrders.orderType,
         limitMode: sellOrders.limitMode,
         limitQuantity: sellOrders.limitQuantity,
@@ -165,14 +207,7 @@ export class MarketController extends Controller {
     }
 
     // Process orders and filter by permissions and availability
-    const filteredOrders: Array<
-      (typeof orders)[0] & {
-        fioQuantity: number
-        availableQuantity: number
-        isOwn: boolean
-        fioUploadedAt: Date | null
-      }
-    > = []
+    const filteredOrders: FilteredSellOrder[] = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -200,12 +235,47 @@ export class MarketController extends Controller {
 
       // Only include if there's available quantity (always show user's own orders even if 0)
       if (availableQuantity > 0 || isOwn) {
+        // Determine pricing mode and effective price
+        const orderPrice = parseFloat(order.price)
+        const pricingMode: PricingMode =
+          order.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
+        let effectivePrice: number | null = null
+        let isFallback = false
+        let priceLocationId: string | null = null
+
+        if (pricingMode === 'dynamic' && order.priceListCode) {
+          // Calculate effective price from price list
+          const effPrice = await calculateEffectivePriceWithFallback(
+            order.priceListCode,
+            order.commodityTicker,
+            order.locationId,
+            order.currency
+          )
+          effectivePrice = effPrice?.finalPrice ?? null
+          isFallback = effPrice?.isFallback ?? false
+          priceLocationId = effPrice?.locationId ?? null
+        }
+
         filteredOrders.push({
-          ...order,
+          id: order.id,
+          userId: order.userId,
+          commodityTicker: order.commodityTicker,
+          locationId: order.locationId,
+          price: order.price,
+          currency: order.currency,
+          priceListCode: order.priceListCode,
+          orderType: order.orderType,
+          limitMode: order.limitMode,
+          limitQuantity: order.limitQuantity,
+          sellerName: order.sellerName,
           fioQuantity: inventoryInfo.quantity,
           availableQuantity,
           isOwn,
           fioUploadedAt: inventoryInfo.fioUploadedAt,
+          effectivePrice,
+          isFallback,
+          priceLocationId,
+          pricingMode,
         })
       }
     }
@@ -252,37 +322,6 @@ export class MarketController extends Controller {
       }
     }
 
-    // Get reference prices if requested
-    const referencePriceMap = new Map<string, number>()
-    if (includeReferencePrice) {
-      const refExchange = (referenceExchange ?? 'KAWA').toUpperCase()
-      const uniqueKeys = [
-        ...new Set(filteredOrders.map(o => `${o.commodityTicker}:${o.locationId}:${o.currency}`)),
-      ]
-
-      // Fetch reference prices for all unique commodity/location/currency combinations
-      for (const key of uniqueKeys) {
-        const [ticker, loc, curr] = key.split(':')
-        const refPrice = await db
-          .select({ price: prices.price })
-          .from(prices)
-          .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
-          .where(
-            and(
-              eq(prices.priceListCode, refExchange),
-              eq(prices.commodityTicker, ticker),
-              eq(prices.locationId, loc),
-              eq(priceLists.currency, curr as Currency)
-            )
-          )
-          .limit(1)
-
-        if (refPrice.length > 0) {
-          referencePriceMap.set(key, parseFloat(refPrice[0].price))
-        }
-      }
-    }
-
     // Build final listings
     const listings: MarketListing[] = filteredOrders.map(order => {
       const reservationData = reservationMap.get(order.id) ?? {
@@ -296,27 +335,18 @@ export class MarketController extends Controller {
         order.availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
       )
 
-      const orderPrice = parseFloat(order.price)
-      const refKey = `${order.commodityTicker}:${order.locationId}:${order.currency}`
-      const referencePrice = referencePriceMap.get(refKey) ?? null
-      let priceDifference: number | null = null
-      let priceDifferencePercent: number | null = null
-
-      if (referencePrice !== null) {
-        priceDifference = Math.round((orderPrice - referencePrice) * 100) / 100
-        priceDifferencePercent =
-          referencePrice !== 0
-            ? Math.round(((orderPrice - referencePrice) / referencePrice) * 10000) / 100
-            : null
-      }
-
       return {
         id: order.id,
         sellerName: order.sellerName,
         commodityTicker: order.commodityTicker,
         locationId: order.locationId,
-        price: orderPrice,
+        price: parseFloat(order.price),
         currency: order.currency,
+        priceListCode: order.priceListCode,
+        effectivePrice: order.effectivePrice,
+        isFallback: order.isFallback,
+        priceLocationId: order.priceLocationId,
+        pricingMode: order.pricingMode,
         orderType: order.orderType,
         availableQuantity: order.availableQuantity,
         isOwn: order.isOwn,
@@ -325,13 +355,11 @@ export class MarketController extends Controller {
         reservedQuantity: reservationData.quantity,
         remainingQuantity,
         fioUploadedAt: order.fioUploadedAt?.toISOString() ?? null,
-        referencePrice,
-        priceDifference,
-        priceDifferencePercent,
       }
     })
 
     // Sort by commodity, then location, then price (or by jumpCount if destination provided)
+    // Use effectivePrice for dynamic orders, price for fixed orders
     listings.sort((a, b) => {
       // If destination is provided, sort by jump count first
       if (destination) {
@@ -345,7 +373,10 @@ export class MarketController extends Controller {
       if (a.locationId !== b.locationId) {
         return a.locationId.localeCompare(b.locationId)
       }
-      return a.price - b.price
+      // Use effective price for dynamic orders, fixed price otherwise
+      const aPrice = a.pricingMode === 'dynamic' ? (a.effectivePrice ?? Infinity) : a.price
+      const bPrice = b.pricingMode === 'dynamic' ? (b.effectivePrice ?? Infinity) : b.price
+      return aPrice - bPrice
     })
 
     return listings
@@ -355,17 +386,13 @@ export class MarketController extends Controller {
    * Get all buy requests on the market (from all users)
    * Filters by order type based on user permissions
    * @param destination Location ID to calculate jump counts from (optional)
-   * @param includeReferencePrice Include reference prices from KAWA price list (default: false)
-   * @param referenceExchange Exchange to use for reference prices (default: KAWA)
    */
   @Get('buy-requests')
   public async getMarketBuyRequests(
     @Request() request: { user: JwtPayload },
     @Query() commodity?: string,
     @Query() location?: string,
-    @Query() destination?: string,
-    @Query() includeReferencePrice?: boolean,
-    @Query() referenceExchange?: string
+    @Query() destination?: string
   ): Promise<MarketBuyRequest[]> {
     const userId = request.user.userId
     const userRoles = request.user.roles
@@ -388,6 +415,7 @@ export class MarketController extends Controller {
         quantity: buyOrders.quantity,
         price: buyOrders.price,
         currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
         orderType: buyOrders.orderType,
         buyerName: users.displayName,
       })
@@ -395,7 +423,7 @@ export class MarketController extends Controller {
       .innerJoin(users, eq(buyOrders.userId, users.id))
 
     // Process orders and filter by permissions
-    const filteredOrders: Array<(typeof orders)[0] & { isOwn: boolean }> = []
+    const filteredBuyOrders: FilteredBuyOrder[] = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -412,13 +440,49 @@ export class MarketController extends Controller {
       // Filter by location if specified
       if (location && order.locationId !== location) continue
 
-      filteredOrders.push({ ...order, isOwn })
+      // Determine pricing mode and effective price
+      const orderPrice = parseFloat(order.price)
+      const pricingMode: PricingMode = order.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
+      let effectivePrice: number | null = null
+      let isFallback = false
+      let priceLocationId: string | null = null
+
+      if (pricingMode === 'dynamic' && order.priceListCode) {
+        // Calculate effective price from price list
+        const effPrice = await calculateEffectivePriceWithFallback(
+          order.priceListCode,
+          order.commodityTicker,
+          order.locationId,
+          order.currency
+        )
+        effectivePrice = effPrice?.finalPrice ?? null
+        isFallback = effPrice?.isFallback ?? false
+        priceLocationId = effPrice?.locationId ?? null
+      }
+
+      filteredBuyOrders.push({
+        id: order.id,
+        userId: order.userId,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        quantity: order.quantity,
+        price: order.price,
+        currency: order.currency,
+        priceListCode: order.priceListCode,
+        orderType: order.orderType,
+        buyerName: order.buyerName,
+        isOwn,
+        effectivePrice,
+        isFallback,
+        priceLocationId,
+        pricingMode,
+      })
     }
 
     // Calculate jump counts if destination is provided
     const jumpCountMap = new Map<string, number | null>()
     if (destination) {
-      const uniqueLocations = [...new Set(filteredOrders.map(o => o.locationId))]
+      const uniqueLocations = [...new Set(filteredBuyOrders.map(o => o.locationId))]
       await Promise.all(
         uniqueLocations.map(async locationId => {
           const jumpCount = await fioClient.getJumpCount(destination, locationId)
@@ -428,7 +492,7 @@ export class MarketController extends Controller {
     }
 
     // Get reservation counts for all buy orders (including fulfilled)
-    const buyOrderIds = filteredOrders.map(o => o.id)
+    const buyOrderIds = filteredBuyOrders.map(o => o.id)
     const buyReservationMap = new Map<
       number,
       { count: number; quantity: number; fulfilledQuantity: number }
@@ -457,38 +521,8 @@ export class MarketController extends Controller {
       }
     }
 
-    // Get reference prices if requested
-    const buyReferencePriceMap = new Map<string, number>()
-    if (includeReferencePrice) {
-      const refExchange = (referenceExchange ?? 'KAWA').toUpperCase()
-      const uniqueKeys = [
-        ...new Set(filteredOrders.map(o => `${o.commodityTicker}:${o.locationId}:${o.currency}`)),
-      ]
-
-      for (const key of uniqueKeys) {
-        const [ticker, loc, curr] = key.split(':')
-        const refPrice = await db
-          .select({ price: prices.price })
-          .from(prices)
-          .innerJoin(priceLists, eq(prices.priceListCode, priceLists.code))
-          .where(
-            and(
-              eq(prices.priceListCode, refExchange),
-              eq(prices.commodityTicker, ticker),
-              eq(prices.locationId, loc),
-              eq(priceLists.currency, curr as Currency)
-            )
-          )
-          .limit(1)
-
-        if (refPrice.length > 0) {
-          buyReferencePriceMap.set(key, parseFloat(refPrice[0].price))
-        }
-      }
-    }
-
     // Build final requests
-    const requests: MarketBuyRequest[] = filteredOrders.map(order => {
+    const requests: MarketBuyRequest[] = filteredBuyOrders.map(order => {
       const reservationData = buyReservationMap.get(order.id) ?? {
         count: 0,
         quantity: 0,
@@ -500,28 +534,19 @@ export class MarketController extends Controller {
         order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
       )
 
-      const orderPrice = parseFloat(order.price)
-      const refKey = `${order.commodityTicker}:${order.locationId}:${order.currency}`
-      const referencePrice = buyReferencePriceMap.get(refKey) ?? null
-      let priceDifference: number | null = null
-      let priceDifferencePercent: number | null = null
-
-      if (referencePrice !== null) {
-        priceDifference = Math.round((orderPrice - referencePrice) * 100) / 100
-        priceDifferencePercent =
-          referencePrice !== 0
-            ? Math.round(((orderPrice - referencePrice) / referencePrice) * 10000) / 100
-            : null
-      }
-
       return {
         id: order.id,
         buyerName: order.buyerName,
         commodityTicker: order.commodityTicker,
         locationId: order.locationId,
         quantity: order.quantity,
-        price: orderPrice,
+        price: parseFloat(order.price),
         currency: order.currency,
+        priceListCode: order.priceListCode,
+        effectivePrice: order.effectivePrice,
+        isFallback: order.isFallback,
+        priceLocationId: order.priceLocationId,
+        pricingMode: order.pricingMode,
         orderType: order.orderType,
         isOwn: order.isOwn,
         jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
@@ -529,14 +554,11 @@ export class MarketController extends Controller {
         reservedQuantity: reservationData.quantity,
         remainingQuantity,
         fioUploadedAt: null, // Not applicable for buy orders
-        referencePrice,
-        priceDifference,
-        priceDifferencePercent,
       }
     })
 
     // Sort by commodity, then location, then price (highest first for buy orders)
-    // If destination provided, sort by jump count first
+    // Use effectivePrice for dynamic orders, price for fixed orders
     requests.sort((a, b) => {
       // If destination is provided, sort by jump count first
       if (destination) {
@@ -550,7 +572,10 @@ export class MarketController extends Controller {
       if (a.locationId !== b.locationId) {
         return a.locationId.localeCompare(b.locationId)
       }
-      return b.price - a.price // Higher prices first for buy orders
+      // Use effective price for dynamic orders, fixed price otherwise
+      const aPrice = a.pricingMode === 'dynamic' ? (a.effectivePrice ?? 0) : a.price
+      const bPrice = b.pricingMode === 'dynamic' ? (b.effectivePrice ?? 0) : b.price
+      return bPrice - aPrice // Higher prices first for buy orders
     })
 
     return requests

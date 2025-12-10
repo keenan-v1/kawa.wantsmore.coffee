@@ -67,6 +67,9 @@ export interface FioInventoryItem {
 // Sell order limit modes
 export type SellOrderLimitMode = 'none' | 'max_sell' | 'reserve'
 
+// Pricing mode for orders - 'fixed' = user-specified price, 'dynamic' = price from price list
+export type PricingMode = 'fixed' | 'dynamic'
+
 // Order types - shared between sell and buy orders
 export type OrderType = 'internal' | 'partner'
 

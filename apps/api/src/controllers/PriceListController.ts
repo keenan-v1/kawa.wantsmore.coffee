@@ -214,40 +214,40 @@ export class PriceListController extends Controller {
       throw NotFound(`Price list '${exchange.toUpperCase()}' not found`)
     }
 
-    // First try the requested location
+    // Get prices for the requested location
     let results = await calculateEffectivePrices(exchange, locationId, priceList[0].currency)
 
-    // Filter by commodity if specified
-    if (commodity) {
-      const upperCommodity = commodity.toUpperCase()
-      results = results.filter(r => r.commodityTicker === upperCommodity)
-    }
-
-    // If no results and fallback is enabled, try default location
+    // If fallback is enabled and there's a different default location, merge in missing commodities
     if (
-      results.length === 0 &&
       useFallback &&
       priceList[0].defaultLocationId &&
       priceList[0].defaultLocationId !== locationId
     ) {
-      results = await calculateEffectivePrices(
+      const defaultResults = await calculateEffectivePrices(
         exchange,
         priceList[0].defaultLocationId,
         priceList[0].currency
       )
 
-      // Filter by commodity if specified
-      if (commodity) {
-        const upperCommodity = commodity.toUpperCase()
-        results = results.filter(r => r.commodityTicker === upperCommodity)
-      }
+      // Build a set of commodities we already have at the requested location
+      const existingCommodities = new Set(results.map(r => r.commodityTicker))
 
-      // Mark all results as fallback with the original requested location
-      results = results.map(price => ({
-        ...price,
-        isFallback: true,
-        requestedLocationId: locationId,
-      }))
+      // Add fallback prices for missing commodities
+      for (const defaultPrice of defaultResults) {
+        if (!existingCommodities.has(defaultPrice.commodityTicker)) {
+          results.push({
+            ...defaultPrice,
+            isFallback: true,
+            requestedLocationId: locationId,
+          })
+        }
+      }
+    }
+
+    // Filter by commodity if specified
+    if (commodity) {
+      const upperCommodity = commodity.toUpperCase()
+      results = results.filter(r => r.commodityTicker === upperCommodity)
     }
 
     return results

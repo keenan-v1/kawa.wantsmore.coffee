@@ -59,7 +59,7 @@ describe('userSettingsService', () => {
       const result = await userSettingsService.getAllSettings(1)
 
       // Should have all default values
-      expect(result['display.preferredCurrency']).toBe('CIS')
+      expect(result['market.preferredCurrency']).toBe('CIS')
       expect(result['display.locationDisplayMode']).toBe('both')
       expect(result['display.commodityDisplayMode']).toBe('both')
       expect(result['notifications.browserEnabled']).toBe(false)
@@ -70,14 +70,14 @@ describe('userSettingsService', () => {
 
     it('should override defaults with user values', async () => {
       mockWhere.mockResolvedValueOnce([
-        { key: 'display.preferredCurrency', value: '"ICA"' },
+        { key: 'market.preferredCurrency', value: '"ICA"' },
         { key: 'notifications.browserEnabled', value: 'true' },
       ])
 
       const result = await userSettingsService.getAllSettings(1)
 
       // Overridden values
-      expect(result['display.preferredCurrency']).toBe('ICA')
+      expect(result['market.preferredCurrency']).toBe('ICA')
       expect(result['notifications.browserEnabled']).toBe(true)
       // Default values preserved
       expect(result['display.locationDisplayMode']).toBe('both')
@@ -85,52 +85,52 @@ describe('userSettingsService', () => {
     })
 
     it('should use cache on subsequent calls', async () => {
-      mockWhere.mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"CIS"' }])
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"CIS"' }])
 
       // First call
       await userSettingsService.getAllSettings(1)
       // Second call should use cache
       const result = await userSettingsService.getAllSettings(1)
 
-      expect(result['display.preferredCurrency']).toBe('CIS')
+      expect(result['market.preferredCurrency']).toBe('CIS')
       // Database should only be called once
       expect(mockSelect).toHaveBeenCalledTimes(1)
     })
 
     it('should have separate caches per user', async () => {
       mockWhere
-        .mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"ICA"' }])
-        .mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"NCC"' }])
+        .mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"ICA"' }])
+        .mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"NCC"' }])
 
       const result1 = await userSettingsService.getAllSettings(1)
       const result2 = await userSettingsService.getAllSettings(2)
 
-      expect(result1['display.preferredCurrency']).toBe('ICA')
-      expect(result2['display.preferredCurrency']).toBe('NCC')
+      expect(result1['market.preferredCurrency']).toBe('ICA')
+      expect(result2['market.preferredCurrency']).toBe('NCC')
       expect(mockSelect).toHaveBeenCalledTimes(2)
     })
 
     it('should ignore unknown setting keys', async () => {
       mockWhere.mockResolvedValueOnce([
         { key: 'unknown.setting', value: '"ignored"' },
-        { key: 'display.preferredCurrency', value: '"ICA"' },
+        { key: 'market.preferredCurrency', value: '"ICA"' },
       ])
 
       const result = await userSettingsService.getAllSettings(1)
 
       expect(result['unknown.setting']).toBeUndefined()
-      expect(result['display.preferredCurrency']).toBe('ICA')
+      expect(result['market.preferredCurrency']).toBe('ICA')
     })
 
     it('should use default for invalid JSON values', async () => {
       // Spy on console.warn
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-      mockWhere.mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: 'invalid-json' }])
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: 'invalid-json' }])
 
       const result = await userSettingsService.getAllSettings(1)
 
-      expect(result['display.preferredCurrency']).toBe('CIS') // default
+      expect(result['market.preferredCurrency']).toBe('CIS') // default
       expect(warnSpy).toHaveBeenCalled()
 
       warnSpy.mockRestore()
@@ -139,9 +139,9 @@ describe('userSettingsService', () => {
 
   describe('getSetting', () => {
     it('should return single setting value', async () => {
-      mockWhere.mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"ICA"' }])
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"ICA"' }])
 
-      const result = await userSettingsService.getSetting(1, 'display.preferredCurrency')
+      const result = await userSettingsService.getSetting(1, 'market.preferredCurrency')
 
       expect(result).toBe('ICA')
     })
@@ -149,7 +149,7 @@ describe('userSettingsService', () => {
     it('should return default for unset setting', async () => {
       mockWhere.mockResolvedValueOnce([])
 
-      const result = await userSettingsService.getSetting(1, 'display.preferredCurrency')
+      const result = await userSettingsService.getSetting(1, 'market.preferredCurrency')
 
       expect(result).toBe('CIS')
     })
@@ -157,13 +157,13 @@ describe('userSettingsService', () => {
 
   describe('setSetting', () => {
     it('should save valid setting value', async () => {
-      await userSettingsService.setSetting(1, 'display.preferredCurrency', 'ICA')
+      await userSettingsService.setSetting(1, 'market.preferredCurrency', 'ICA')
 
       expect(mockInsert).toHaveBeenCalled()
       expect(mockValues).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
-          settingKey: 'display.preferredCurrency',
+          settingKey: 'market.preferredCurrency',
           value: '"ICA"',
         })
       )
@@ -183,8 +183,8 @@ describe('userSettingsService', () => {
 
     it('should validate enum options', async () => {
       await expect(
-        userSettingsService.setSetting(1, 'display.preferredCurrency', 'INVALID')
-      ).rejects.toThrow('display.preferredCurrency must be one of: ICA, CIS, AIC, NCC')
+        userSettingsService.setSetting(1, 'market.preferredCurrency', 'INVALID')
+      ).rejects.toThrow('market.preferredCurrency must be one of: ICA, CIS, AIC, NCC')
     })
 
     it('should validate string array type', async () => {
@@ -214,10 +214,10 @@ describe('userSettingsService', () => {
       expect(mockSelect).toHaveBeenCalledTimes(1)
 
       // Set new value
-      await userSettingsService.setSetting(1, 'display.preferredCurrency', 'ICA')
+      await userSettingsService.setSetting(1, 'market.preferredCurrency', 'ICA')
 
       // Next call should hit database
-      mockWhere.mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"ICA"' }])
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"ICA"' }])
       await userSettingsService.getAllSettings(1)
       expect(mockSelect).toHaveBeenCalledTimes(2)
     })
@@ -226,7 +226,7 @@ describe('userSettingsService', () => {
   describe('setSettings', () => {
     it('should set multiple settings', async () => {
       await userSettingsService.setSettings(1, {
-        'display.preferredCurrency': 'ICA',
+        'market.preferredCurrency': 'ICA',
         'notifications.browserEnabled': true,
       })
 
@@ -236,10 +236,10 @@ describe('userSettingsService', () => {
     it('should validate all settings before saving any', async () => {
       await expect(
         userSettingsService.setSettings(1, {
-          'display.preferredCurrency': 'INVALID',
+          'market.preferredCurrency': 'INVALID',
           'notifications.browserEnabled': true,
         })
-      ).rejects.toThrow('display.preferredCurrency must be one of')
+      ).rejects.toThrow('market.preferredCurrency must be one of')
 
       // Should not have called insert due to validation failure
       expect(mockInsert).not.toHaveBeenCalled()
@@ -256,7 +256,7 @@ describe('userSettingsService', () => {
 
   describe('resetSetting', () => {
     it('should delete user setting override', async () => {
-      await userSettingsService.resetSetting(1, 'display.preferredCurrency')
+      await userSettingsService.resetSetting(1, 'market.preferredCurrency')
 
       expect(mockDelete).toHaveBeenCalled()
     })
@@ -269,12 +269,12 @@ describe('userSettingsService', () => {
 
     it('should invalidate cache after reset', async () => {
       // Populate cache
-      mockWhere.mockResolvedValueOnce([{ key: 'display.preferredCurrency', value: '"ICA"' }])
+      mockWhere.mockResolvedValueOnce([{ key: 'market.preferredCurrency', value: '"ICA"' }])
       await userSettingsService.getAllSettings(1)
       expect(mockSelect).toHaveBeenCalledTimes(1)
 
       // Reset
-      await userSettingsService.resetSetting(1, 'display.preferredCurrency')
+      await userSettingsService.resetSetting(1, 'market.preferredCurrency')
 
       // Next call should hit database
       mockWhere.mockResolvedValueOnce([])
@@ -346,12 +346,24 @@ describe('userSettingsService', () => {
     it('should have definitions for all expected settings', () => {
       // Verify all expected settings exist
       const expectedKeys = [
-        'display.preferredCurrency',
+        // General settings
+        'general.timezone',
+        'general.datetimeFormat',
+        'general.numberFormat',
+        // Display settings
         'display.locationDisplayMode',
         'display.commodityDisplayMode',
+        // Market settings
+        'market.preferredCurrency',
+        'market.defaultPriceList',
+        'market.automaticPricing',
+        'market.favoritedLocations',
+        'market.favoritedCommodities',
+        // Notification settings
         'notifications.browserEnabled',
         'notifications.reservationPlaced',
         'notifications.reservationStatusChange',
+        // FIO settings
         'fio.username',
         'fio.apiKey',
         'fio.autoSync',

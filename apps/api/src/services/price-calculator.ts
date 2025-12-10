@@ -179,6 +179,68 @@ export async function calculateEffectivePrice(
 }
 
 /**
+ * Calculate effective price with fallback to the price list's default location
+ * This is the recommended function to use when you want automatic fallback behavior
+ *
+ * Note: The currency parameter is ignored - we use the price list's currency instead.
+ * This ensures dynamic pricing always works regardless of what currency was stored on the order.
+ */
+export async function calculateEffectivePriceWithFallback(
+  priceListCode: string,
+  ticker: string,
+  locationId: string,
+  _currency: Currency // Ignored - we use the price list's currency
+): Promise<EffectivePrice | null> {
+  // First get the price list's currency and default location
+  const priceListResult = await db
+    .select({
+      currency: priceLists.currency,
+      defaultLocationId: priceLists.defaultLocationId,
+    })
+    .from(priceLists)
+    .where(eq(priceLists.code, priceListCode.toUpperCase()))
+    .limit(1)
+
+  if (priceListResult.length === 0) {
+    return null
+  }
+
+  const priceListCurrency = priceListResult[0].currency
+  const defaultLocationId = priceListResult[0].defaultLocationId
+
+  // First try the requested location with the price list's currency
+  let result = await calculateEffectivePrice(priceListCode, ticker, locationId, priceListCurrency)
+
+  if (result !== null) {
+    return result
+  }
+
+  // If no default location or same as requested, no fallback possible
+  if (!defaultLocationId || defaultLocationId === locationId) {
+    return null
+  }
+
+  // Try the default location with the price list's currency
+  result = await calculateEffectivePrice(
+    priceListCode,
+    ticker,
+    defaultLocationId,
+    priceListCurrency
+  )
+
+  // Mark result as fallback with the original requested location
+  if (result) {
+    return {
+      ...result,
+      isFallback: true,
+      requestedLocationId: locationId,
+    }
+  }
+
+  return null
+}
+
+/**
  * Calculate effective prices for all commodities at a specific price list and location
  */
 export async function calculateEffectivePrices(

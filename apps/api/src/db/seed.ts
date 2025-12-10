@@ -1,17 +1,7 @@
 // Seed database with initial roles and permissions
 // Commodities and locations will come from FIO API integration
-import {
-  db,
-  client,
-  roles,
-  permissions,
-  rolePermissions,
-  priceLists,
-  importConfigs,
-} from './index.js'
-import { eq, and } from 'drizzle-orm'
+import { db, client, roles, permissions, rolePermissions } from './index.js'
 import { createLogger } from '../utils/logger.js'
-import type { Currency } from '@kawakawa/types'
 
 const log = createLogger({ script: 'seed' })
 
@@ -105,90 +95,6 @@ const PERMISSIONS_DATA = [
   },
 ]
 
-// Price Lists seed data - maps exchange codes to locations
-// Type 'fio' = synced from FIO API, 'custom' = user-managed
-type PriceListType = 'fio' | 'custom'
-const PRICE_LISTS_DATA: {
-  code: string
-  name: string
-  description: string | null
-  type: PriceListType
-  defaultLocationId: string | null
-  currency: Currency
-}[] = [
-  {
-    code: 'CI1',
-    name: 'Commodity Exchange - Benton',
-    description: 'FIO CI1 exchange at Benton station',
-    type: 'fio',
-    defaultLocationId: 'BEN',
-    currency: 'CIS',
-  },
-  {
-    code: 'NC1',
-    name: 'Commodity Exchange - Moria',
-    description: 'FIO NC1 exchange at Moria station',
-    type: 'fio',
-    defaultLocationId: 'MOR',
-    currency: 'NCC',
-  },
-  {
-    code: 'IC1',
-    name: 'Commodity Exchange - Antares',
-    description: 'FIO IC1 exchange at Antares station',
-    type: 'fio',
-    defaultLocationId: 'ANT',
-    currency: 'ICA',
-  },
-  {
-    code: 'AI1',
-    name: 'Commodity Exchange - Hortus',
-    description: 'FIO AI1 exchange at Hortus station',
-    type: 'fio',
-    defaultLocationId: 'HRT',
-    currency: 'AIC',
-  },
-  {
-    code: 'KAWA',
-    name: 'KAWA Internal Exchange',
-    description: 'Internal price list for KAWA members',
-    type: 'custom',
-    defaultLocationId: null,
-    currency: 'CIS',
-  },
-]
-
-// Import Config presets
-// The KAWA sheet uses a pivot format:
-// - First column: commodity ticker
-// - Remaining columns: location names/IDs with prices
-type ImportSourceType = 'csv' | 'google_sheets'
-type ImportFormat = 'flat' | 'pivot'
-const IMPORT_CONFIGS_DATA: {
-  priceListCode: string
-  name: string
-  sourceType: ImportSourceType
-  format: ImportFormat
-  sheetsUrl: string | null
-  sheetGid: number | null
-  config: Record<string, unknown> | null
-}[] = [
-  {
-    priceListCode: 'KAWA',
-    name: 'KAWA Price Sheet (Pivot)',
-    sourceType: 'google_sheets',
-    format: 'pivot',
-    sheetsUrl: null, // URL to be configured by admin
-    sheetGid: null, // Tab to be configured by admin
-    config: {
-      // Pivot format expects:
-      // - tickerColumn: column header for commodity tickers (default: auto-detect 'Ticker' or 'Material')
-      // - Remaining columns are location names/IDs with price values
-      description: 'KAWA internal price sheet with commodities as rows and locations as columns',
-    },
-  },
-]
-
 // Default role permissions (roleId -> list of permissionIds that are allowed)
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   unverified: [
@@ -278,32 +184,6 @@ async function seed() {
       await db.insert(rolePermissions).values(rolePermissionsData).onConflictDoNothing()
     }
     log.info({ count: rolePermissionsData.length }, 'Seeded role permissions')
-
-    // Seed price lists
-    log.info('Seeding price lists')
-    await db.insert(priceLists).values(PRICE_LISTS_DATA).onConflictDoNothing()
-    log.info({ count: PRICE_LISTS_DATA.length }, 'Seeded price lists')
-
-    // Seed import configs (presets for price list imports)
-    log.info('Seeding import configs')
-    for (const config of IMPORT_CONFIGS_DATA) {
-      // Check if config already exists for this price list
-      const existing = await db
-        .select({ id: importConfigs.id })
-        .from(importConfigs)
-        .where(
-          and(
-            eq(importConfigs.priceListCode, config.priceListCode),
-            eq(importConfigs.name, config.name)
-          )
-        )
-        .limit(1)
-
-      if (existing.length === 0) {
-        await db.insert(importConfigs).values(config)
-      }
-    }
-    log.info({ count: IMPORT_CONFIGS_DATA.length }, 'Seeded import configs')
 
     log.info('Database seeding complete')
   } catch (error) {

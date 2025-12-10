@@ -123,11 +123,23 @@ export const useSettingsStore = () => {
 
   // ==================== TYPED COMPUTED PROPERTIES ====================
 
-  const preferredCurrency = computed({
-    get: () => settingsValues.value['display.preferredCurrency'] as Currency,
-    set: (value: Currency) => updateSetting('display.preferredCurrency', value),
+  // General settings
+  const timezone = computed({
+    get: () => settingsValues.value['general.timezone'] as string,
+    set: (value: string) => updateSetting('general.timezone', value),
   })
 
+  const datetimeFormat = computed({
+    get: () => settingsValues.value['general.datetimeFormat'] as string,
+    set: (value: string) => updateSetting('general.datetimeFormat', value),
+  })
+
+  const numberFormat = computed({
+    get: () => settingsValues.value['general.numberFormat'] as string,
+    set: (value: string) => updateSetting('general.numberFormat', value),
+  })
+
+  // Display settings
   const locationDisplayMode = computed({
     get: () => settingsValues.value['display.locationDisplayMode'] as LocationDisplayMode,
     set: (value: LocationDisplayMode) => updateSetting('display.locationDisplayMode', value),
@@ -138,11 +150,49 @@ export const useSettingsStore = () => {
     set: (value: CommodityDisplayMode) => updateSetting('display.commodityDisplayMode', value),
   })
 
+  // Market settings
+  const preferredCurrency = computed({
+    get: () => settingsValues.value['market.preferredCurrency'] as Currency,
+    set: (value: Currency) => updateSetting('market.preferredCurrency', value),
+  })
+
+  const defaultPriceList = computed({
+    get: () => settingsValues.value['market.defaultPriceList'] as string | null,
+    set: (value: string | null) => updateSetting('market.defaultPriceList', value),
+  })
+
+  const automaticPricing = computed({
+    get: () => settingsValues.value['market.automaticPricing'] as boolean,
+    set: (value: boolean) => updateSetting('market.automaticPricing', value),
+  })
+
+  const favoritedLocations = computed({
+    get: () => settingsValues.value['market.favoritedLocations'] as string[],
+    set: (value: string[]) => updateSetting('market.favoritedLocations', value),
+  })
+
+  const favoritedCommodities = computed({
+    get: () => settingsValues.value['market.favoritedCommodities'] as string[],
+    set: (value: string[]) => updateSetting('market.favoritedCommodities', value),
+  })
+
+  // Notification settings
   const browserNotificationsEnabled = computed({
     get: () => settingsValues.value['notifications.browserEnabled'] as boolean,
     set: (value: boolean) => updateSetting('notifications.browserEnabled', value),
   })
 
+  const reservationPlacedNotification = computed({
+    get: () => settingsValues.value['notifications.reservationPlaced'] as boolean,
+    set: (value: boolean) => updateSetting('notifications.reservationPlaced', value),
+  })
+
+  const reservationStatusChangeNotification = computed({
+    get: () => settingsValues.value['notifications.reservationStatusChange'] as boolean,
+    set: (value: boolean) => updateSetting('notifications.reservationStatusChange', value),
+  })
+
+  // FIO settings
   const fioUsername = computed({
     get: () => settingsValues.value['fio.username'] as string,
     set: (value: string) => updateSetting('fio.username', value),
@@ -197,11 +247,28 @@ export const useSettingsStore = () => {
     clearSettings,
     getSettingsByCategory,
 
-    // Typed computed properties for common settings
-    preferredCurrency,
+    // Typed computed properties - General
+    timezone,
+    datetimeFormat,
+    numberFormat,
+
+    // Typed computed properties - Display
     locationDisplayMode,
     commodityDisplayMode,
+
+    // Typed computed properties - Market
+    preferredCurrency,
+    defaultPriceList,
+    automaticPricing,
+    favoritedLocations,
+    favoritedCommodities,
+
+    // Typed computed properties - Notifications
     browserNotificationsEnabled,
+    reservationPlacedNotification,
+    reservationStatusChangeNotification,
+
+    // Typed computed properties - FIO
     fioUsername,
     hasFioCredentials,
     fioAutoSync,

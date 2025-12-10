@@ -60,7 +60,7 @@ export const useUserStore = () => {
   }
 
   const updateCurrency = async (currency: string) => {
-    await settingsStore.updateSetting('display.preferredCurrency', currency)
+    await settingsStore.updateSetting('market.preferredCurrency', currency)
   }
 
   const getLocationDisplayMode = () => {

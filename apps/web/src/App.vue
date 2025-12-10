@@ -215,3 +215,14 @@ onUnmounted(() => {
   width: auto;
 }
 </style>
+
+<style>
+/* Global tooltip styling - must be unscoped since tooltips render in a portal */
+.kawa-tooltip {
+  background-color: rgb(var(--v-theme-surface-bright)) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  font-size: 0.875rem;
+}
+</style>
