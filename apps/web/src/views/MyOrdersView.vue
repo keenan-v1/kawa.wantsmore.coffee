@@ -1043,6 +1043,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useUrlTab, useOrderDeepLink } from '../composables'
 import {
   PERMISSIONS,
   type Currency,
@@ -1083,7 +1084,11 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
-const activeTab = ref('sell')
+const ORDERS_TABS = ['sell', 'buy', 'reservations'] as const
+const activeTab = useUrlTab({
+  validTabs: ORDERS_TABS,
+  defaultTab: 'sell',
+})
 
 const sellHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
@@ -1164,10 +1169,13 @@ const reservationRoleFilter = ref<'all' | 'owner' | 'counterparty'>('all')
 const reservationStatusFilter = ref<ReservationStatus | null>(null)
 const reservationActionLoading = ref<string | null>(null)
 
-// Order detail dialog
-const orderDetailDialog = ref(false)
-const orderDetailType = ref<'sell' | 'buy'>('sell')
-const orderDetailId = ref<number>(0)
+// Order detail dialog with deep linking
+const {
+  dialogOpen: orderDetailDialog,
+  orderType: orderDetailType,
+  orderId: orderDetailId,
+  openOrder,
+} = useOrderDeepLink()
 
 // Edit sell order state
 const editSellDialog = ref(false)
@@ -1454,15 +1462,11 @@ const openSellOrderDialog = () => {
 
 // View order functions
 const viewSellOrder = (order: SellOrderResponse) => {
-  orderDetailType.value = 'sell'
-  orderDetailId.value = order.id
-  orderDetailDialog.value = true
+  openOrder('sell', order.id)
 }
 
 const viewBuyOrder = (order: BuyOrderResponse) => {
-  orderDetailType.value = 'buy'
-  orderDetailId.value = order.id
-  orderDetailDialog.value = true
+  openOrder('buy', order.id)
 }
 
 // Handler for OrderDialog creation

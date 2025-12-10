@@ -1068,6 +1068,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useUrlTab } from '../composables'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
 import DiscordIcon from '../components/DiscordIcon.vue'
@@ -1094,7 +1095,19 @@ const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = 
   { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
 ]
 
-const activeTab = ref('general')
+const ACCOUNT_TABS = [
+  'general',
+  'security',
+  'market',
+  'notifications',
+  'fio',
+  'discord',
+  'danger',
+] as const
+const activeTab = useUrlTab({
+  validTabs: ACCOUNT_TABS,
+  defaultTab: 'general',
+})
 
 // Profile data (from API)
 // Note: FIO credentials (fioUsername, fioApiKey) are now in user settings, not profile

@@ -1770,6 +1770,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useUrlTab } from '../composables'
 import type { Role } from '../types'
 import type {
   DiscordSettings,
@@ -1837,7 +1838,19 @@ interface RolePermissionWithDetails {
   allowed: boolean
 }
 
-const activeTab = ref('approvals')
+const ADMIN_TABS = [
+  'approvals',
+  'users',
+  'permissions',
+  'roles',
+  'discord',
+  'priceLists',
+  'globalDefaults',
+] as const
+const activeTab = useUrlTab({
+  validTabs: ADMIN_TABS,
+  defaultTab: 'approvals',
+})
 
 const userHeaders = [
   { title: 'Username', key: 'username', sortable: false },

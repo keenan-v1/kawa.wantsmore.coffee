@@ -11,6 +11,9 @@
     :loading="loading"
     :required="required"
     :no-filter="true"
+    :multiple="multiple"
+    :chips="multiple"
+    :closable-chips="multiple"
     @update:search="onSearchUpdate"
     @focus="onFocus"
     @keydown="onKeydown"
@@ -46,26 +49,32 @@ export interface KeyValueItem {
 
 type ValidationRule = (v: unknown) => boolean | string
 
+/** Model value type - single string or array of strings */
+type ModelValue = string | null | undefined | string[]
+
 const props = withDefaults(
   defineProps<{
-    modelValue: string | null | undefined
+    modelValue: ModelValue
     items: KeyValueItem[]
     label: string
     rules?: ValidationRule[]
     loading?: boolean
     required?: boolean
     favorites?: string[]
+    /** Enable multi-select mode with chips */
+    multiple?: boolean
   }>(),
   {
     rules: () => [],
     loading: false,
     required: false,
     favorites: () => [],
+    multiple: false,
   }
 )
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string | null): void
+  (e: 'update:modelValue', value: string | null | string[]): void
   (e: 'update:favorites', value: string[]): void
 }>()
 
@@ -95,10 +104,26 @@ const toggleFavorite = (key: string) => {
   emit('update:favorites', currentFavorites)
 }
 
-// Two-way binding for v-model
+// Two-way binding for v-model - handles both single and multiple modes
 const internalValue = computed({
-  get: () => props.modelValue ?? null,
-  set: value => emit('update:modelValue', value),
+  get: () => {
+    if (props.multiple) {
+      // Multiple mode: always return array
+      if (Array.isArray(props.modelValue)) return props.modelValue
+      if (props.modelValue) return [props.modelValue]
+      return []
+    }
+    // Single mode: return string or null
+    if (Array.isArray(props.modelValue)) return props.modelValue[0] ?? null
+    return props.modelValue ?? null
+  },
+  set: value => {
+    if (props.multiple) {
+      emit('update:modelValue', Array.isArray(value) ? value : value ? [value] : [])
+    } else {
+      emit('update:modelValue', Array.isArray(value) ? (value[0] ?? null) : value)
+    }
+  },
 })
 
 // Handle search input updates
@@ -124,15 +149,30 @@ const onKeydown = (event: Event) => {
   // Find exact match first (case-insensitive)
   const exactMatch = props.items.find(item => item.key.toLowerCase() === search)
   if (exactMatch) {
-    // Set value but let Tab proceed naturally for focus change
-    internalValue.value = exactMatch.key
+    // In multiple mode, add to selection; in single mode, replace
+    if (props.multiple) {
+      const current = Array.isArray(internalValue.value) ? internalValue.value : []
+      if (!current.includes(exactMatch.key)) {
+        internalValue.value = [...current, exactMatch.key]
+      }
+    } else {
+      internalValue.value = exactMatch.key
+    }
     searchText.value = ''
     return
   }
 
   // Check if there's only one filtered result
   if (sortedFilteredItems.value.length === 1) {
-    internalValue.value = sortedFilteredItems.value[0].key
+    const matchKey = sortedFilteredItems.value[0].key
+    if (props.multiple) {
+      const current = Array.isArray(internalValue.value) ? internalValue.value : []
+      if (!current.includes(matchKey)) {
+        internalValue.value = [...current, matchKey]
+      }
+    } else {
+      internalValue.value = matchKey
+    }
     searchText.value = ''
     return
   }

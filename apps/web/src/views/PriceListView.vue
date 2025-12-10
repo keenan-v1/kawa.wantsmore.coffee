@@ -39,20 +39,26 @@
             <KeyValueAutocomplete
               v-model="filters.location"
               :items="locationOptions"
+              :favorites="settingsStore.favoritedLocations.value"
               label="Location"
               density="compact"
               clearable
               hide-details
+              multiple
+              @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
             />
           </v-col>
           <v-col cols="6" sm="3">
             <KeyValueAutocomplete
               v-model="filters.commodity"
               :items="commodityOptions"
+              :favorites="settingsStore.favoritedCommodities.value"
               label="Commodity"
               density="compact"
               clearable
               hide-details
+              multiple
+              @update:favorites="settingsStore.updateSetting('market.favoritedCommodities', $event)"
             />
           </v-col>
           <v-col cols="6" sm="3">
@@ -67,7 +73,7 @@
           </v-col>
           <v-col cols="6" sm="3">
             <v-select
-              v-model="filters.currency"
+              v-model="currencyFilter"
               :items="currencies"
               label="Currency"
               density="compact"
@@ -76,6 +82,49 @@
             />
           </v-col>
         </v-row>
+
+        <!-- Active Filters Display -->
+        <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
+          <v-chip
+            v-for="locId in filters.location"
+            :key="`location-${locId}`"
+            closable
+            size="small"
+            color="info"
+            @click:close="filters.location = filters.location.filter(l => l !== locId)"
+          >
+            {{ getLocationDisplay(locId) }}
+          </v-chip>
+          <v-chip
+            v-for="ticker in filters.commodity"
+            :key="`commodity-${ticker}`"
+            closable
+            size="small"
+            color="primary"
+            @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
+          >
+            {{ getCommodityDisplay(ticker) }}
+          </v-chip>
+          <v-chip
+            v-if="filters.category"
+            closable
+            size="small"
+            color="secondary"
+            @click:close="filters.category = null"
+          >
+            Category: {{ filters.category }}
+          </v-chip>
+          <v-chip
+            v-if="filters.currency"
+            closable
+            size="small"
+            color="warning"
+            @click:close="filters.currency = null"
+          >
+            {{ filters.currency }}
+          </v-chip>
+        </div>
+
         <v-row dense class="mt-2">
           <v-col cols="12" class="d-flex align-center justify-space-between flex-wrap ga-2">
             <div class="d-flex ga-2">
@@ -102,7 +151,7 @@
                     <v-list-item-title>Base Prices (CSV)</v-list-item-title>
                   </v-list-item>
                   <v-list-item
-                    v-if="filters.location && filters.currency"
+                    v-if="filters.location.length === 1 && filters.currency"
                     @click="exportEffectivePrices"
                   >
                     <v-list-item-title>Effective Prices (CSV)</v-list-item-title>
@@ -344,7 +393,14 @@ import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
-import { useSnackbar, useDisplayHelpers, useFormatters } from '../composables'
+import {
+  useSnackbar,
+  useDisplayHelpers,
+  useFormatters,
+  useUrlTab,
+  useUrlFilters,
+  useUrlState,
+} from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
@@ -357,26 +413,50 @@ const { formatDate, formatPrice } = useFormatters()
 const loading = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
-const search = ref('')
+
+// Search with URL deep linking
+const search = useUrlState<string | null>({
+  param: 'search',
+  defaultValue: null,
+  debounce: 150,
+})
 
 const exchanges = ref<FioExchangeResponse[]>([])
-const selectedExchange = ref<string>('')
 const prices = ref<PriceListResponse[]>([])
 const activeAdjustments = ref<PriceAdjustmentResponse[]>([])
 
+// Dynamic tab support - exchanges are loaded from API
+const exchangeCodes = computed(() => exchanges.value.map(e => e.code))
+const defaultExchange = computed(() => {
+  const userDefault = settingsStore.defaultPriceList.value
+  if (userDefault && exchanges.value.find(e => e.code === userDefault)) {
+    return userDefault
+  }
+  return exchanges.value[0]?.code ?? ''
+})
+const selectedExchange = useUrlTab({
+  validTabs: exchangeCodes,
+  defaultTab: defaultExchange,
+})
+
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
-// Filters
-const filters = ref<{
-  location: string | null
-  commodity: string | null
-  category: string | null
-  currency: Currency | null
-}>({
-  location: null,
-  commodity: null,
-  category: null,
-  currency: null,
+// Filters with URL deep linking
+const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
+  schema: {
+    location: { type: 'array' },
+    commodity: { type: 'array' },
+    category: { type: 'string' },
+    currency: { type: 'string' },
+  },
+})
+
+// Computed to handle currency filter type casting for v-select binding
+const currencyFilter = computed({
+  get: () => filters.value.currency as Currency | null,
+  set: (v: Currency | null) => {
+    filters.value.currency = v
+  },
 })
 
 // Dialogs
@@ -460,9 +540,7 @@ const headers = computed(() => {
   return base
 })
 
-const hasActiveFilters = computed(() => {
-  return Object.values(filters.value).some(v => v !== null)
-})
+// hasActiveFilters, clearFilters, and setFilter are provided by useUrlFilters
 
 // Filter options from loaded prices
 const locationOptions = computed((): KeyValueItem[] => {
@@ -507,12 +585,15 @@ const allCommodityOptions = computed((): KeyValueItem[] => {
 const filteredPrices = computed(() => {
   let result = prices.value
 
-  if (filters.value.location) {
-    result = result.filter(p => p.locationId === filters.value.location)
+  // Apply array filters (multi-select)
+  if (filters.value.location.length > 0) {
+    result = result.filter(p => filters.value.location.includes(p.locationId))
   }
-  if (filters.value.commodity) {
-    result = result.filter(p => p.commodityTicker === filters.value.commodity)
+  if (filters.value.commodity.length > 0) {
+    result = result.filter(p => filters.value.commodity.includes(p.commodityTicker))
   }
+
+  // Apply string filters (single-select)
   if (filters.value.category) {
     result = result.filter(p => getCommodityCategory(p.commodityTicker) === filters.value.category)
   }
@@ -520,6 +601,7 @@ const filteredPrices = computed(() => {
     result = result.filter(p => p.currency === filters.value.currency)
   }
 
+  // Apply search
   if (search.value) {
     const searchLower = search.value.toLowerCase()
     result = result.filter(
@@ -561,37 +643,12 @@ const canEditPrice = (price: PriceListResponse): boolean => {
   return price.source !== 'fio_exchange'
 }
 
-const setFilter = (key: keyof typeof filters.value, value: string | null) => {
-  if (key === 'currency') {
-    filters.value[key] = value as Currency | null
-  } else {
-    filters.value[key] = value
-  }
-}
-
-const clearFilters = () => {
-  filters.value = {
-    location: null,
-    commodity: null,
-    category: null,
-    currency: null,
-  }
-}
+// setFilter and clearFilters are provided by useUrlFilters
 
 const loadExchanges = async () => {
   try {
     exchanges.value = await api.fioExchanges.list()
-    // Use user's default price list if valid, otherwise use first exchange
-    const userDefault = settingsStore.defaultPriceList.value
-    if (!selectedExchange.value) {
-      if (userDefault && exchanges.value.find(e => e.code === userDefault)) {
-        selectedExchange.value = userDefault
-      } else {
-        selectedExchange.value = exchanges.value[0]?.code ?? ''
-      }
-    } else if (!exchanges.value.find(e => e.code === selectedExchange.value)) {
-      selectedExchange.value = exchanges.value[0]?.code ?? ''
-    }
+    // useUrlTab handles tab selection via URL param or computed default
   } catch (error) {
     console.error('Failed to load exchanges:', error)
     showSnackbar('Failed to load exchanges', 'error')
@@ -621,8 +678,9 @@ const loadAdjustments = async () => {
 
 const exportBasePrices = () => {
   const queryParts: string[] = []
-  if (filters.value.location)
-    queryParts.push(`location=${encodeURIComponent(filters.value.location)}`)
+  // Export supports single location filter
+  if (filters.value.location.length === 1)
+    queryParts.push(`location=${encodeURIComponent(filters.value.location[0])}`)
   if (filters.value.currency)
     queryParts.push(`currency=${encodeURIComponent(filters.value.currency)}`)
 
@@ -631,11 +689,11 @@ const exportBasePrices = () => {
 }
 
 const exportEffectivePrices = () => {
-  if (!filters.value.location || !filters.value.currency) {
-    showSnackbar('Select a location and currency to export effective prices', 'error')
+  if (filters.value.location.length !== 1 || !filters.value.currency) {
+    showSnackbar('Select exactly one location and a currency to export effective prices', 'error')
     return
   }
-  const url = `/api/prices/export/${selectedExchange.value}/${filters.value.location}/effective?currency=${filters.value.currency}`
+  const url = `/api/prices/export/${selectedExchange.value}/${filters.value.location[0]}/effective?currency=${filters.value.currency}`
   window.open(url, '_blank')
 }
 

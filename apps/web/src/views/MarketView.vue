@@ -83,6 +83,7 @@
                 density="compact"
                 clearable
                 hide-details
+                multiple
                 @update:favorites="
                   settingsStore.updateSetting('market.favoritedCommodities', $event)
                 "
@@ -107,6 +108,7 @@
                 density="compact"
                 clearable
                 hide-details
+                multiple
                 @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
               />
             </v-col>
@@ -145,6 +147,75 @@
               />
             </v-col>
           </v-row>
+          <!-- Active Filters Display -->
+          <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
+            <v-chip
+              v-if="filters.itemType"
+              closable
+              size="small"
+              :color="filters.itemType === 'sell' ? 'success' : 'warning'"
+              @click:close="filters.itemType = null"
+            >
+              {{ filters.itemType === 'sell' ? 'Sell' : 'Buy' }}
+            </v-chip>
+            <v-chip
+              v-for="ticker in filters.commodity"
+              :key="`commodity-${ticker}`"
+              closable
+              size="small"
+              color="primary"
+              @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
+            >
+              {{ getCommodityDisplay(ticker) }}
+            </v-chip>
+            <v-chip
+              v-if="filters.category"
+              closable
+              size="small"
+              color="secondary"
+              @click:close="filters.category = null"
+            >
+              Category: {{ filters.category }}
+            </v-chip>
+            <v-chip
+              v-for="locId in filters.location"
+              :key="`location-${locId}`"
+              closable
+              size="small"
+              color="info"
+              @click:close="filters.location = filters.location.filter(l => l !== locId)"
+            >
+              {{ getLocationDisplay(locId) }}
+            </v-chip>
+            <v-chip
+              v-if="filters.userName"
+              closable
+              size="small"
+              color="default"
+              @click:close="filters.userName = null"
+            >
+              User: {{ filters.userName }}
+            </v-chip>
+            <v-chip
+              v-if="filters.orderType"
+              closable
+              size="small"
+              :color="filters.orderType === 'partner' ? 'primary' : 'default'"
+              @click:close="filters.orderType = null"
+            >
+              {{ filters.orderType === 'partner' ? 'Partner' : 'Internal' }}
+            </v-chip>
+            <v-chip
+              v-if="filters.pricing"
+              closable
+              size="small"
+              :color="filters.pricing === 'custom' ? 'default' : 'info'"
+              @click:close="filters.pricing = null"
+            >
+              {{ filters.pricing === 'custom' ? 'Custom Pricing' : filters.pricing }}
+            </v-chip>
+          </div>
+
           <v-row dense class="mt-2">
             <v-col cols="12" class="d-flex align-center justify-space-between">
               <div>
@@ -593,7 +664,14 @@ import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
 import { api, type EffectivePrice } from '../services/api'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
-import { useSnackbar, useDisplayHelpers, useFormatters } from '../composables'
+import {
+  useSnackbar,
+  useDisplayHelpers,
+  useFormatters,
+  useOrderDeepLink,
+  useUrlFilters,
+  useUrlState,
+} from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
 import ReservationDialog from '../components/ReservationDialog.vue'
@@ -639,15 +717,7 @@ const getDisplayPrice = (item: MarketItem): number | null => {
   return item.price
 }
 
-interface Filters {
-  itemType: MarketItemType | null
-  commodity: string | null
-  category: string | null
-  location: string | null
-  userName: string | null
-  orderType: OrderType | null
-  pricing: string | null // 'custom' or price list code
-}
+// Filters interface removed - using useUrlFilters instead
 
 const headers = [
   {
@@ -709,15 +779,24 @@ const headers = [
 
 const marketItems = ref<MarketItem[]>([])
 const loading = ref(false)
-const search = ref('')
+
+// Search with URL deep linking
+const search = useUrlState<string | null>({
+  param: 'search',
+  defaultValue: null,
+  debounce: 150,
+})
 
 const orderDialog = ref(false)
 const orderDialogTab = ref<'buy' | 'sell'>('buy')
 
-// Order detail dialog
-const orderDetailDialog = ref(false)
-const orderDetailType = ref<'sell' | 'buy'>('sell')
-const orderDetailId = ref<number>(0)
+// Order detail dialog with deep linking
+const {
+  dialogOpen: orderDetailDialog,
+  orderType: orderDetailType,
+  orderId: orderDetailId,
+  openOrder,
+} = useOrderDeepLink()
 
 // Edit dialog
 const editDialog = ref(false)
@@ -792,15 +871,17 @@ const deleting = ref(false)
 const reserveDialog = ref(false)
 const reservingItem = ref<MarketItem | null>(null)
 
-// Filters
-const filters = ref<Filters>({
-  itemType: null,
-  commodity: null,
-  category: null,
-  location: null,
-  userName: null,
-  orderType: null,
-  pricing: null,
+// Filters with URL deep linking
+const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
+  schema: {
+    itemType: { type: 'string' },
+    commodity: { type: 'array' },
+    category: { type: 'string' },
+    location: { type: 'array' },
+    userName: { type: 'string' },
+    orderType: { type: 'string' },
+    pricing: { type: 'string' },
+  },
 })
 const filtersExpanded = ref(false)
 
@@ -872,43 +953,17 @@ const pricingOptions = computed(() => {
   return options
 })
 
-const hasActiveFilters = computed(() => {
-  return Object.values(filters.value).some(v => v !== null)
-})
-
-const clearFilters = () => {
-  filters.value = {
-    itemType: null,
-    commodity: null,
-    category: null,
-    location: null,
-    userName: null,
-    orderType: null,
-    pricing: null,
-  }
-}
-
-const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
-  if (value) {
-    filters.value[key] = value
-  }
-}
+// hasActiveFilters, clearFilters, and setFilter are provided by useUrlFilters
 
 const filteredItems = computed(() => {
   let result = marketItems.value
 
-  // Apply filters
+  // Apply string filters (single-select)
   if (filters.value.itemType) {
     result = result.filter(l => l.itemType === filters.value.itemType)
   }
-  if (filters.value.commodity) {
-    result = result.filter(l => l.commodityTicker === filters.value.commodity)
-  }
   if (filters.value.category) {
     result = result.filter(l => getCommodityCategory(l.commodityTicker) === filters.value.category)
-  }
-  if (filters.value.location) {
-    result = result.filter(l => l.locationId === filters.value.location)
   }
   if (filters.value.userName) {
     result = result.filter(l => l.userName === filters.value.userName)
@@ -922,6 +977,14 @@ const filteredItems = computed(() => {
     } else {
       result = result.filter(l => l.priceListCode === filters.value.pricing)
     }
+  }
+
+  // Apply array filters (multi-select)
+  if (filters.value.commodity.length > 0) {
+    result = result.filter(l => filters.value.commodity.includes(l.commodityTicker))
+  }
+  if (filters.value.location.length > 0) {
+    result = result.filter(l => filters.value.location.includes(l.locationId))
   }
 
   // Apply search
@@ -1017,9 +1080,7 @@ const openOrderDialog = () => {
 }
 
 const viewOrder = (item: MarketItem) => {
-  orderDetailType.value = item.itemType
-  orderDetailId.value = item.id
-  orderDetailDialog.value = true
+  openOrder(item.itemType, item.id)
 }
 
 // Handler for row clicks on the data table

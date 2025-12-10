@@ -219,6 +219,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useUrlState } from '../composables'
 import { api } from '../services/api'
 import type { Notification, NotificationType } from '../services/api'
 import { formatRelativeDate } from '../utils/dateFormat'
@@ -244,7 +245,16 @@ const expandedGroups = ref<Record<string, boolean>>({})
 const orderDetailDialog = ref(false)
 const selectedOrder = ref<{ type: 'sell' | 'buy'; id: number } | null>(null)
 
-const filter = ref<'all' | 'unread'>('all')
+const FILTER_VALUES = ['all', 'unread'] as const
+type FilterValue = (typeof FILTER_VALUES)[number]
+const filter = useUrlState<FilterValue>({
+  param: 'filter',
+  defaultValue: 'all',
+  transform: {
+    toUrl: v => (v === 'all' ? null : v), // Clean URL for default
+    fromUrl: v => (FILTER_VALUES.includes(v as FilterValue) ? (v as FilterValue) : 'all'),
+  },
+})
 const filterOptions = [
   { title: 'All', value: 'all' },
   { title: 'Unread', value: 'unread' },
