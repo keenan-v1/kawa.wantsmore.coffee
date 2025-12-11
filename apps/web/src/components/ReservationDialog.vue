@@ -1,5 +1,10 @@
 <template>
-  <v-dialog v-model="dialog" max-width="500" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="500"
+    :persistent="dialogBehavior.persistent.value"
+    :no-click-animation="dialogBehavior.noClickAnimation"
+  >
     <v-card>
       <v-card-title>
         {{ isBuying ? 'Reserve from Sell Order' : 'Fill Buy Order' }}
@@ -131,6 +136,7 @@ import { api } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useDialogBehavior } from '../composables'
 
 // MarketItem type matching what MarketView uses
 interface MarketItem {
@@ -165,6 +171,8 @@ const dialog = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
 })
+
+const dialogBehavior = useDialogBehavior({ modelValue: dialog })
 
 // Whether user is buying (reserving from a sell order) or selling (filling a buy order)
 const isBuying = computed(() => props.order?.itemType === 'sell')

@@ -1,5 +1,10 @@
 <template>
-  <v-dialog v-model="dialog" max-width="500" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="500"
+    :persistent="dialogBehavior.persistent.value"
+    :no-click-animation="dialogBehavior.noClickAnimation"
+  >
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon start>{{ isEdit ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
@@ -112,6 +117,7 @@ import type { Currency } from '@kawakawa/types'
 import { api, type PriceListDefinition, type PriceListType } from '../services/api'
 import { locationService } from '../services/locationService'
 import { useUserStore } from '../stores/user'
+import { useDialogBehavior } from '../composables'
 
 const props = defineProps<{
   modelValue: boolean
@@ -129,6 +135,8 @@ const dialog = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
 })
+
+const dialogBehavior = useDialogBehavior({ modelValue: dialog })
 
 const isEdit = computed(() => !!props.priceList)
 

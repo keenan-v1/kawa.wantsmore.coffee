@@ -31,6 +31,7 @@ export interface Role {
 export interface User {
   profileName: string
   displayName: string
+  email: string | null
   roles: Role[] // One user to many roles
   permissions: string[] // Permission IDs granted to this user based on their roles
 }

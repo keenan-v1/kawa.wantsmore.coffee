@@ -81,6 +81,15 @@ export const SETTING_DEFINITIONS = {
     description: 'How numbers are formatted (preset or custom pattern)',
   } satisfies SettingDef<string, 'string'>,
 
+  'general.closeDialogOnClickOutside': {
+    key: 'general.closeDialogOnClickOutside',
+    type: 'boolean',
+    defaultValue: false,
+    category: SETTING_CATEGORIES.GENERAL,
+    label: 'Close Dialogs on Click Outside',
+    description: 'Close dialogs and modals when clicking outside of them',
+  } satisfies SettingDef<boolean, 'boolean'>,
+
   // ==================== DISPLAY SETTINGS ====================
   'display.locationDisplayMode': {
     key: 'display.locationDisplayMode',

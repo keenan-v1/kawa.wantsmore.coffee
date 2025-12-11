@@ -18,6 +18,7 @@ vi.mock('../db/index.js', () => ({
     id: 'id',
     username: 'username',
     displayName: 'displayName',
+    email: 'email',
     passwordHash: 'passwordHash',
     updatedAt: 'updatedAt',
   },
@@ -77,6 +78,7 @@ describe('AccountController', () => {
       const mockUser = {
         username: 'testuser',
         displayName: 'Test User',
+        email: 'test@example.com',
       }
       const mockRoles = [
         { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
@@ -96,6 +98,7 @@ describe('AccountController', () => {
       expect(result).toEqual({
         profileName: 'testuser',
         displayName: 'Test User',
+        email: 'test@example.com',
         roles: [
           { id: 'member', name: 'Member', color: 'blue' },
           { id: 'lead', name: 'Lead', color: 'green' },
@@ -110,6 +113,7 @@ describe('AccountController', () => {
       const mockUser = {
         username: 'newuser',
         displayName: 'New User',
+        email: null,
       }
 
       mockSelect.where.mockResolvedValueOnce([mockUser]).mockResolvedValueOnce([])
@@ -122,6 +126,7 @@ describe('AccountController', () => {
       expect(result).toEqual({
         profileName: 'newuser',
         displayName: 'New User',
+        email: null,
         roles: [],
         permissions: [],
       })
@@ -142,6 +147,7 @@ describe('AccountController', () => {
     const mockProfileData = {
       username: 'testuser',
       displayName: 'Updated Name',
+      email: 'test@example.com',
     }
 
     beforeEach(() => {

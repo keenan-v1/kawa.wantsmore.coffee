@@ -126,6 +126,7 @@ export const mockApi = {
           user: {
             profileName: user.profileName,
             displayName: user.displayName,
+            email: null,
             roles: user.roles,
             permissions: getPermissionsForRoles(user.roles),
           },

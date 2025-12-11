@@ -145,7 +145,7 @@ pnpm format:check  # Check formatting without modifying
    - Always lint and fix all errors
    - Always format
    - Always refactor duplicate code
-   - Always split large files into more logical modules
+   - Always split large files over 1000 lines into more logical modules
    - Favor componentization over duplication
 
 4. **Run format, lint, and tests before committing**

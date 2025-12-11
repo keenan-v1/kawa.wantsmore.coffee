@@ -3,7 +3,15 @@
 // Safe to run multiple times - only seeds/syncs if database is empty
 // Order: FIO sync first (locations needed for price_lists FK), then seed
 
-import { db, client, fioCommodities, roles, permissions, rolePermissions, priceLists } from '../db/index.js'
+import {
+  db,
+  client,
+  fioCommodities,
+  roles,
+  permissions,
+  rolePermissions,
+  priceLists,
+} from '../db/index.js'
 import { sql } from 'drizzle-orm'
 import { createLogger } from '../utils/logger.js'
 import { syncCommodities } from '../services/fio/sync-commodities.js'

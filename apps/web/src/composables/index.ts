@@ -1,6 +1,11 @@
 export { useSnackbar, type SnackbarState } from './useSnackbar'
 export { useDisplayHelpers } from './useDisplayHelpers'
 export { useFormatters } from './useFormatters'
+export {
+  useDialogBehavior,
+  type UseDialogBehaviorOptions,
+  type UseDialogBehaviorReturn,
+} from './useDialogBehavior'
 
 // URL deep linking composables
 export { useUrlState, createEnumTransform, type UseUrlStateOptions } from './useUrlState'

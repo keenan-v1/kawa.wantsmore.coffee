@@ -339,7 +339,12 @@
     </v-card>
 
     <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400" persistent>
+    <v-dialog
+      v-model="deleteDialog"
+      max-width="400"
+      :persistent="deleteDialogBehavior.persistent.value"
+      :no-click-animation="deleteDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title>Delete Order</v-card-title>
         <v-card-text>
@@ -354,7 +359,12 @@
     </v-dialog>
 
     <!-- Reserve Dialog -->
-    <v-dialog v-model="reserveDialog" max-width="500" persistent>
+    <v-dialog
+      v-model="reserveDialog"
+      max-width="500"
+      :persistent="reserveDialogBehavior.persistent.value"
+      :no-click-animation="reserveDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title>
           {{ orderType === 'sell' ? 'Reserve from Order' : 'Fill Order' }}
@@ -411,7 +421,7 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import { useFormatters } from '../composables'
+import { useFormatters, useDialogBehavior } from '../composables'
 import { formatRelativeDate, formatDateTime } from '../utils/dateFormat'
 import ReservationStatusChip from './ReservationStatusChip.vue'
 
@@ -496,8 +506,10 @@ const toggleReservationExpanded = (id: number) => {
 
 // Dialog state
 const deleteDialog = ref(false)
+const deleteDialogBehavior = useDialogBehavior({ modelValue: deleteDialog })
 const deleting = ref(false)
 const reserveDialog = ref(false)
+const reserveDialogBehavior = useDialogBehavior({ modelValue: reserveDialog })
 const reserveQuantity = ref(1)
 const reserveNotes = ref('')
 const reserving = ref(false)

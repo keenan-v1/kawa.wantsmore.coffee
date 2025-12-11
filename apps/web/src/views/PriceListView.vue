@@ -296,7 +296,12 @@
     </v-card>
 
     <!-- Create/Edit Price Dialog -->
-    <v-dialog v-model="priceDialog" max-width="500" persistent>
+    <v-dialog
+      v-model="priceDialog"
+      max-width="500"
+      :persistent="priceDialogBehavior.persistent.value"
+      :no-click-animation="priceDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title>{{ editingPrice ? 'Edit Price' : 'Add Price' }}</v-card-title>
         <v-card-text>
@@ -400,6 +405,7 @@ import {
   useUrlTab,
   useUrlFilters,
   useUrlState,
+  useDialogBehavior,
 } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
@@ -461,6 +467,7 @@ const currencyFilter = computed({
 
 // Dialogs
 const priceDialog = ref(false)
+const priceDialogBehavior = useDialogBehavior({ modelValue: priceDialog })
 const deleteDialog = ref(false)
 const editingPrice = ref<PriceListResponse | null>(null)
 const deletingPrice = ref<PriceListResponse | null>(null)

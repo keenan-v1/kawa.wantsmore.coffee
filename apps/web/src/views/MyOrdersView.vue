@@ -738,7 +738,12 @@
     />
 
     <!-- Edit Sell Order Dialog -->
-    <v-dialog v-model="editSellDialog" max-width="500" persistent>
+    <v-dialog
+      v-model="editSellDialog"
+      max-width="500"
+      :persistent="editSellDialogBehavior.persistent.value"
+      :no-click-animation="editSellDialogBehavior.noClickAnimation"
+    >
       <v-card v-if="editingSellOrder">
         <v-card-title>Edit Sell Order</v-card-title>
         <v-card-text>
@@ -873,7 +878,12 @@
     </v-dialog>
 
     <!-- Edit Buy Order Dialog -->
-    <v-dialog v-model="editBuyDialog" max-width="500" persistent>
+    <v-dialog
+      v-model="editBuyDialog"
+      max-width="500"
+      :persistent="editBuyDialogBehavior.persistent.value"
+      :no-click-animation="editBuyDialogBehavior.noClickAnimation"
+    >
       <v-card v-if="editingBuyOrder">
         <v-card-title>Edit Buy Order</v-card-title>
         <v-card-text>
@@ -1043,7 +1053,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useUrlTab, useOrderDeepLink } from '../composables'
+import { useUrlTab, useOrderDeepLink, useDialogBehavior } from '../composables'
 import {
   PERMISSIONS,
   type Currency,
@@ -1179,6 +1189,7 @@ const {
 
 // Edit sell order state
 const editSellDialog = ref(false)
+const editSellDialogBehavior = useDialogBehavior({ modelValue: editSellDialog })
 const editingSellOrder = ref<SellOrderResponse | null>(null)
 const editSellFormRef = ref()
 const savingSell = ref(false)
@@ -1187,6 +1198,7 @@ const suggestedSellPrice = ref<EffectivePrice | null>(null)
 
 // Edit buy order state
 const editBuyDialog = ref(false)
+const editBuyDialogBehavior = useDialogBehavior({ modelValue: editBuyDialog })
 const editingBuyOrder = ref<BuyOrderResponse | null>(null)
 const editBuyFormRef = ref()
 const savingBuy = ref(false)

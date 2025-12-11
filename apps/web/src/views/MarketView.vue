@@ -511,7 +511,12 @@
     <OrderDialog v-model="orderDialog" :initial-tab="orderDialogTab" @created="onOrderCreated" />
 
     <!-- Edit Order Dialog -->
-    <v-dialog v-model="editDialog" max-width="500" persistent>
+    <v-dialog
+      v-model="editDialog"
+      max-width="500"
+      :persistent="editDialogBehavior.persistent.value"
+      :no-click-animation="editDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title
           >Edit {{ editingItem?.itemType === 'sell' ? 'Sell' : 'Buy' }} Order</v-card-title
@@ -671,6 +676,7 @@ import {
   useOrderDeepLink,
   useUrlFilters,
   useUrlState,
+  useDialogBehavior,
 } from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
@@ -800,6 +806,7 @@ const {
 
 // Edit dialog
 const editDialog = ref(false)
+const editDialogBehavior = useDialogBehavior({ modelValue: editDialog })
 const editingItem = ref<MarketItem | null>(null)
 const editFormRef = ref()
 const saving = ref(false)

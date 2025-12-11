@@ -12,6 +12,7 @@ import { getPermissions } from '../utils/permissionService.js'
 interface UserProfile {
   profileName: string
   displayName: string
+  email: string | null
   roles: Role[]
   permissions: string[] // Permission IDs granted to this user
 }
@@ -20,6 +21,7 @@ interface UserProfile {
 // Note: FIO credentials and display preferences are now updated via /user-settings
 interface UpdateProfileRequest {
   displayName?: string
+  email?: string | null
 }
 
 interface ChangePasswordRequest {
@@ -40,6 +42,7 @@ export class AccountController extends Controller {
       .select({
         username: users.username,
         displayName: users.displayName,
+        email: users.email,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -76,6 +79,7 @@ export class AccountController extends Controller {
     return {
       profileName: user.username,
       displayName: user.displayName,
+      email: user.email,
       roles: rolesArray,
       permissions: permissionIds,
     }
@@ -88,15 +92,22 @@ export class AccountController extends Controller {
   ): Promise<UserProfile> {
     const userId = request.user.userId
 
-    // Update user table if displayName provided
+    // Build update object
+    const updateData: { displayName?: string; email?: string | null; updatedAt: Date } = {
+      updatedAt: new Date(),
+    }
+
     if (body.displayName !== undefined) {
-      await db
-        .update(users)
-        .set({
-          displayName: body.displayName,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId))
+      updateData.displayName = body.displayName
+    }
+
+    if (body.email !== undefined) {
+      updateData.email = body.email
+    }
+
+    // Update user table if there's anything to update
+    if (body.displayName !== undefined || body.email !== undefined) {
+      await db.update(users).set(updateData).where(eq(users.id, userId))
     }
 
     // Note: FIO credentials are now updated via /user-settings endpoint

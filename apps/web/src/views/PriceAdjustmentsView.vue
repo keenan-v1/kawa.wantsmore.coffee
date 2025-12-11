@@ -199,7 +199,12 @@
     </v-card>
 
     <!-- Create/Edit Dialog -->
-    <v-dialog v-model="adjustmentDialog" max-width="600" persistent>
+    <v-dialog
+      v-model="adjustmentDialog"
+      max-width="600"
+      :persistent="adjustmentDialogBehavior.persistent.value"
+      :no-click-animation="adjustmentDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title>{{ editingAdjustment ? 'Edit Adjustment' : 'Add Adjustment' }}</v-card-title>
         <v-card-text>
@@ -358,6 +363,7 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useDialogBehavior } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
@@ -392,6 +398,7 @@ const activeFilterOptions = [
 
 // Dialogs
 const adjustmentDialog = ref(false)
+const adjustmentDialogBehavior = useDialogBehavior({ modelValue: adjustmentDialog })
 const deleteDialog = ref(false)
 const editingAdjustment = ref<PriceAdjustmentResponse | null>(null)
 const deletingAdjustment = ref<PriceAdjustmentResponse | null>(null)

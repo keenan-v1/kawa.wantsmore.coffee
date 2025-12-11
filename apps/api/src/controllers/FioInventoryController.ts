@@ -178,6 +178,26 @@ export class FioInventoryController extends Controller {
   }
 
   /**
+   * Get the unique location IDs where the user has FIO inventory
+   */
+  @Get('locations')
+  public async getStorageLocations(
+    @Request() request: { user: JwtPayload }
+  ): Promise<{ locationIds: string[] }> {
+    const userId = request.user.userId
+
+    const locations = await db
+      .selectDistinct({ locationId: fioUserStorage.locationId })
+      .from(fioUserStorage)
+      .where(eq(fioUserStorage.userId, userId))
+
+    // Filter out null locationIds and return unique list
+    const locationIds = locations.map(l => l.locationId).filter((id): id is string => id !== null)
+
+    return { locationIds }
+  }
+
+  /**
    * Get FIO inventory statistics for the current user
    */
   @Get('stats')

@@ -6,71 +6,79 @@
       {{ snackbar.message }}
     </v-snackbar>
 
-    <v-tabs v-model="activeTab" color="primary" class="mb-4">
-      <v-tab value="general">
-        <v-icon start>mdi-account-cog</v-icon>
-        General
-      </v-tab>
-      <v-tab value="security">
-        <v-icon start>mdi-shield-lock</v-icon>
-        Security
-      </v-tab>
-      <v-tab value="market">
-        <v-icon start>mdi-store</v-icon>
-        Market
-      </v-tab>
-      <v-tab value="notifications">
-        <v-icon start>mdi-bell</v-icon>
-        Notifications
-      </v-tab>
-      <v-tab value="fio">
-        <v-icon start>mdi-cloud-sync</v-icon>
-        FIO
-      </v-tab>
-      <v-tab value="discord">
-        <DiscordIcon :size="20" class="mr-2" />
-        Discord
-      </v-tab>
-      <v-spacer />
-      <v-tab value="danger" color="error">
-        <v-icon start color="error">mdi-alert-circle</v-icon>
-        <span class="text-error">Danger Zone</span>
-      </v-tab>
-    </v-tabs>
+    <div class="d-flex account-layout">
+      <!-- Vertical Tabs Navigation -->
+      <v-card class="account-nav flex-shrink-0 mr-4">
+        <v-tabs v-model="activeTab" direction="vertical" color="primary">
+          <v-tab value="general">
+            <v-icon start>mdi-account-cog</v-icon>
+            General
+          </v-tab>
+          <v-tab value="security">
+            <v-icon start>mdi-shield-lock</v-icon>
+            Security
+          </v-tab>
+          <v-tab value="interface">
+            <v-icon start>mdi-palette-outline</v-icon>
+            Interface
+          </v-tab>
+          <v-tab value="market">
+            <v-icon start>mdi-store</v-icon>
+            Market
+          </v-tab>
+          <v-tab value="notifications">
+            <v-icon start>mdi-bell</v-icon>
+            Notifications
+          </v-tab>
+          <v-tab value="fio">
+            <v-icon start>mdi-cloud-sync</v-icon>
+            FIO
+          </v-tab>
+          <v-tab value="discord">
+            <DiscordIcon :size="20" class="mr-2" />
+            Discord
+          </v-tab>
+          <v-divider class="my-2" />
+          <v-tab value="danger" color="error">
+            <v-icon start color="error">mdi-alert-circle</v-icon>
+            <span class="text-error">Danger Zone</span>
+          </v-tab>
+        </v-tabs>
+      </v-card>
 
-    <v-tabs-window v-model="activeTab">
-      <!-- General Tab -->
-      <v-tabs-window-item value="general">
-        <v-card :loading="loading">
-          <v-card-text>
-            <v-row>
-              <!-- Profile Picture Placeholder -->
-              <v-col cols="12" md="4" class="d-flex flex-column align-center justify-center">
-                <v-avatar size="150" color="grey-darken-3" class="mb-4">
-                  <v-icon size="80">mdi-account</v-icon>
-                </v-avatar>
-                <div class="text-body-2 text-medium-emphasis">Profile picture coming soon</div>
-
-                <!-- Role Chips -->
-                <div class="mt-4 text-center">
-                  <div class="text-subtitle-2 mb-2">Roles</div>
-                  <v-chip
-                    v-for="role in account.roles"
-                    :key="role.id"
-                    :color="role.color"
-                    class="ma-1"
-                    size="small"
-                  >
-                    {{ role.name }}
-                  </v-chip>
-                  <v-chip v-if="account.roles.length === 0" color="grey" size="small">
-                    No roles assigned
-                  </v-chip>
+      <!-- Tab Content -->
+      <div class="account-content flex-grow-1">
+        <v-tabs-window v-model="activeTab">
+          <!-- General Tab -->
+          <v-tabs-window-item value="general">
+            <v-card :loading="loading">
+              <v-card-text>
+                <!-- Profile Picture and Roles - Stacked on top -->
+                <div class="d-flex flex-column align-center mb-6">
+                  <v-avatar size="120" color="grey-darken-3" class="mb-3">
+                    <v-icon size="64">mdi-account</v-icon>
+                  </v-avatar>
+                  <div class="text-body-2 text-medium-emphasis mb-3">
+                    Profile picture coming soon
+                  </div>
+                  <div class="d-flex flex-wrap justify-center ga-1">
+                    <v-chip
+                      v-for="role in account.roles"
+                      :key="role.id"
+                      :color="role.color"
+                      size="small"
+                    >
+                      {{ role.name }}
+                    </v-chip>
+                    <v-chip v-if="account.roles.length === 0" color="grey" size="small">
+                      No roles assigned
+                    </v-chip>
+                  </div>
                 </div>
-              </v-col>
 
-              <!-- Profile Fields -->
-              <v-col cols="12" md="8">
+                <v-divider class="mb-6" />
+
+                <!-- Account Information -->
                 <v-form>
                   <div class="text-subtitle-1 font-weight-bold mb-3">Account Information</div>
 
@@ -94,7 +102,7 @@
                     v-model="account.displayName"
                     label="Display Name"
                     prepend-icon="mdi-card-account-details"
-                    class="mb-4"
+                    class="mb-2"
                     @blur="saveDisplayName"
                   >
                     <template #append-inner>
@@ -106,470 +114,517 @@
                     </template>
                   </v-text-field>
 
-                  <v-divider class="my-4" />
-
-                  <div class="text-subtitle-1 font-weight-bold mb-3">Display Preferences</div>
-
-                  <v-autocomplete
-                    v-model="settingsStore.timezone.value"
-                    :items="timezoneOptions"
-                    label="Timezone"
-                    prepend-icon="mdi-clock-outline"
-                    class="mb-2"
-                    @update:model-value="autoSaveSetting('general.timezone', $event)"
-                  >
-                    <template #append-inner>
-                      <v-tooltip
-                        location="top"
-                        text="Your preferred timezone for displaying dates and times"
-                      >
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-autocomplete>
-
-                  <v-select
-                    v-model="settingsStore.locationDisplayMode.value"
-                    :items="locationDisplayModes"
-                    label="Location Display Mode"
-                    prepend-icon="mdi-map-marker"
-                    class="mb-2"
-                    @update:model-value="autoSaveSetting('display.locationDisplayMode', $event)"
-                  >
-                    <template #append-inner>
-                      <v-tooltip
-                        location="top"
-                        text="How to display location names in dropdowns and tables"
-                      >
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-select>
-
-                  <v-select
-                    v-model="settingsStore.commodityDisplayMode.value"
-                    :items="commodityDisplayModes"
-                    label="Commodity Display Mode"
-                    prepend-icon="mdi-package-variant"
-                    class="mb-4"
-                    @update:model-value="autoSaveSetting('display.commodityDisplayMode', $event)"
-                  >
-                    <template #append-inner>
-                      <v-tooltip
-                        location="top"
-                        text="How to display commodity names in dropdowns and tables"
-                      >
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-select>
-
-                  <v-divider class="my-4" />
-
-                  <div class="text-subtitle-1 font-weight-bold mb-3">Formatting</div>
-
-                  <v-select
-                    v-model="datetimeFormatSelection"
-                    :items="datetimeFormatOptions"
-                    label="Datetime Format"
-                    prepend-icon="mdi-calendar-clock"
-                    class="mb-2"
-                    @update:model-value="autoSaveDatetimeFormat"
-                  >
-                    <template #append-inner>
-                      <v-tooltip location="top" text="How dates and times are displayed">
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-select>
-
                   <v-text-field
-                    v-if="datetimeFormatSelection === 'custom'"
-                    v-model="customDatetimeFormat"
-                    label="Custom Datetime Pattern"
-                    prepend-icon="mdi-pencil"
+                    v-model="account.email"
+                    label="Email"
+                    prepend-icon="mdi-email"
                     class="mb-2"
-                    @blur="autoSaveDatetimeFormat"
+                    @blur="saveEmail"
                   >
                     <template #append-inner>
-                      <v-tooltip location="top" text="Enter your custom datetime pattern">
+                      <v-tooltip location="top" text="Your email address (optional)">
                         <template #activator="{ props }">
                           <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
                         </template>
                       </v-tooltip>
                     </template>
                   </v-text-field>
-
-                  <v-expand-transition>
-                    <v-alert
-                      v-if="datetimeFormatSelection === 'custom'"
-                      type="info"
-                      variant="tonal"
-                      density="compact"
-                      class="mb-4"
-                    >
-                      <div class="text-subtitle-2 mb-2">Datetime Format Tokens</div>
-                      <v-row dense>
-                        <v-col cols="12" sm="6">
-                          <div class="text-caption">
-                            <strong>Date:</strong><br />
-                            YYYY - 4-digit year (2024)<br />
-                            YY - 2-digit year (24)<br />
-                            MM - Month (01-12)<br />
-                            MMM - Month short (Jan)<br />
-                            MMMM - Month full (January)<br />
-                            DD - Day (01-31)<br />
-                            D - Day (1-31)<br />
-                            ddd - Day short (Mon)<br />
-                            dddd - Day full (Monday)
-                          </div>
-                        </v-col>
-                        <v-col cols="12" sm="6">
-                          <div class="text-caption">
-                            <strong>Time:</strong><br />
-                            HH - Hour 24h (00-23)<br />
-                            hh - Hour 12h (01-12)<br />
-                            mm - Minute (00-59)<br />
-                            ss - Second (00-59)<br />
-                            A - AM/PM<br />
-                            a - am/pm<br /><br />
-                            <strong>Examples:</strong><br />
-                            YYYY-MM-DD HH:mm → 2024-01-15 14:30<br />
-                            DD/MM/YYYY hh:mm A → 15/01/2024 02:30 PM
-                          </div>
-                        </v-col>
-                      </v-row>
-                    </v-alert>
-                  </v-expand-transition>
-
-                  <v-select
-                    v-model="numberFormatSelection"
-                    :items="numberFormatOptions"
-                    label="Number Format"
-                    prepend-icon="mdi-numeric"
-                    class="mb-2"
-                    @update:model-value="autoSaveNumberFormat"
-                  >
-                    <template #append-inner>
-                      <v-tooltip location="top" text="How numbers are formatted">
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-select>
-
-                  <v-text-field
-                    v-if="numberFormatSelection === 'custom'"
-                    v-model="customNumberFormat"
-                    label="Custom Number Format"
-                    prepend-icon="mdi-pencil"
-                    class="mb-2"
-                    @blur="autoSaveNumberFormat"
-                  >
-                    <template #append-inner>
-                      <v-tooltip
-                        location="top"
-                        text="Format: [thousands separator][decimal separator]"
-                      >
-                        <template #activator="{ props }">
-                          <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                        </template>
-                      </v-tooltip>
-                    </template>
-                  </v-text-field>
-
-                  <v-expand-transition>
-                    <v-alert
-                      v-if="numberFormatSelection === 'custom'"
-                      type="info"
-                      variant="tonal"
-                      density="compact"
-                      class="mb-4"
-                    >
-                      <div class="text-subtitle-2 mb-2">Number Format Options</div>
-                      <div class="text-caption">
-                        <strong>Format:</strong> [thousands][decimal]<br />
-                        Thousands separator: <code>,</code> <code>.</code> <code>_</code> (space) or
-                        none<br />
-                        Decimal separator: <code>.</code> or <code>,</code><br /><br />
-                        <strong>Examples:</strong><br />
-                        <code>,.</code> → 1,234.56 (US style)<br />
-                        <code>.,</code> → 1.234,56 (EU style)<br />
-                        <code>_,</code> → 1 234,56 (SI with space)
-                      </div>
-                    </v-alert>
-                  </v-expand-transition>
                 </v-form>
-              </v-col>
-            </v-row>
-          </v-card-text>
-        </v-card>
-      </v-tabs-window-item>
+              </v-card-text>
+            </v-card>
+          </v-tabs-window-item>
 
-      <!-- Security Tab -->
-      <v-tabs-window-item value="security">
-        <v-card :loading="loading" max-width="500">
-          <v-card-title>
-            <v-icon start>mdi-lock</v-icon>
-            Change Password
-          </v-card-title>
-          <v-card-text>
-            <v-form>
-              <v-text-field
-                v-model="passwordForm.current"
-                label="Current Password"
-                type="password"
-                prepend-icon="mdi-lock"
-                class="mb-2"
-              />
-              <v-text-field
-                v-model="passwordForm.new"
-                label="New Password"
-                type="password"
-                prepend-icon="mdi-lock-outline"
-                hint="Minimum 8 characters"
-                class="mb-2"
-              />
-              <v-text-field
-                v-model="passwordForm.confirm"
-                label="Confirm New Password"
-                type="password"
-                prepend-icon="mdi-lock-check"
-              />
-            </v-form>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn
-              color="primary"
-              variant="flat"
-              size="large"
-              prepend-icon="mdi-lock-reset"
-              :loading="changingPassword"
-              :disabled="changingPassword || loading"
-              @click="changePassword"
-            >
-              Update Password
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Market Tab -->
-      <v-tabs-window-item value="market">
-        <v-card :loading="loading">
-          <v-card-text>
-            <div class="text-subtitle-1 font-weight-bold mb-3">Currency & Pricing</div>
-
-            <v-select
-              v-model="settingsStore.preferredCurrency.value"
-              :items="currencies"
-              label="Preferred Currency"
-              prepend-icon="mdi-currency-usd"
-              class="mb-2"
-              @update:model-value="autoSaveSetting('market.preferredCurrency', $event)"
-            >
-              <template #append-inner>
-                <v-tooltip
-                  location="top"
-                  text="Default currency for displaying and entering prices"
-                >
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-select>
-
-            <v-autocomplete
-              v-model="settingsStore.defaultPriceList.value"
-              :items="priceListOptions"
-              :loading="loadingPriceLists"
-              label="Default Price List"
-              prepend-icon="mdi-clipboard-list"
-              class="mb-4"
-              clearable
-              @update:model-value="autoSaveSetting('market.defaultPriceList', $event)"
-            >
-              <template #append-inner>
-                <v-tooltip
-                  location="top"
-                  text="Price list used for price suggestions in order forms"
-                >
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-autocomplete>
-
-            <v-switch
-              v-model="settingsStore.automaticPricing.value"
-              label="Automatic Pricing"
-              color="primary"
-              hide-details
-              class="mb-2"
-              @update:model-value="autoSaveSetting('market.automaticPricing', $event)"
-            >
-              <template #prepend>
-                <v-icon>mdi-auto-fix</v-icon>
-              </template>
-              <template #append>
-                <v-tooltip
-                  location="top"
-                  text="Use your default price list for new orders instead of entering a fixed price"
-                >
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-switch>
-
-            <v-divider class="my-4" />
-
-            <div class="text-subtitle-1 font-weight-bold mb-3">Favorites</div>
-
-            <v-autocomplete
-              v-model="settingsStore.favoritedLocations.value"
-              :items="locationOptions"
-              :loading="loadingLocations"
-              label="Favorite Locations"
-              prepend-icon="mdi-star-outline"
-              multiple
-              chips
-              closable-chips
-              class="mb-4"
-              @update:model-value="autoSaveSetting('market.favoritedLocations', $event)"
-            >
-              <template #append-inner>
-                <v-tooltip location="top" text="Locations that appear first in dropdown menus">
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-autocomplete>
-
-            <v-autocomplete
-              v-model="settingsStore.favoritedCommodities.value"
-              :items="commodityOptions"
-              :loading="loadingCommodities"
-              label="Favorite Commodities"
-              prepend-icon="mdi-star-outline"
-              multiple
-              chips
-              closable-chips
-              class="mb-4"
-              @update:model-value="autoSaveSetting('market.favoritedCommodities', $event)"
-            >
-              <template #append-inner>
-                <v-tooltip location="top" text="Commodities that appear first in dropdown menus">
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-autocomplete>
-          </v-card-text>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Notifications Tab -->
-      <v-tabs-window-item value="notifications">
-        <v-card :loading="loading">
-          <v-card-text>
-            <div class="text-subtitle-1 font-weight-bold mb-3">Browser Notifications</div>
-
-            <div class="d-flex align-center mb-2">
-              <v-switch
-                v-model="browserNotificationsEnabled"
-                color="primary"
-                hide-details
-                @change="handleBrowserNotificationToggle"
-              >
-                <template #prepend>
-                  <v-icon>mdi-bell-ring</v-icon>
-                </template>
-              </v-switch>
-              <div class="ml-2">
-                <div class="text-body-2">Enable Browser Notifications</div>
-                <div class="text-caption text-medium-emphasis">
-                  {{ browserNotificationStatus }}
-                </div>
-              </div>
-            </div>
-
-            <v-divider class="my-4" />
-
-            <div class="text-subtitle-1 font-weight-bold mb-3">Order Notifications</div>
-
-            <v-switch
-              v-model="settingsStore.reservationPlacedNotification.value"
-              label="Reservation Placed"
-              color="primary"
-              hide-details
-              class="mb-2"
-              @update:model-value="autoSaveSetting('notifications.reservationPlaced', $event)"
-            >
-              <template #prepend>
-                <v-icon>mdi-cart-plus</v-icon>
-              </template>
-              <template #append>
-                <v-tooltip
-                  location="top"
-                  text="Notify when someone places a reservation on your order"
-                >
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-switch>
-
-            <v-switch
-              v-model="settingsStore.reservationStatusChangeNotification.value"
-              label="Status Changes"
-              color="primary"
-              hide-details
-              class="mb-2"
-              @update:model-value="autoSaveSetting('notifications.reservationStatusChange', $event)"
-            >
-              <template #prepend>
-                <v-icon>mdi-swap-horizontal</v-icon>
-              </template>
-              <template #append>
-                <v-tooltip location="top" text="Notify when reservation status changes">
-                  <template #activator="{ props }">
-                    <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
-                  </template>
-                </v-tooltip>
-              </template>
-            </v-switch>
-          </v-card-text>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- FIO Integration Tab -->
-      <v-tabs-window-item value="fio">
-        <v-row>
-          <!-- FIO Settings Card -->
-          <v-col cols="12" md="6">
+          <!-- Security Tab -->
+          <v-tabs-window-item value="security">
             <v-card :loading="loading">
               <v-card-title>
-                <v-icon start>mdi-cog</v-icon>
-                FIO Settings
+                <v-icon start>mdi-lock</v-icon>
+                Change Password
               </v-card-title>
               <v-card-text>
+                <v-form>
+                  <v-text-field
+                    v-model="passwordForm.current"
+                    label="Current Password"
+                    type="password"
+                    prepend-icon="mdi-lock"
+                    class="mb-2"
+                  />
+                  <v-text-field
+                    v-model="passwordForm.new"
+                    label="New Password"
+                    type="password"
+                    prepend-icon="mdi-lock-outline"
+                    hint="Minimum 8 characters"
+                    class="mb-2"
+                  />
+                  <v-text-field
+                    v-model="passwordForm.confirm"
+                    label="Confirm New Password"
+                    type="password"
+                    prepend-icon="mdi-lock-check"
+                  />
+                </v-form>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer />
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  size="large"
+                  prepend-icon="mdi-lock-reset"
+                  :loading="changingPassword"
+                  :disabled="changingPassword || loading"
+                  @click="changePassword"
+                >
+                  Update Password
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-tabs-window-item>
+
+          <!-- Interface Tab -->
+          <v-tabs-window-item value="interface">
+            <v-card :loading="loading">
+              <v-card-text>
+                <div class="text-subtitle-1 font-weight-bold mb-3">Display Preferences</div>
+
+                <v-autocomplete
+                  v-model="settingsStore.timezone.value"
+                  :items="timezoneOptions"
+                  label="Timezone"
+                  prepend-icon="mdi-clock-outline"
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('general.timezone', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Your preferred timezone for displaying dates and times"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-autocomplete>
+
+                <v-select
+                  v-model="settingsStore.locationDisplayMode.value"
+                  :items="locationDisplayModes"
+                  label="Location Display Mode"
+                  prepend-icon="mdi-map-marker"
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('display.locationDisplayMode', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="How to display location names in dropdowns and tables"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-select
+                  v-model="settingsStore.commodityDisplayMode.value"
+                  :items="commodityDisplayModes"
+                  label="Commodity Display Mode"
+                  prepend-icon="mdi-package-variant"
+                  class="mb-4"
+                  @update:model-value="autoSaveSetting('display.commodityDisplayMode', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="How to display commodity names in dropdowns and tables"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Formatting</div>
+
+                <v-select
+                  v-model="datetimeFormatSelection"
+                  :items="datetimeFormatOptions"
+                  label="Datetime Format"
+                  prepend-icon="mdi-calendar-clock"
+                  class="mb-2"
+                  @update:model-value="autoSaveDatetimeFormat"
+                >
+                  <template #append-inner>
+                    <v-tooltip location="top" text="How dates and times are displayed">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-text-field
+                  v-if="datetimeFormatSelection === 'custom'"
+                  v-model="customDatetimeFormat"
+                  label="Custom Datetime Pattern"
+                  prepend-icon="mdi-pencil"
+                  class="mb-2"
+                  @blur="autoSaveDatetimeFormat"
+                >
+                  <template #append-inner>
+                    <v-tooltip location="top" text="Enter your custom datetime pattern">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-text-field>
+
+                <v-expand-transition>
+                  <v-alert
+                    v-if="datetimeFormatSelection === 'custom'"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                  >
+                    <div class="text-subtitle-2 mb-2">Datetime Format Tokens</div>
+                    <v-row dense>
+                      <v-col cols="12" sm="6">
+                        <div class="text-caption">
+                          <strong>Date:</strong><br />
+                          YYYY - 4-digit year (2024)<br />
+                          YY - 2-digit year (24)<br />
+                          MM - Month (01-12)<br />
+                          MMM - Month short (Jan)<br />
+                          MMMM - Month full (January)<br />
+                          DD - Day (01-31)<br />
+                          D - Day (1-31)<br />
+                          ddd - Day short (Mon)<br />
+                          dddd - Day full (Monday)
+                        </div>
+                      </v-col>
+                      <v-col cols="12" sm="6">
+                        <div class="text-caption">
+                          <strong>Time:</strong><br />
+                          HH - Hour 24h (00-23)<br />
+                          hh - Hour 12h (01-12)<br />
+                          mm - Minute (00-59)<br />
+                          ss - Second (00-59)<br />
+                          A - AM/PM<br />
+                          a - am/pm<br /><br />
+                          <strong>Examples:</strong><br />
+                          YYYY-MM-DD HH:mm → 2024-01-15 14:30<br />
+                          DD/MM/YYYY hh:mm A → 15/01/2024 02:30 PM
+                        </div>
+                      </v-col>
+                    </v-row>
+                  </v-alert>
+                </v-expand-transition>
+
+                <v-select
+                  v-model="numberFormatSelection"
+                  :items="numberFormatOptions"
+                  label="Number Format"
+                  prepend-icon="mdi-numeric"
+                  class="mb-2"
+                  @update:model-value="autoSaveNumberFormat"
+                >
+                  <template #append-inner>
+                    <v-tooltip location="top" text="How numbers are formatted">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-text-field
+                  v-if="numberFormatSelection === 'custom'"
+                  v-model="customNumberFormat"
+                  label="Custom Number Format"
+                  prepend-icon="mdi-pencil"
+                  class="mb-2"
+                  @blur="autoSaveNumberFormat"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Format: [thousands separator][decimal separator]"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-text-field>
+
+                <v-expand-transition>
+                  <v-alert
+                    v-if="numberFormatSelection === 'custom'"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                  >
+                    <div class="text-subtitle-2 mb-2">Number Format Options</div>
+                    <div class="text-caption">
+                      <strong>Format:</strong> [thousands][decimal]<br />
+                      Thousands separator: <code>,</code> <code>.</code> <code>_</code> (space) or
+                      none<br />
+                      Decimal separator: <code>.</code> or <code>,</code><br /><br />
+                      <strong>Examples:</strong><br />
+                      <code>,.</code> → 1,234.56 (US style)<br />
+                      <code>.,</code> → 1.234,56 (EU style)<br />
+                      <code>_,</code> → 1 234,56 (SI with space)
+                    </div>
+                  </v-alert>
+                </v-expand-transition>
+
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Behaviors</div>
+
+                <v-switch
+                  v-model="settingsStore.closeDialogOnClickOutside.value"
+                  label="Close Dialogs on Click Outside"
+                  color="primary"
+                  hide-details
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('general.closeDialogOnClickOutside', $event)"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-gesture-tap</v-icon>
+                  </template>
+                  <template #append>
+                    <v-tooltip
+                      location="top"
+                      text="Close dialogs and modals when clicking outside of them"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-switch>
+              </v-card-text>
+            </v-card>
+          </v-tabs-window-item>
+
+          <!-- Market Tab -->
+          <v-tabs-window-item value="market">
+            <v-card :loading="loading">
+              <v-card-text>
+                <div class="text-subtitle-1 font-weight-bold mb-3">Currency & Pricing</div>
+
+                <v-select
+                  v-model="settingsStore.preferredCurrency.value"
+                  :items="currencies"
+                  label="Preferred Currency"
+                  prepend-icon="mdi-currency-usd"
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('market.preferredCurrency', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Default currency for displaying and entering prices"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-autocomplete
+                  v-model="settingsStore.defaultPriceList.value"
+                  :items="priceListOptions"
+                  :loading="loadingPriceLists"
+                  label="Default Price List"
+                  prepend-icon="mdi-clipboard-list"
+                  class="mb-4"
+                  clearable
+                  @update:model-value="autoSaveSetting('market.defaultPriceList', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Price list used for price suggestions in order forms"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-autocomplete>
+
+                <v-switch
+                  v-model="settingsStore.automaticPricing.value"
+                  label="Automatic Pricing"
+                  color="primary"
+                  hide-details
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('market.automaticPricing', $event)"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-auto-fix</v-icon>
+                  </template>
+                  <template #append>
+                    <v-tooltip
+                      location="top"
+                      text="Use your default price list for new orders instead of entering a fixed price"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-switch>
+
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Favorites</div>
+
+                <v-autocomplete
+                  v-model="settingsStore.favoritedLocations.value"
+                  :items="locationOptions"
+                  :loading="loadingLocations"
+                  label="Favorite Locations"
+                  prepend-icon="mdi-star-outline"
+                  multiple
+                  chips
+                  closable-chips
+                  class="mb-4"
+                  @update:model-value="autoSaveSetting('market.favoritedLocations', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip location="top" text="Locations that appear first in dropdown menus">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-autocomplete>
+
+                <v-autocomplete
+                  v-model="settingsStore.favoritedCommodities.value"
+                  :items="commodityOptions"
+                  :loading="loadingCommodities"
+                  label="Favorite Commodities"
+                  prepend-icon="mdi-star-outline"
+                  multiple
+                  chips
+                  closable-chips
+                  class="mb-4"
+                  @update:model-value="autoSaveSetting('market.favoritedCommodities', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Commodities that appear first in dropdown menus"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-autocomplete>
+              </v-card-text>
+            </v-card>
+          </v-tabs-window-item>
+
+          <!-- Notifications Tab -->
+          <v-tabs-window-item value="notifications">
+            <v-card :loading="loading">
+              <v-card-text>
+                <div class="text-subtitle-1 font-weight-bold mb-3">Browser Notifications</div>
+
+                <div class="d-flex align-center mb-2">
+                  <v-switch
+                    v-model="browserNotificationsEnabled"
+                    color="primary"
+                    hide-details
+                    @change="handleBrowserNotificationToggle"
+                  >
+                    <template #prepend>
+                      <v-icon>mdi-bell-ring</v-icon>
+                    </template>
+                  </v-switch>
+                  <div class="ml-2">
+                    <div class="text-body-2">Enable Browser Notifications</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ browserNotificationStatus }}
+                    </div>
+                  </div>
+                </div>
+
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Order Notifications</div>
+
+                <v-switch
+                  v-model="settingsStore.reservationPlacedNotification.value"
+                  label="Reservation Placed"
+                  color="primary"
+                  hide-details
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('notifications.reservationPlaced', $event)"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-cart-plus</v-icon>
+                  </template>
+                  <template #append>
+                    <v-tooltip
+                      location="top"
+                      text="Notify when someone places a reservation on your order"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-switch>
+
+                <v-switch
+                  v-model="settingsStore.reservationStatusChangeNotification.value"
+                  label="Status Changes"
+                  color="primary"
+                  hide-details
+                  class="mb-2"
+                  @update:model-value="
+                    autoSaveSetting('notifications.reservationStatusChange', $event)
+                  "
+                >
+                  <template #prepend>
+                    <v-icon>mdi-swap-horizontal</v-icon>
+                  </template>
+                  <template #append>
+                    <v-tooltip location="top" text="Notify when reservation status changes">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-switch>
+              </v-card-text>
+            </v-card>
+          </v-tabs-window-item>
+
+          <!-- FIO Integration Tab -->
+          <v-tabs-window-item value="fio">
+            <v-card :loading="loading || loadingFio">
+              <v-card-text>
+                <!-- FIO Settings -->
+                <div class="text-subtitle-1 font-weight-bold mb-3">FIO Credentials</div>
+
                 <v-form>
                   <v-text-field
                     v-model="fioUsername"
@@ -577,6 +632,7 @@
                     prepend-icon="mdi-game-controller"
                     hint="Your Prosperous Universe username"
                     class="mb-2"
+                    @blur="saveFioUsername"
                   />
                   <v-text-field
                     v-model="fioApiKey"
@@ -597,97 +653,77 @@
                     persistent-hint
                     class="mb-4"
                     @click:append-inner="showFioApiKey = !showFioApiKey"
-                  />
-
-                  <v-divider class="my-4" />
-
-                  <div class="text-subtitle-2 mb-3">Sync Preferences</div>
-
-                  <v-switch
-                    v-model="settingsStore.fioAutoSync.value"
-                    label="Auto Sync"
-                    color="primary"
-                    hide-details
-                    class="mb-2"
-                  >
-                    <template #prepend>
-                      <v-icon>mdi-sync-circle</v-icon>
-                    </template>
-                  </v-switch>
-                  <div class="text-caption text-medium-emphasis mb-4 ml-10">
-                    Automatically sync your inventory every 3 hours
-                  </div>
-
-                  <v-text-field
-                    v-model="excludedLocationsText"
-                    label="Excluded Locations"
-                    prepend-icon="mdi-map-marker-off"
-                    hint="Comma-separated list of location IDs or names to exclude (e.g., UV-351a, Katoa)"
-                    persistent-hint
+                    @blur="saveFioApiKey"
                   />
                 </v-form>
-              </v-card-text>
-              <v-card-actions>
-                <v-spacer />
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  size="large"
-                  prepend-icon="mdi-content-save"
-                  :loading="savingFio"
-                  :disabled="savingFio || loading"
-                  @click="saveFioSettings"
-                >
-                  Save FIO Settings
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-col>
 
-          <!-- FIO Actions Card -->
-          <v-col cols="12" md="6">
-            <v-card :loading="loadingFio">
-              <v-card-title>
-                <v-icon start>mdi-sync</v-icon>
-                Sync Actions
-              </v-card-title>
-              <v-card-text>
-                <p class="text-body-2 mb-4">
-                  Sync your inventory data from FIO or clear all synced data.
-                </p>
-                <v-row>
-                  <v-col cols="6">
-                    <v-btn
-                      color="primary"
-                      block
-                      :loading="syncing"
-                      :disabled="syncing || clearing || !settingsStore.hasFioCredentials.value"
-                      @click="syncFio"
-                    >
-                      <v-icon start>mdi-cloud-download</v-icon>
-                      Sync Now
-                    </v-btn>
-                  </v-col>
-                  <v-col cols="6">
-                    <v-btn
-                      color="error"
-                      variant="outlined"
-                      block
-                      :loading="clearing"
-                      :disabled="syncing || clearing || fioStats.totalItems === 0"
-                      @click="confirmClearFio"
-                    >
-                      <v-icon start>mdi-delete</v-icon>
-                      Clear Data
-                    </v-btn>
-                  </v-col>
-                </v-row>
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Sync Preferences</div>
+
+                <v-switch
+                  v-model="settingsStore.fioAutoSync.value"
+                  label="Auto Sync"
+                  color="primary"
+                  hide-details
+                  class="mb-2"
+                  @update:model-value="autoSaveSetting('fio.autoSync', $event)"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-sync-circle</v-icon>
+                  </template>
+                </v-switch>
+                <div class="text-caption text-medium-emphasis mb-4 ml-10">
+                  Automatically sync your inventory every 3 hours
+                </div>
+
+                <v-autocomplete
+                  v-model="settingsStore.fioExcludedLocations.value"
+                  :items="sortedLocationOptions"
+                  :loading="loadingLocations"
+                  label="Excluded Locations"
+                  prepend-icon="mdi-map-marker-off"
+                  item-props
+                  multiple
+                  chips
+                  closable-chips
+                  hint="Locations to exclude from FIO sync"
+                  persistent-hint
+                  class="mb-4"
+                  @update:model-value="autoSaveSetting('fio.excludedLocations', $event)"
+                />
+
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">Sync Actions</div>
+
+                <div class="d-flex ga-2 flex-wrap mb-4">
+                  <v-btn
+                    color="primary"
+                    :loading="syncing"
+                    :disabled="syncing || clearing || !settingsStore.hasFioCredentials.value"
+                    @click="syncFio"
+                  >
+                    <v-icon start>mdi-cloud-download</v-icon>
+                    Sync Now
+                  </v-btn>
+                  <v-btn
+                    color="error"
+                    variant="outlined"
+                    :loading="clearing"
+                    :disabled="syncing || clearing || fioStats.totalItems === 0"
+                    @click="confirmClearFio"
+                  >
+                    <v-icon start>mdi-delete</v-icon>
+                    Clear Data
+                  </v-btn>
+                </div>
 
                 <v-alert
                   v-if="!settingsStore.hasFioCredentials.value"
                   type="info"
                   variant="tonal"
-                  class="mt-4"
+                  class="mb-4"
                   density="compact"
                 >
                   Configure your FIO API key to enable syncing.
@@ -697,7 +733,7 @@
                   v-if="syncResult"
                   :type="syncResult.success ? 'success' : 'error'"
                   variant="tonal"
-                  class="mt-4"
+                  class="mb-4"
                   closable
                   @click:close="syncResult = null"
                 >
@@ -707,117 +743,75 @@
                   </template>
                   <template v-else> Sync failed: {{ syncResult.errors.join(', ') }} </template>
                 </v-alert>
-              </v-card-text>
-            </v-card>
-          </v-col>
 
-          <!-- FIO Stats Card -->
-          <v-col cols="12">
-            <v-card :loading="loadingFio">
-              <v-card-title>
-                <v-icon start>mdi-chart-box</v-icon>
-                FIO Statistics
-              </v-card-title>
-              <v-card-text>
-                <v-row>
-                  <v-col cols="6" sm="4" md="2">
-                    <div class="text-center">
-                      <div class="text-h4 font-weight-bold">{{ fioStats.totalItems }}</div>
-                      <div class="text-caption text-medium-emphasis">Total Items</div>
-                    </div>
-                  </v-col>
-                  <v-col cols="6" sm="4" md="2">
-                    <div class="text-center">
-                      <div class="text-h4 font-weight-bold">
-                        {{ formatNumber(fioStats.totalQuantity) }}
-                      </div>
-                      <div class="text-caption text-medium-emphasis">Total Quantity</div>
-                    </div>
-                  </v-col>
-                  <v-col cols="6" sm="4" md="2">
-                    <div class="text-center">
-                      <div class="text-h4 font-weight-bold">{{ fioStats.uniqueCommodities }}</div>
-                      <div class="text-caption text-medium-emphasis">Unique Commodities</div>
-                    </div>
-                  </v-col>
-                  <v-col cols="6" sm="4" md="2">
-                    <div class="text-center">
-                      <div class="text-h4 font-weight-bold">{{ fioStats.storageLocations }}</div>
-                      <div class="text-caption text-medium-emphasis">Storage Locations</div>
-                    </div>
-                  </v-col>
-                  <v-col cols="6" sm="4" md="4">
-                    <div class="text-center">
-                      <div class="text-body-1 font-weight-bold">
-                        {{ formatDateTime(fioStats.newestSyncTime) }}
-                      </div>
-                      <div class="text-caption text-medium-emphasis">Last Synced</div>
-                    </div>
-                  </v-col>
-                </v-row>
-
+                <!-- FIO Statistics -->
                 <v-divider class="my-4" />
 
-                <v-row>
-                  <v-col cols="12" sm="6">
-                    <div class="d-flex align-center">
-                      <v-icon
-                        class="mr-2"
-                        :color="getDataAgeInfo(fioStats.oldestFioUploadTime).color"
-                      >
-                        {{ getDataAgeInfo(fioStats.oldestFioUploadTime).icon }}
-                      </v-icon>
-                      <div>
-                        <div class="text-body-2">Oldest FIO Data</div>
-                        <div class="text-caption text-medium-emphasis">
-                          {{ formatDateTime(fioStats.oldestFioUploadTime) }}
-                        </div>
-                        <div v-if="fioStats.oldestFioUploadLocation" class="text-caption">
-                          <v-chip size="x-small" class="mr-1">{{
-                            fioStats.oldestFioUploadLocation.storageType
-                          }}</v-chip>
-                          <span class="text-medium-emphasis">{{
-                            fioStats.oldestFioUploadLocation.locationNaturalId || 'Unknown'
-                          }}</span>
-                        </div>
+                <div class="text-subtitle-1 font-weight-bold mb-3">Statistics</div>
+
+                <div class="d-flex flex-wrap ga-6 mb-4 justify-center">
+                  <div class="text-center">
+                    <div class="text-h5 font-weight-bold">{{ fioStats.totalItems }}</div>
+                    <div class="text-caption text-medium-emphasis">Items</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-h5 font-weight-bold">
+                      {{ formatNumber(fioStats.totalQuantity) }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">Quantity</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-h5 font-weight-bold">{{ fioStats.uniqueCommodities }}</div>
+                    <div class="text-caption text-medium-emphasis">Commodities</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-h5 font-weight-bold">{{ fioStats.storageLocations }}</div>
+                    <div class="text-caption text-medium-emphasis">Locations</div>
+                  </div>
+                </div>
+
+                <div class="d-flex flex-wrap ga-4 justify-center">
+                  <div class="d-flex align-center">
+                    <v-icon
+                      class="mr-2"
+                      size="small"
+                      :color="getDataAgeInfo(fioStats.oldestFioUploadTime).color"
+                    >
+                      {{ getDataAgeInfo(fioStats.oldestFioUploadTime).icon }}
+                    </v-icon>
+                    <div>
+                      <div class="text-body-2">
+                        Oldest: {{ formatDateTime(fioStats.oldestFioUploadTime) }}
                       </div>
                     </div>
-                  </v-col>
-                  <v-col cols="12" sm="6">
-                    <div class="d-flex align-center">
-                      <v-icon
-                        class="mr-2"
-                        :color="getDataAgeInfo(fioStats.newestFioUploadTime).color"
-                      >
-                        {{ getDataAgeInfo(fioStats.newestFioUploadTime).icon }}
-                      </v-icon>
-                      <div>
-                        <div class="text-body-2">Newest FIO Data</div>
-                        <div class="text-caption text-medium-emphasis">
-                          {{ formatDateTime(fioStats.newestFioUploadTime) }}
-                        </div>
+                  </div>
+                  <div class="d-flex align-center">
+                    <v-icon
+                      class="mr-2"
+                      size="small"
+                      :color="getDataAgeInfo(fioStats.newestFioUploadTime).color"
+                    >
+                      {{ getDataAgeInfo(fioStats.newestFioUploadTime).icon }}
+                    </v-icon>
+                    <div>
+                      <div class="text-body-2">
+                        Newest: {{ formatDateTime(fioStats.newestFioUploadTime) }}
                       </div>
                     </div>
-                  </v-col>
-                </v-row>
+                  </div>
+                </div>
               </v-card-text>
             </v-card>
-          </v-col>
-        </v-row>
-      </v-tabs-window-item>
+          </v-tabs-window-item>
 
-      <!-- Discord Tab -->
-      <v-tabs-window-item value="discord">
-        <v-row>
-          <v-col cols="12" md="6">
+          <!-- Discord Tab -->
+          <v-tabs-window-item value="discord">
             <v-card :loading="loadingDiscord">
-              <v-card-title class="d-flex align-center">
-                <DiscordIcon :size="24" class="mr-2 text-indigo" />
-                Discord Connection
-              </v-card-title>
               <v-card-text>
                 <!-- Not Connected State -->
                 <template v-if="!discordStatus?.connected">
+                  <div class="text-subtitle-1 font-weight-bold mb-3">Connect Discord</div>
+
                   <v-alert type="info" variant="tonal" class="mb-4">
                     Connect your Discord account to enable features like auto-approval and server
                     integration.
@@ -867,9 +861,7 @@
                     </template>
                   </v-alert>
 
-                  <v-divider class="my-4" />
-
-                  <div class="d-flex ga-2 flex-wrap">
+                  <div class="d-flex ga-2 flex-wrap mb-4">
                     <v-btn
                       color="primary"
                       variant="outlined"
@@ -891,18 +883,12 @@
                     </v-btn>
                   </div>
                 </template>
-              </v-card-text>
-            </v-card>
-          </v-col>
 
-          <v-col cols="12" md="6">
-            <v-card>
-              <v-card-title>
-                <v-icon start>mdi-information</v-icon>
-                About Discord Integration
-              </v-card-title>
-              <v-card-text>
-                <v-list density="compact">
+                <v-divider class="my-4" />
+
+                <div class="text-subtitle-1 font-weight-bold mb-3">About Discord Integration</div>
+
+                <v-list density="compact" class="bg-transparent">
                   <v-list-item prepend-icon="mdi-account-check">
                     <v-list-item-title>Auto-Approval</v-list-item-title>
                     <v-list-item-subtitle>
@@ -925,65 +911,67 @@
                 </v-list>
               </v-card-text>
             </v-card>
-          </v-col>
-        </v-row>
-      </v-tabs-window-item>
+          </v-tabs-window-item>
 
-      <!-- Danger Zone Tab -->
-      <v-tabs-window-item value="danger">
-        <v-card variant="outlined" color="error">
-          <v-card-title class="text-error">
-            <v-icon start color="error">mdi-alert-circle</v-icon>
-            Danger Zone
-          </v-card-title>
-          <v-card-text>
-            <v-alert type="warning" variant="tonal" class="mb-6">
-              <strong>Warning:</strong> Actions in this section are permanent and cannot be undone.
-              Please proceed with caution.
-            </v-alert>
-
-            <v-card variant="outlined" class="mb-4">
-              <v-card-title class="text-subtitle-1">
-                <v-icon start>mdi-account-remove</v-icon>
-                Delete Account
+          <!-- Danger Zone Tab -->
+          <v-tabs-window-item value="danger">
+            <v-card variant="outlined" color="error">
+              <v-card-title class="text-error">
+                <v-icon start color="error">mdi-alert-circle</v-icon>
+                Danger Zone
               </v-card-title>
               <v-card-text>
-                <p class="mb-4">
-                  Once you delete your account, there is no going back. This will permanently
-                  delete:
-                </p>
-                <v-list density="compact" class="mb-4">
-                  <v-list-item prepend-icon="mdi-account">
-                    <v-list-item-title>Your account and profile information</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item prepend-icon="mdi-connection">
-                    <v-list-item-title>Any external connections, such as Discord</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item prepend-icon="mdi-cart">
-                    <v-list-item-title>All your sell and buy orders</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item prepend-icon="mdi-package-variant">
-                    <v-list-item-title>Your FIO inventory data</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item prepend-icon="mdi-database">
-                    <v-list-item-title>All other associated data</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-                <v-btn
-                  color="error"
-                  variant="flat"
-                  size="large"
-                  prepend-icon="mdi-delete-forever"
-                  @click="deleteAccountDialog = true"
-                >
-                  Delete My Account
-                </v-btn>
+                <v-alert type="warning" variant="tonal" class="mb-6">
+                  <strong>Warning:</strong> Actions in this section are permanent and cannot be
+                  undone. Please proceed with caution.
+                </v-alert>
+
+                <v-card variant="outlined" class="mb-4">
+                  <v-card-title class="text-subtitle-1">
+                    <v-icon start>mdi-account-remove</v-icon>
+                    Delete Account
+                  </v-card-title>
+                  <v-card-text>
+                    <p class="mb-4">
+                      Once you delete your account, there is no going back. This will permanently
+                      delete:
+                    </p>
+                    <v-list density="compact" class="mb-4">
+                      <v-list-item prepend-icon="mdi-account">
+                        <v-list-item-title>Your account and profile information</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item prepend-icon="mdi-connection">
+                        <v-list-item-title
+                          >Any external connections, such as Discord</v-list-item-title
+                        >
+                      </v-list-item>
+                      <v-list-item prepend-icon="mdi-cart">
+                        <v-list-item-title>All your sell and buy orders</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item prepend-icon="mdi-package-variant">
+                        <v-list-item-title>Your FIO inventory data</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item prepend-icon="mdi-database">
+                        <v-list-item-title>All other associated data</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                    <v-btn
+                      color="error"
+                      variant="flat"
+                      size="large"
+                      prepend-icon="mdi-delete-forever"
+                      @click="deleteAccountDialog = true"
+                    >
+                      Delete My Account
+                    </v-btn>
+                  </v-card-text>
+                </v-card>
               </v-card-text>
             </v-card>
-          </v-card-text>
-        </v-card>
-      </v-tabs-window-item>
-    </v-tabs-window>
+          </v-tabs-window-item>
+        </v-tabs-window>
+      </div>
+    </div>
 
     <!-- Clear Confirmation Dialog -->
     <v-dialog v-model="clearDialog" max-width="400">
@@ -1098,6 +1086,7 @@ const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = 
 const ACCOUNT_TABS = [
   'general',
   'security',
+  'interface',
   'market',
   'notifications',
   'fio',
@@ -1114,10 +1103,12 @@ const activeTab = useUrlTab({
 const account = ref<{
   profileName: string
   displayName: string
+  email: string | null
   roles: Role[]
 }>({
   profileName: '',
   displayName: '',
+  email: null,
   roles: [],
 })
 
@@ -1161,15 +1152,36 @@ const customNumberFormat = ref('')
 const priceListOptions = ref<{ title: string; value: string }[]>([])
 const locationOptions = ref<{ title: string; value: string }[]>([])
 const commodityOptions = ref<{ title: string; value: string }[]>([])
+const fioStorageLocationIds = ref<string[]>([])
 const loadingPriceLists = ref(false)
 const loadingLocations = ref(false)
 const loadingCommodities = ref(false)
+
+// Sorted location options with icons: favorites (star), FIO storage (house), then alphabetical
+const sortedLocationOptions = computed(() => {
+  const favorites = new Set(settingsStore.favoritedLocations.value || [])
+  const fioStorage = new Set(fioStorageLocationIds.value || [])
+
+  return [...locationOptions.value]
+    .map(opt => {
+      const isFavorite = favorites.has(opt.value)
+      const isFioStorage = fioStorage.has(opt.value)
+      return {
+        ...opt,
+        prependIcon: isFavorite ? 'mdi-star' : isFioStorage ? 'mdi-home' : undefined,
+        priority: isFavorite ? 0 : isFioStorage ? 1 : 2,
+      }
+    })
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority
+      return a.title.localeCompare(b.title)
+    })
+})
 
 // FIO-specific state
 const fioUsername = ref('')
 const fioApiKey = ref('')
 const showFioApiKey = ref(false)
-const excludedLocationsText = ref('') // Comma-separated string for UI
 const fioStats = ref({
   totalItems: 0,
   totalQuantity: 0,
@@ -1282,7 +1294,6 @@ const passwordForm = ref({
 })
 
 const loading = ref(false)
-const savingFio = ref(false)
 const changingPassword = ref(false)
 const snackbar = ref({
   show: false,
@@ -1327,8 +1338,12 @@ const getDataAgeInfo = (dateStr: string | null): { color: string; icon: string }
 const loadFioStats = async () => {
   try {
     loadingFio.value = true
-    const stats = await api.fioInventory.getStats()
+    const [stats, storageLocations] = await Promise.all([
+      api.fioInventory.getStats(),
+      api.fioInventory.getStorageLocations(),
+    ])
     fioStats.value = stats
+    fioStorageLocationIds.value = storageLocations.locationIds
   } catch (error) {
     console.error('Failed to load FIO stats', error)
   } finally {
@@ -1406,6 +1421,7 @@ onMounted(async () => {
     account.value = {
       profileName: profile.profileName,
       displayName: profile.displayName,
+      email: profile.email ?? null,
       roles: profile.roles,
     }
     userStore.setUser(profile)
@@ -1417,8 +1433,6 @@ onMounted(async () => {
 
     // Initialize FIO settings for local editing
     fioUsername.value = settingsStore.fioUsername.value || ''
-    const excludedLocations = settingsStore.fioExcludedLocations.value
-    excludedLocationsText.value = (excludedLocations || []).join(', ')
 
     // Load FIO stats
     await loadFioStats()
@@ -1433,14 +1447,13 @@ onMounted(async () => {
       account.value = {
         profileName: cachedUser.profileName,
         displayName: cachedUser.displayName,
+        email: cachedUser.email ?? null,
         roles: cachedUser.roles,
       }
       // Settings should be loaded from cache by settings store
       initDatetimeFormat(settingsStore.datetimeFormat.value)
       initNumberFormat(settingsStore.numberFormat.value)
       fioUsername.value = settingsStore.fioUsername.value || ''
-      const excludedLocations = settingsStore.fioExcludedLocations.value
-      excludedLocationsText.value = (excludedLocations || []).join(', ')
     }
     showSnackbar('Failed to load profile from server', 'error')
   } finally {
@@ -1478,6 +1491,18 @@ const saveDisplayName = async () => {
   }
 }
 
+// Save email on blur
+const saveEmail = async () => {
+  try {
+    const profileData = { email: account.value.email }
+    const updated = await api.account.updateProfile(profileData)
+    userStore.setUser(updated)
+  } catch (error) {
+    console.error('Failed to save email', error)
+    showSnackbar('Failed to save email', 'error')
+  }
+}
+
 // Generic auto-save for a single setting
 const autoSaveSetting = async (key: string, value: unknown) => {
   try {
@@ -1512,41 +1537,27 @@ const autoSaveNumberFormat = async () => {
   }
 }
 
-const saveFioSettings = async () => {
+// Auto-save FIO username
+const saveFioUsername = async () => {
   try {
-    savingFio.value = true
+    await settingsStore.updateSettings({ 'fio.username': fioUsername.value })
+  } catch (error) {
+    console.error('Failed to save FIO username', error)
+    showSnackbar('Failed to save FIO username', 'error')
+  }
+}
 
-    // Parse excluded locations from comma-separated text
-    const excludedLocations = excludedLocationsText.value
-      .split(',')
-      .map(s => s.trim())
-      .filter(s => s.length > 0)
-
-    // Build settings update object
-    const settingsUpdate: Record<string, unknown> = {
-      'fio.username': fioUsername.value,
-      'fio.autoSync': settingsStore.fioAutoSync.value,
-      'fio.excludedLocations': excludedLocations,
-    }
-
-    // Only include fio.apiKey if user entered a new one
-    if (fioApiKey.value) {
-      settingsUpdate['fio.apiKey'] = fioApiKey.value
-    }
-
-    // Update all FIO settings via settings store
-    await settingsStore.updateSettings(settingsUpdate)
-
+// Auto-save FIO API key
+const saveFioApiKey = async () => {
+  if (!fioApiKey.value) return // Don't save empty values
+  try {
+    await settingsStore.updateSettings({ 'fio.apiKey': fioApiKey.value })
     // Clear the API key field after successful save
     fioApiKey.value = ''
     showFioApiKey.value = false
-
-    showSnackbar('FIO settings updated successfully')
   } catch (error) {
-    console.error('Failed to update FIO settings', error)
-    showSnackbar('Failed to update FIO settings', 'error')
-  } finally {
-    savingFio.value = false
+    console.error('Failed to save FIO API key', error)
+    showSnackbar('Failed to save FIO API key', 'error')
   }
 }
 
@@ -1787,3 +1798,28 @@ watch(
   { immediate: true }
 )
 </script>
+
+<style scoped>
+.account-layout {
+  max-width: 900px;
+  align-items: flex-start;
+}
+
+.account-nav {
+  width: 200px;
+  min-width: 200px;
+  position: sticky;
+  top: 80px;
+}
+
+.account-nav :deep(.v-tab) {
+  justify-content: flex-start;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.account-content {
+  min-width: 0;
+  max-width: 600px;
+}
+</style>

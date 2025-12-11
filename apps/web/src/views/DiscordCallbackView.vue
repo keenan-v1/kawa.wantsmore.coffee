@@ -52,6 +52,7 @@ const infoMessage = ref('')
 const discordAuthUserToUser = (authUser: DiscordAuthUser): User => ({
   profileName: authUser.username,
   displayName: authUser.displayName,
+  email: null,
   roles: authUser.roles,
   permissions: authUser.permissions,
 })

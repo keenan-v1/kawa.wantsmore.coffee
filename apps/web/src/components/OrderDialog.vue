@@ -1,5 +1,11 @@
 <template>
-  <v-dialog v-model="dialog" max-width="1000" width="95%" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="1000"
+    width="95%"
+    :persistent="dialogBehavior.persistent.value"
+    :no-click-animation="dialogBehavior.noClickAnimation"
+  >
     <v-card>
       <v-card-title class="pb-0">
         <v-tabs v-model="activeTab" color="primary" grow>
@@ -741,7 +747,7 @@ import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
-import { useDisplayHelpers } from '../composables'
+import { useDisplayHelpers, useDialogBehavior } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from './KeyValueAutocomplete.vue'
 import DurationDisplay from './DurationDisplay.vue'
 import PriceListDisplay from './PriceListDisplay.vue'
@@ -779,6 +785,8 @@ const dialog = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
 })
+
+const dialogBehavior = useDialogBehavior({ modelValue: dialog })
 
 const activeTab = ref<OrderTab>(props.initialTab)
 

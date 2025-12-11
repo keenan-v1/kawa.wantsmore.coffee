@@ -139,6 +139,11 @@ export const useSettingsStore = () => {
     set: (value: string) => updateSetting('general.numberFormat', value),
   })
 
+  const closeDialogOnClickOutside = computed({
+    get: () => settingsValues.value['general.closeDialogOnClickOutside'] as boolean,
+    set: (value: boolean) => updateSetting('general.closeDialogOnClickOutside', value),
+  })
+
   // Display settings
   const locationDisplayMode = computed({
     get: () => settingsValues.value['display.locationDisplayMode'] as LocationDisplayMode,
@@ -251,6 +256,7 @@ export const useSettingsStore = () => {
     timezone,
     datetimeFormat,
     numberFormat,
+    closeDialogOnClickOutside,
 
     // Typed computed properties - Display
     locationDisplayMode,

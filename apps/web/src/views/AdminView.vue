@@ -1627,7 +1627,12 @@
     </v-dialog>
 
     <!-- Create/Edit Price Adjustment Dialog -->
-    <v-dialog v-model="adjustmentDialog" max-width="600" persistent>
+    <v-dialog
+      v-model="adjustmentDialog"
+      max-width="600"
+      :persistent="adjustmentDialogBehavior.persistent.value"
+      :no-click-animation="adjustmentDialogBehavior.noClickAnimation"
+    >
       <v-card>
         <v-card-title>
           {{ editingAdjustment ? 'Edit Price Adjustment' : 'Create Price Adjustment' }}
@@ -1770,7 +1775,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useUrlTab } from '../composables'
+import { useUrlTab, useDialogBehavior } from '../composables'
 import type { Role } from '../types'
 import type {
   DiscordSettings,
@@ -2000,6 +2005,7 @@ const deletingImportConfigLoading = ref(false)
 const priceAdjustments = ref<PriceAdjustmentResponse[]>([])
 const loadingAdjustments = ref(false)
 const adjustmentDialog = ref(false)
+const adjustmentDialogBehavior = useDialogBehavior({ modelValue: adjustmentDialog })
 const editingAdjustment = ref<PriceAdjustmentResponse | null>(null)
 const adjustmentForm = ref({
   priceListCode: null as string | null,

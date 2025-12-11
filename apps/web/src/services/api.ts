@@ -41,6 +41,7 @@ interface RegisterRequest {
 
 interface UpdateProfileRequest {
   displayName?: string
+  email?: string | null
   fioUsername?: string
   fioApiKey?: string
   preferredCurrency?: Currency
@@ -1407,6 +1408,27 @@ const realApi = {
         throw new Error('Unauthorized')
       }
       throw new Error(`Failed to get FIO stats: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getFioStorageLocations: async (): Promise<{ locationIds: string[] }> => {
+    const response = await fetchWithLogging('/api/fio/inventory/locations', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      throw new Error(`Failed to get FIO storage locations: ${response.statusText}`)
     }
 
     return response.json()
@@ -3651,6 +3673,7 @@ export const api = {
     sync: () => realApi.syncFioInventory(),
     getLastSync: () => realApi.getFioLastSync(),
     getStats: () => realApi.getFioStats(),
+    getStorageLocations: () => realApi.getFioStorageLocations(),
     clear: () => realApi.clearFioInventory(),
   },
   sellOrders: {

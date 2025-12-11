@@ -7,6 +7,7 @@ import * as userSettingsService from '../services/userSettingsService.js'
 vi.mock('../db/index.js', () => ({
   db: {
     select: vi.fn(),
+    selectDistinct: vi.fn(),
     delete: vi.fn(),
     insert: vi.fn(),
   },
@@ -271,6 +272,57 @@ describe('FioInventoryController', () => {
       expect(result).toEqual({
         lastSyncedAt: null,
         fioUploadedAt: null,
+      })
+    })
+  })
+
+  describe('getStorageLocations', () => {
+    let mockSelectDistinct: any
+
+    beforeEach(() => {
+      mockSelectDistinct = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+      }
+      vi.mocked(db.selectDistinct).mockReturnValue(mockSelectDistinct)
+    })
+
+    it('should return unique location IDs where user has inventory', async () => {
+      mockSelectDistinct.where.mockResolvedValueOnce([
+        { locationId: 'BEN' },
+        { locationId: 'UV-351a' },
+        { locationId: 'MON' },
+      ])
+
+      const result = await controller.getStorageLocations(mockRequest)
+
+      expect(result).toEqual({
+        locationIds: ['BEN', 'UV-351a', 'MON'],
+      })
+      expect(db.selectDistinct).toHaveBeenCalled()
+    })
+
+    it('should filter out null location IDs', async () => {
+      mockSelectDistinct.where.mockResolvedValueOnce([
+        { locationId: 'BEN' },
+        { locationId: null },
+        { locationId: 'MON' },
+      ])
+
+      const result = await controller.getStorageLocations(mockRequest)
+
+      expect(result).toEqual({
+        locationIds: ['BEN', 'MON'],
+      })
+    })
+
+    it('should return empty array when user has no storage', async () => {
+      mockSelectDistinct.where.mockResolvedValueOnce([])
+
+      const result = await controller.getStorageLocations(mockRequest)
+
+      expect(result).toEqual({
+        locationIds: [],
       })
     })
   })

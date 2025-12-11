@@ -1,5 +1,10 @@
 <template>
-  <v-dialog v-model="dialog" max-width="900" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="900"
+    :persistent="dialogBehavior.persistent.value"
+    :no-click-animation="dialogBehavior.noClickAnimation"
+  >
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon start>mdi-google-spreadsheet</v-icon>
@@ -409,6 +414,7 @@ import {
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { useUserStore } from '../stores/user'
+import { useDialogBehavior } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from './KeyValueAutocomplete.vue'
 
 const props = defineProps<{
@@ -427,6 +433,8 @@ const dialog = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
 })
+
+const dialogBehavior = useDialogBehavior({ modelValue: dialog })
 
 // Stepper
 const step = ref(1)

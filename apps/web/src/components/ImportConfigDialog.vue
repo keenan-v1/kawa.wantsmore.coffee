@@ -1,5 +1,10 @@
 <template>
-  <v-dialog v-model="dialog" max-width="600" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="600"
+    :persistent="dialogBehavior.persistent.value"
+    :no-click-animation="dialogBehavior.noClickAnimation"
+  >
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon start>{{ isEdit ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
@@ -220,6 +225,7 @@ import {
   type ImportFormat,
   type PriceListDefinition,
 } from '../services/api'
+import { useDialogBehavior } from '../composables'
 
 const props = defineProps<{
   modelValue: boolean
@@ -236,6 +242,8 @@ const dialog = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
 })
+
+const dialogBehavior = useDialogBehavior({ modelValue: dialog })
 
 const isEdit = computed(() => !!props.config)
 
