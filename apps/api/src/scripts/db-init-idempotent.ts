@@ -3,7 +3,8 @@
 // Safe to run multiple times - only seeds/syncs if database is empty
 // Order: FIO sync first (locations needed for price_lists FK), then seed
 
-import { db, client, fioCommodities } from '../db/index.js'
+import { db, client, fioCommodities, roles, permissions, rolePermissions, priceLists } from '../db/index.js'
+import { sql } from 'drizzle-orm'
 import { createLogger } from '../utils/logger.js'
 import { syncCommodities } from '../services/fio/sync-commodities.js'
 import { syncLocations } from '../services/fio/sync-locations.js'
@@ -24,8 +25,7 @@ async function checkIfDatabaseNeedsInit(): Promise<boolean> {
 }
 
 async function runSeed() {
-  // Import seed data inline to avoid running seed.ts at module level
-  const { db, roles, permissions, rolePermissions, priceLists } = await import('../db/index.js')
+  // Uses imports from top of file
 
   log.info('Seeding roles and permissions')
 
@@ -216,20 +216,76 @@ async function runSeed() {
     ],
   }
 
-  await db.insert(roles).values(ROLES_DATA).onConflictDoNothing()
-  await db.insert(permissions).values(PERMISSIONS_DATA).onConflictDoNothing()
+  // Upsert roles (insert or update name/color)
+  await db
+    .insert(roles)
+    .values(ROLES_DATA)
+    .onConflictDoUpdate({
+      target: roles.id,
+      set: {
+        name: sql`EXCLUDED.name`,
+        color: sql`EXCLUDED.color`,
+      },
+    })
 
+  // Upsert permissions (insert or update name/description)
+  await db
+    .insert(permissions)
+    .values(PERMISSIONS_DATA)
+    .onConflictDoUpdate({
+      target: permissions.id,
+      set: {
+        name: sql`EXCLUDED.name`,
+        description: sql`EXCLUDED.description`,
+      },
+    })
+
+  // Build role permissions data
   const rolePermissionsData: { roleId: string; permissionId: string; allowed: boolean }[] = []
   for (const [roleId, permissionIds] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
     for (const permissionId of permissionIds) {
       rolePermissionsData.push({ roleId, permissionId, allowed: true })
     }
   }
+
+  // Insert role permissions if they don't exist
+  // Note: role_permissions doesn't have a unique constraint on (roleId, permissionId),
+  // so we check for existence before inserting
   if (rolePermissionsData.length > 0) {
-    await db.insert(rolePermissions).values(rolePermissionsData).onConflictDoNothing()
+    // Get existing role-permission mappings
+    const existingRolePerms = await db
+      .select({
+        roleId: rolePermissions.roleId,
+        permissionId: rolePermissions.permissionId,
+      })
+      .from(rolePermissions)
+
+    const existingSet = new Set(existingRolePerms.map(rp => `${rp.roleId}:${rp.permissionId}`))
+
+    // Filter to only new mappings
+    const newMappings = rolePermissionsData.filter(
+      rp => !existingSet.has(`${rp.roleId}:${rp.permissionId}`)
+    )
+
+    if (newMappings.length > 0) {
+      await db.insert(rolePermissions).values(newMappings)
+      log.info({ count: newMappings.length }, 'Added new role-permission mappings')
+    }
   }
 
-  await db.insert(priceLists).values(PRICE_LISTS_DATA).onConflictDoNothing()
+  // Upsert price lists
+  await db
+    .insert(priceLists)
+    .values(PRICE_LISTS_DATA)
+    .onConflictDoUpdate({
+      target: priceLists.code,
+      set: {
+        name: sql`EXCLUDED.name`,
+        description: sql`EXCLUDED.description`,
+        type: sql`EXCLUDED.type`,
+        currency: sql`EXCLUDED.currency`,
+      },
+    })
 
   log.info('Seeding complete')
 }
@@ -241,7 +297,7 @@ async function main() {
     const needsInit = await checkIfDatabaseNeedsInit()
 
     if (needsInit) {
-      log.info('Database is empty - running FIO sync then seed')
+      log.info('Database is empty - running FIO sync first')
 
       // FIO sync FIRST - seed needs locations for price_lists FK
       log.info('Syncing FIO commodities')
@@ -252,14 +308,16 @@ async function main() {
 
       log.info('Syncing FIO stations')
       await syncStations()
-
-      // Now seed (roles, permissions, price_lists)
-      await runSeed()
-
-      log.info('Database initialization complete')
     } else {
-      log.info('Database already has data - skipping initialization')
+      log.info('Database already has data - skipping FIO sync')
     }
+
+    // Always run seed - it uses upserts so it's safe to run on existing data
+    // This ensures new roles, permissions, and role-permission mappings are added
+    log.info('Running seed (upserts roles, permissions, price lists)')
+    await runSeed()
+
+    log.info('Database initialization complete')
   } finally {
     await client.end()
   }
