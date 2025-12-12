@@ -309,6 +309,21 @@
                     />
                   </template>
 
+                  <!-- Existing order alert -->
+                  <v-alert
+                    v-if="existingSellOrder"
+                    type="warning"
+                    variant="tonal"
+                    class="mb-4"
+                    density="compact"
+                  >
+                    <div class="font-weight-medium">Order already exists</div>
+                    <div class="text-caption">
+                      You have a sell order for this commodity at this location in
+                      {{ existingSellOrder.currency }}. Use the Edit button to modify it.
+                    </div>
+                  </v-alert>
+
                   <!-- Automatic Pricing Status -->
                   <div class="d-flex align-center mb-3 text-body-2">
                     <span class="text-medium-emphasis">Automatic Pricing:</span>
@@ -720,9 +735,20 @@
         <v-btn v-if="activeTab === 'buy'" color="warning" :loading="saving" @click="submitOrder">
           {{ totalReservationQuantity > 0 ? 'Create & Reserve' : 'Create Buy Order' }}
         </v-btn>
-        <v-btn v-else color="success" :loading="saving" @click="submitOrder">
-          {{ totalReservationQuantity > 0 ? 'Create & Fill' : 'Create Sell Order' }}
-        </v-btn>
+        <template v-else>
+          <!-- Show Edit button if existing order matches, Create button otherwise -->
+          <v-btn
+            v-if="existingSellOrder"
+            color="primary"
+            prepend-icon="mdi-pencil"
+            @click="editExistingOrder"
+          >
+            Edit Existing Order
+          </v-btn>
+          <v-btn v-else color="success" :loading="saving" @click="submitOrder">
+            {{ totalReservationQuantity > 0 ? 'Create & Fill' : 'Create Sell Order' }}
+          </v-btn>
+        </template>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -730,6 +756,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   PERMISSIONS,
   type Currency,
@@ -742,6 +769,7 @@ import {
   type MarketListing,
   type MarketBuyRequest,
   type EffectivePrice,
+  type SellOrderResponse,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
@@ -777,6 +805,7 @@ const emit = defineEmits<{
   (e: 'created', type: OrderTab): void
 }>()
 
+const router = useRouter()
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { getLocationDisplay, getCommodityDisplay } = useDisplayHelpers()
@@ -803,9 +832,13 @@ const loadingCommodities = ref(false)
 const loadingLocations = ref(false)
 const loadingMatchingOrders = ref(false)
 const loadingSuggestedPrice = ref(false)
+const loadingExistingOrders = ref(false)
 
 // Price suggestion
 const suggestedPrice = ref<EffectivePrice | null>(null)
+
+// User's existing sell orders (for checking duplicates)
+const existingSellOrders = ref<SellOrderResponse[]>([])
 
 // Constants
 const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
@@ -962,6 +995,34 @@ const selectedReservationsCount = computed(() => {
   return Object.values(reservationQuantities.value).filter(qty => qty && qty > 0).length
 })
 
+// Check if an existing sell order matches the current form (commodity + location + currency)
+const existingSellOrder = computed(() => {
+  if (activeTab.value !== 'sell') return null
+
+  const commodity = props.inventoryItem?.commodityTicker ?? sellForm.value.commodityTicker
+  const location = props.inventoryItem?.locationId ?? sellForm.value.locationId
+  const currency = sellForm.value.currency
+
+  if (!commodity || !location || !currency) return null
+
+  return existingSellOrders.value.find(
+    order =>
+      order.commodityTicker === commodity &&
+      order.locationId === location &&
+      order.currency === currency
+  )
+})
+
+// Navigate to edit existing order
+const editExistingOrder = () => {
+  if (!existingSellOrder.value) return
+  dialog.value = false
+  router.push({
+    path: '/my-orders',
+    query: { order: `sell:${existingSellOrder.value.id}` },
+  })
+}
+
 const updateReservationQty = (orderId: number, value: number | string | null) => {
   const numValue = typeof value === 'string' ? parseInt(value, 10) : (value ?? 0)
   const order = matchingOrders.value.find(o => o.id === orderId)
@@ -1105,6 +1166,20 @@ const loadLocations = async () => {
     errorMessage.value = 'Failed to load locations'
   } finally {
     loadingLocations.value = false
+  }
+}
+
+// Load user's existing sell orders to check for duplicates
+const loadExistingSellOrders = async () => {
+  try {
+    loadingExistingOrders.value = true
+    existingSellOrders.value = await api.sellOrders.list()
+  } catch (error) {
+    console.error('Failed to load existing sell orders', error)
+    // Non-critical - just means we won't detect duplicates
+    existingSellOrders.value = []
+  } finally {
+    loadingExistingOrders.value = false
   }
 }
 
@@ -1392,6 +1467,8 @@ watch(dialog, open => {
     if (locations.value.length === 0) {
       loadLocations()
     }
+    // Load existing sell orders to check for duplicates
+    loadExistingSellOrders()
     // Load matching orders and suggested price if we have inventory item
     if (props.inventoryItem) {
       loadMatchingOrders()

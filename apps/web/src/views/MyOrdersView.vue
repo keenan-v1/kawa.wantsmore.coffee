@@ -163,13 +163,7 @@
             </template>
 
             <template #item.orderType="{ item }">
-              <v-chip
-                :color="item.orderType === 'partner' ? 'primary' : 'default'"
-                size="small"
-                variant="tonal"
-              >
-                {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
-              </v-chip>
+              <OrderTypeChip :order-type="item.orderType" />
             </template>
 
             <template #item.actions="{ item }">
@@ -365,13 +359,7 @@
             </template>
 
             <template #item.orderType="{ item }">
-              <v-chip
-                :color="item.orderType === 'partner' ? 'primary' : 'default'"
-                size="small"
-                variant="tonal"
-              >
-                {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
-              </v-chip>
+              <OrderTypeChip :order-type="item.orderType" />
             </template>
 
             <template #item.actions="{ item }">
@@ -738,270 +726,14 @@
     />
 
     <!-- Edit Sell Order Dialog -->
-    <v-dialog
+    <SellOrderEditDialog
       v-model="editSellDialog"
-      max-width="500"
-      :persistent="editSellDialogBehavior.persistent.value"
-      :no-click-animation="editSellDialogBehavior.noClickAnimation"
-    >
-      <v-card v-if="editingSellOrder">
-        <v-card-title>Edit Sell Order</v-card-title>
-        <v-card-text>
-          <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-            <div>
-              <strong>{{ getCommodityDisplay(editingSellOrder.commodityTicker) }}</strong>
-              at {{ getLocationDisplay(editingSellOrder.locationId) }}
-            </div>
-            <div class="text-caption">
-              FIO Quantity: {{ editingSellOrder.fioQuantity.toLocaleString() }}
-            </div>
-          </v-alert>
-
-          <v-form ref="editSellFormRef">
-            <!-- Automatic Pricing Status -->
-            <div class="d-flex align-center mb-3 text-body-2">
-              <span class="text-medium-emphasis">Automatic Pricing:</span>
-              <a
-                v-if="editSellForm.usePriceList"
-                href="#"
-                tabindex="-1"
-                class="ml-2 font-weight-medium text-primary"
-                @click.prevent="toggleSellAutomaticPricing(false)"
-              >
-                ON
-              </a>
-              <a
-                v-else-if="canUseDynamicPricing"
-                href="#"
-                tabindex="-1"
-                class="ml-2 font-weight-medium text-primary"
-                @click.prevent="toggleSellAutomaticPricing(true)"
-              >
-                OFF
-              </a>
-              <span v-else class="ml-2 text-medium-emphasis">
-                OFF
-                <v-tooltip location="top">
-                  <template #activator="{ props: tooltipProps }">
-                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                      mdi-alert-circle-outline
-                    </v-icon>
-                  </template>
-                  <span>Set a default price list in Account Settings to enable</span>
-                </v-tooltip>
-              </span>
-              <v-chip
-                v-if="editSellForm.usePriceList"
-                size="x-small"
-                color="info"
-                variant="tonal"
-                class="ml-2"
-              >
-                {{ settingsStore.defaultPriceList.value }}
-              </v-chip>
-            </div>
-
-            <!-- Dynamic Pricing Display (when using price list) -->
-            <PriceListDisplay
-              v-if="editSellForm.usePriceList"
-              :loading="loadingSuggestedSellPrice"
-              :price="suggestedSellPrice"
-              :price-list-code="settingsStore.defaultPriceList.value ?? ''"
-              :requested-currency="editSellForm.currency"
-              :fallback-location-display="
-                suggestedSellPrice?.locationId
-                  ? getLocationDisplay(suggestedSellPrice.locationId)
-                  : ''
-              "
-              :requested-location-display="
-                suggestedSellPrice?.requestedLocationId
-                  ? getLocationDisplay(suggestedSellPrice.requestedLocationId)
-                  : ''
-              "
-              class="mb-3"
-            />
-
-            <!-- Custom Price (when not using price list) -->
-            <v-row v-if="!editSellForm.usePriceList">
-              <v-col cols="8">
-                <v-text-field
-                  v-model.number="editSellForm.price"
-                  label="Price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  :rules="[v => v > 0 || 'Price must be positive']"
-                  required
-                />
-              </v-col>
-              <v-col cols="4">
-                <v-select v-model="editSellForm.currency" :items="currencies" label="Currency" />
-              </v-col>
-            </v-row>
-
-            <v-select
-              v-model="editSellForm.limitMode"
-              :items="limitModes"
-              item-title="title"
-              item-value="value"
-              label="Quantity Limit"
-            />
-
-            <v-text-field
-              v-if="editSellForm.limitMode !== 'none'"
-              v-model.number="editSellForm.limitQuantity"
-              :label="
-                editSellForm.limitMode === 'max_sell' ? 'Maximum to sell' : 'Reserve quantity'
-              "
-              type="number"
-              min="0"
-              :rules="[v => v >= 0 || 'Quantity must be non-negative']"
-              class="mt-2"
-            />
-
-            <v-select
-              v-model="editSellForm.orderType"
-              :items="orderTypes"
-              item-title="title"
-              item-value="value"
-              label="Order Type"
-              class="mt-4"
-            />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="editSellDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="savingSell" @click="saveEditSell"> Save Changes </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      :order="editingSellOrder"
+      @saved="onSellOrderSaved"
+    />
 
     <!-- Edit Buy Order Dialog -->
-    <v-dialog
-      v-model="editBuyDialog"
-      max-width="500"
-      :persistent="editBuyDialogBehavior.persistent.value"
-      :no-click-animation="editBuyDialogBehavior.noClickAnimation"
-    >
-      <v-card v-if="editingBuyOrder">
-        <v-card-title>Edit Buy Order</v-card-title>
-        <v-card-text>
-          <v-alert type="info" variant="tonal" class="mb-4" density="compact">
-            <div>
-              <strong>{{ getCommodityDisplay(editingBuyOrder.commodityTicker) }}</strong>
-              at {{ getLocationDisplay(editingBuyOrder.locationId) }}
-            </div>
-          </v-alert>
-
-          <v-form ref="editBuyFormRef">
-            <v-text-field
-              v-model.number="editBuyForm.quantity"
-              label="Quantity"
-              type="number"
-              min="1"
-              :rules="[v => v > 0 || 'Quantity must be positive']"
-              required
-            />
-
-            <!-- Automatic Pricing Status -->
-            <div class="d-flex align-center mb-3 text-body-2">
-              <span class="text-medium-emphasis">Automatic Pricing:</span>
-              <a
-                v-if="editBuyForm.usePriceList"
-                href="#"
-                tabindex="-1"
-                class="ml-2 font-weight-medium text-primary"
-                @click.prevent="toggleBuyAutomaticPricing(false)"
-              >
-                ON
-              </a>
-              <a
-                v-else-if="canUseDynamicPricing"
-                href="#"
-                tabindex="-1"
-                class="ml-2 font-weight-medium text-primary"
-                @click.prevent="toggleBuyAutomaticPricing(true)"
-              >
-                OFF
-              </a>
-              <span v-else class="ml-2 text-medium-emphasis">
-                OFF
-                <v-tooltip location="top">
-                  <template #activator="{ props: tooltipProps }">
-                    <v-icon v-bind="tooltipProps" size="small" color="warning" class="ml-1">
-                      mdi-alert-circle-outline
-                    </v-icon>
-                  </template>
-                  <span>Set a default price list in Account Settings to enable</span>
-                </v-tooltip>
-              </span>
-              <v-chip
-                v-if="editBuyForm.usePriceList"
-                size="x-small"
-                color="info"
-                variant="tonal"
-                class="ml-2"
-              >
-                {{ settingsStore.defaultPriceList.value }}
-              </v-chip>
-            </div>
-
-            <!-- Dynamic Pricing Display (when using price list) -->
-            <PriceListDisplay
-              v-if="editBuyForm.usePriceList"
-              :loading="loadingSuggestedBuyPrice"
-              :price="suggestedBuyPrice"
-              :price-list-code="settingsStore.defaultPriceList.value ?? ''"
-              :requested-currency="editBuyForm.currency"
-              :fallback-location-display="
-                suggestedBuyPrice?.locationId
-                  ? getLocationDisplay(suggestedBuyPrice.locationId)
-                  : ''
-              "
-              :requested-location-display="
-                suggestedBuyPrice?.requestedLocationId
-                  ? getLocationDisplay(suggestedBuyPrice.requestedLocationId)
-                  : ''
-              "
-              class="mb-3"
-            />
-
-            <!-- Custom Price (when not using price list) -->
-            <v-row v-if="!editBuyForm.usePriceList">
-              <v-col cols="8">
-                <v-text-field
-                  v-model.number="editBuyForm.price"
-                  label="Price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  :rules="[v => v > 0 || 'Price must be positive']"
-                  required
-                />
-              </v-col>
-              <v-col cols="4">
-                <v-select v-model="editBuyForm.currency" :items="currencies" label="Currency" />
-              </v-col>
-            </v-row>
-
-            <v-select
-              v-model="editBuyForm.orderType"
-              :items="orderTypes"
-              item-title="title"
-              item-value="value"
-              label="Order Type"
-              class="mt-4"
-            />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="editBuyDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="savingBuy" @click="saveEditBuy"> Save Changes </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <BuyOrderEditDialog v-model="editBuyDialog" :order="editingBuyOrder" @saved="onBuyOrderSaved" />
 
     <!-- Delete Sell Order Confirmation -->
     <v-dialog v-model="deleteSellDialog" max-width="400">
@@ -1053,37 +785,26 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useUrlTab, useOrderDeepLink, useDialogBehavior } from '../composables'
-import {
-  PERMISSIONS,
-  type Currency,
-  type SellOrderLimitMode,
-  type OrderType,
-} from '@kawakawa/types'
+import { useUrlTab, useOrderDeepLink } from '../composables'
+import { PERMISSIONS, type SellOrderLimitMode, type OrderType } from '@kawakawa/types'
 import {
   api,
   type SellOrderResponse,
   type BuyOrderResponse,
   type ReservationWithDetails,
   type ReservationStatus,
-  type EffectivePrice,
 } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import { useSettingsStore } from '../stores/settings'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
+import SellOrderEditDialog from '../components/SellOrderEditDialog.vue'
+import BuyOrderEditDialog from '../components/BuyOrderEditDialog.vue'
 import ReservationStatusChip from '../components/ReservationStatusChip.vue'
-import PriceListDisplay from '../components/PriceListDisplay.vue'
+import OrderTypeChip from '../components/OrderTypeChip.vue'
 
 const userStore = useUserStore()
-const settingsStore = useSettingsStore()
-
-// Check if user can use dynamic pricing (has a default price list configured)
-const canUseDynamicPricing = computed(() => {
-  return !!settingsStore.defaultPriceList.value
-})
 
 // Display helpers that respect user preferences
 const getLocationDisplay = (locationId: string): string => {
@@ -1189,21 +910,11 @@ const {
 
 // Edit sell order state
 const editSellDialog = ref(false)
-const editSellDialogBehavior = useDialogBehavior({ modelValue: editSellDialog })
 const editingSellOrder = ref<SellOrderResponse | null>(null)
-const editSellFormRef = ref()
-const savingSell = ref(false)
-const loadingSuggestedSellPrice = ref(false)
-const suggestedSellPrice = ref<EffectivePrice | null>(null)
 
 // Edit buy order state
 const editBuyDialog = ref(false)
-const editBuyDialogBehavior = useDialogBehavior({ modelValue: editBuyDialog })
 const editingBuyOrder = ref<BuyOrderResponse | null>(null)
-const editBuyFormRef = ref()
-const savingBuy = ref(false)
-const loadingSuggestedBuyPrice = ref(false)
-const suggestedBuyPrice = ref<EffectivePrice | null>(null)
 
 // Delete state
 const deleteSellDialog = ref(false)
@@ -1219,14 +930,6 @@ const snackbar = ref({
   message: '',
   color: 'success',
 })
-
-const currencies: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
-
-const limitModes = [
-  { title: 'No limit (sell all available)', value: 'none' },
-  { title: 'Maximum to sell', value: 'max_sell' },
-  { title: 'Reserve quantity (keep minimum)', value: 'reserve' },
-]
 
 // Check permissions for order creation
 const canCreateInternalOrders = computed(() =>
@@ -1249,25 +952,6 @@ const orderTypes = computed(() => {
 
 // Check if user can create any orders at all
 const canCreateAnyOrders = computed(() => orderTypes.value.length > 0)
-
-const editSellForm = ref({
-  price: 0,
-  currency: 'CIS' as Currency,
-  orderType: 'internal' as OrderType,
-  limitMode: 'none' as SellOrderLimitMode,
-  limitQuantity: 0,
-  usePriceList: false,
-  priceListCode: null as string | null,
-})
-
-const editBuyForm = ref({
-  quantity: 1,
-  price: 0,
-  currency: 'CIS' as Currency,
-  orderType: 'internal' as OrderType,
-  usePriceList: false,
-  priceListCode: null as string | null,
-})
 
 const showSnackbar = (message: string, color: 'success' | 'error' = 'success') => {
   snackbar.value = { show: true, message, color }
@@ -1507,177 +1191,26 @@ const onOrderUpdated = async () => {
   }
 }
 
-// Load suggested price for sell order editing
-const loadSuggestedSellPrice = async () => {
-  if (!editingSellOrder.value) return
-  const commodity = editingSellOrder.value.commodityTicker
-  const location = editingSellOrder.value.locationId
-  const currency = editSellForm.value.currency
-  const priceList = settingsStore.defaultPriceList.value
-
-  if (!commodity || !location || !currency || !priceList) {
-    suggestedSellPrice.value = null
-    return
-  }
-
-  try {
-    loadingSuggestedSellPrice.value = true
-    const prices = await api.prices.getEffective(priceList, location, currency)
-    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
-    suggestedSellPrice.value = price ?? null
-  } catch {
-    suggestedSellPrice.value = null
-  } finally {
-    loadingSuggestedSellPrice.value = false
-  }
-}
-
-// Load suggested price for buy order editing
-const loadSuggestedBuyPrice = async () => {
-  if (!editingBuyOrder.value) return
-  const commodity = editingBuyOrder.value.commodityTicker
-  const location = editingBuyOrder.value.locationId
-  const currency = editBuyForm.value.currency
-  const priceList = settingsStore.defaultPriceList.value
-
-  if (!commodity || !location || !currency || !priceList) {
-    suggestedBuyPrice.value = null
-    return
-  }
-
-  try {
-    loadingSuggestedBuyPrice.value = true
-    const prices = await api.prices.getEffective(priceList, location, currency)
-    const price = prices.find((p: EffectivePrice) => p.commodityTicker === commodity)
-    suggestedBuyPrice.value = price ?? null
-  } catch {
-    suggestedBuyPrice.value = null
-  } finally {
-    loadingSuggestedBuyPrice.value = false
-  }
-}
-
-// Toggle automatic pricing for sell order edit
-const toggleSellAutomaticPricing = async (enable: boolean) => {
-  const priceListCode = enable ? settingsStore.defaultPriceList.value : null
-  editSellForm.value.usePriceList = enable
-  editSellForm.value.priceListCode = priceListCode
-  if (enable) {
-    editSellForm.value.price = 0
-    if (suggestedSellPrice.value) {
-      editSellForm.value.currency = suggestedSellPrice.value.currency
-    }
-  }
-}
-
-// Toggle automatic pricing for buy order edit
-const toggleBuyAutomaticPricing = async (enable: boolean) => {
-  const priceListCode = enable ? settingsStore.defaultPriceList.value : null
-  editBuyForm.value.usePriceList = enable
-  editBuyForm.value.priceListCode = priceListCode
-  if (enable) {
-    editBuyForm.value.price = 0
-    if (suggestedBuyPrice.value) {
-      editBuyForm.value.currency = suggestedBuyPrice.value.currency
-    }
-  }
-}
-
 // Edit sell order functions
 const openEditSellDialog = (order: SellOrderResponse) => {
   editingSellOrder.value = order
-  const usePriceList = !!order.priceListCode
-  editSellForm.value = {
-    price: order.price,
-    currency: order.currency,
-    orderType: order.orderType,
-    limitMode: order.limitMode,
-    limitQuantity: order.limitQuantity ?? 0,
-    usePriceList,
-    priceListCode: order.priceListCode ?? null,
-  }
-  suggestedSellPrice.value = null
   editSellDialog.value = true
-  // Load suggested price if user has a default price list
-  if (settingsStore.defaultPriceList.value) {
-    loadSuggestedSellPrice()
-  }
 }
 
-const saveEditSell = async () => {
-  if (!editingSellOrder.value) return
-
-  const { valid } = await editSellFormRef.value.validate()
-  if (!valid) return
-
-  try {
-    savingSell.value = true
-    await api.sellOrders.update(editingSellOrder.value.id, {
-      price: editSellForm.value.usePriceList ? 0 : editSellForm.value.price,
-      currency: editSellForm.value.currency,
-      priceListCode: editSellForm.value.priceListCode,
-      orderType: editSellForm.value.orderType,
-      limitMode: editSellForm.value.limitMode,
-      limitQuantity:
-        editSellForm.value.limitMode === 'none' ? null : editSellForm.value.limitQuantity,
-    })
-    showSnackbar('Sell order updated successfully')
-    editSellDialog.value = false
-    await loadSellOrders()
-  } catch (error) {
-    console.error('Failed to update sell order', error)
-    const message = error instanceof Error ? error.message : 'Failed to update sell order'
-    showSnackbar(message, 'error')
-  } finally {
-    savingSell.value = false
-  }
+const onSellOrderSaved = () => {
+  showSnackbar('Sell order updated successfully')
+  loadSellOrders()
 }
 
 // Edit buy order functions
 const openEditBuyDialog = (order: BuyOrderResponse) => {
   editingBuyOrder.value = order
-  const usePriceList = !!order.priceListCode
-  editBuyForm.value = {
-    quantity: order.quantity,
-    price: order.price,
-    currency: order.currency,
-    orderType: order.orderType,
-    usePriceList,
-    priceListCode: order.priceListCode ?? null,
-  }
-  suggestedBuyPrice.value = null
   editBuyDialog.value = true
-  // Load suggested price if user has a default price list
-  if (settingsStore.defaultPriceList.value) {
-    loadSuggestedBuyPrice()
-  }
 }
 
-const saveEditBuy = async () => {
-  if (!editingBuyOrder.value) return
-
-  const { valid } = await editBuyFormRef.value.validate()
-  if (!valid) return
-
-  try {
-    savingBuy.value = true
-    await api.buyOrders.update(editingBuyOrder.value.id, {
-      quantity: editBuyForm.value.quantity,
-      price: editBuyForm.value.usePriceList ? 0 : editBuyForm.value.price,
-      currency: editBuyForm.value.currency,
-      priceListCode: editBuyForm.value.priceListCode,
-      orderType: editBuyForm.value.orderType,
-    })
-    showSnackbar('Buy order updated successfully')
-    editBuyDialog.value = false
-    await loadBuyOrders()
-  } catch (error) {
-    console.error('Failed to update buy order', error)
-    const message = error instanceof Error ? error.message : 'Failed to update buy order'
-    showSnackbar(message, 'error')
-  } finally {
-    savingBuy.value = false
-  }
+const onBuyOrderSaved = () => {
+  showSnackbar('Buy order updated successfully')
+  loadBuyOrders()
 }
 
 // Delete sell order functions

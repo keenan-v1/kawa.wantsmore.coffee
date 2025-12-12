@@ -25,43 +25,78 @@
     <!-- Filters Card -->
     <v-card class="mb-4">
       <v-card-text class="py-2">
-        <!-- Collapsed view: single row with Filters button and Create Order -->
-        <v-row v-if="!filtersExpanded && !hasActiveFilters" dense align="center">
-          <v-col cols="auto">
-            <v-btn
-              variant="outlined"
-              prepend-icon="mdi-filter-variant"
-              @click="filtersExpanded = true"
-            >
-              Filters
-            </v-btn>
-          </v-col>
-          <v-spacer />
-          <v-col cols="auto">
-            <v-tooltip
-              :disabled="canCreateAnyOrders"
-              text="You do not have permission to create orders"
-              location="bottom"
-            >
-              <template #activator="{ props }">
-                <span v-bind="props">
-                  <v-btn
-                    color="primary"
-                    prepend-icon="mdi-plus"
-                    :disabled="!canCreateAnyOrders"
-                    @click="openOrderDialog"
-                  >
-                    Create Order
-                  </v-btn>
-                </span>
-              </template>
-            </v-tooltip>
-          </v-col>
-        </v-row>
+        <!-- Active Filters Display - always visible when filters active -->
+        <div v-if="hasActiveFilters" class="d-flex flex-wrap ga-2 mb-3">
+          <v-chip
+            v-if="filters.itemType"
+            closable
+            size="small"
+            :color="filters.itemType === 'sell' ? 'success' : 'warning'"
+            @click:close="filters.itemType = null"
+          >
+            {{ filters.itemType === 'sell' ? 'Sell' : 'Buy' }}
+          </v-chip>
+          <v-chip
+            v-for="ticker in filters.commodity"
+            :key="`commodity-${ticker}`"
+            closable
+            size="small"
+            color="primary"
+            @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
+          >
+            {{ getCommodityDisplay(ticker) }}
+          </v-chip>
+          <v-chip
+            v-if="filters.category"
+            closable
+            size="small"
+            color="secondary"
+            @click:close="filters.category = null"
+          >
+            Category: {{ filters.category }}
+          </v-chip>
+          <v-chip
+            v-for="locId in filters.location"
+            :key="`location-${locId}`"
+            closable
+            size="small"
+            color="info"
+            @click:close="filters.location = filters.location.filter(l => l !== locId)"
+          >
+            {{ getLocationDisplay(locId) }}
+          </v-chip>
+          <v-chip
+            v-if="filters.userName"
+            closable
+            size="small"
+            color="default"
+            @click:close="filters.userName = null"
+          >
+            User: {{ filters.userName }}
+          </v-chip>
+          <v-chip
+            v-if="filters.orderType"
+            closable
+            size="small"
+            :color="filters.orderType === 'partner' ? 'primary' : 'default'"
+            @click:close="filters.orderType = null"
+          >
+            {{ filters.orderType === 'partner' ? 'Partner' : 'Internal' }}
+          </v-chip>
+          <v-chip
+            v-if="filters.pricing"
+            closable
+            size="small"
+            :color="filters.pricing === 'custom' ? 'default' : 'info'"
+            @click:close="filters.pricing = null"
+          >
+            {{ filters.pricing === 'custom' ? 'Custom Pricing' : filters.pricing }}
+          </v-chip>
+        </div>
 
-        <!-- Expanded view: all filter dropdowns -->
-        <template v-else>
-          <v-row dense>
+        <!-- Collapsible filter dropdowns -->
+        <v-expand-transition>
+          <v-row v-if="filtersExpanded" dense class="mb-2 filter-row">
             <v-col cols="6" sm="4" lg="2">
               <v-select
                 v-model="filters.itemType"
@@ -147,136 +182,67 @@
               />
             </v-col>
           </v-row>
-          <!-- Active Filters Display -->
-          <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
-            <v-chip
-              v-if="filters.itemType"
-              closable
-              size="small"
-              :color="filters.itemType === 'sell' ? 'success' : 'warning'"
-              @click:close="filters.itemType = null"
-            >
-              {{ filters.itemType === 'sell' ? 'Sell' : 'Buy' }}
-            </v-chip>
-            <v-chip
-              v-for="ticker in filters.commodity"
-              :key="`commodity-${ticker}`"
-              closable
-              size="small"
-              color="primary"
-              @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
-            >
-              {{ getCommodityDisplay(ticker) }}
-            </v-chip>
-            <v-chip
-              v-if="filters.category"
-              closable
-              size="small"
-              color="secondary"
-              @click:close="filters.category = null"
-            >
-              Category: {{ filters.category }}
-            </v-chip>
-            <v-chip
-              v-for="locId in filters.location"
-              :key="`location-${locId}`"
-              closable
-              size="small"
-              color="info"
-              @click:close="filters.location = filters.location.filter(l => l !== locId)"
-            >
-              {{ getLocationDisplay(locId) }}
-            </v-chip>
-            <v-chip
-              v-if="filters.userName"
-              closable
-              size="small"
-              color="default"
-              @click:close="filters.userName = null"
-            >
-              User: {{ filters.userName }}
-            </v-chip>
-            <v-chip
-              v-if="filters.orderType"
-              closable
-              size="small"
-              :color="filters.orderType === 'partner' ? 'primary' : 'default'"
-              @click:close="filters.orderType = null"
-            >
-              {{ filters.orderType === 'partner' ? 'Partner' : 'Internal' }}
-            </v-chip>
-            <v-chip
-              v-if="filters.pricing"
-              closable
-              size="small"
-              :color="filters.pricing === 'custom' ? 'default' : 'info'"
-              @click:close="filters.pricing = null"
-            >
-              {{ filters.pricing === 'custom' ? 'Custom Pricing' : filters.pricing }}
-            </v-chip>
-          </div>
+        </v-expand-transition>
 
-          <v-row dense class="mt-2">
-            <v-col cols="12" class="d-flex align-center justify-space-between">
-              <div>
-                <v-btn
-                  v-if="hasActiveFilters"
-                  variant="text"
-                  color="primary"
-                  size="small"
-                  @click="clearFilters"
-                >
-                  Clear Filters
-                </v-btn>
-                <v-btn v-else variant="text" size="small" @click="filtersExpanded = false">
-                  Hide Filters
-                </v-btn>
-              </div>
-              <v-tooltip
-                :disabled="canCreateAnyOrders"
-                text="You do not have permission to create orders"
-                location="bottom"
-              >
-                <template #activator="{ props }">
-                  <span v-bind="props">
-                    <v-btn
-                      color="primary"
-                      prepend-icon="mdi-plus"
-                      :disabled="!canCreateAnyOrders"
-                      @click="openOrderDialog"
-                    >
-                      Create Order
-                    </v-btn>
-                  </span>
-                </template>
-              </v-tooltip>
-            </v-col>
-          </v-row>
-        </template>
+        <!-- Always visible buttons row -->
+        <v-row dense align="center">
+          <v-col cols="auto" class="d-flex ga-2">
+            <v-btn
+              variant="outlined"
+              size="small"
+              :prepend-icon="filtersExpanded ? 'mdi-filter-variant-minus' : 'mdi-filter-variant'"
+              @click="filtersExpanded = !filtersExpanded"
+            >
+              {{ filtersExpanded ? 'Hide Filters' : 'Filters' }}
+            </v-btn>
+            <v-btn
+              v-if="hasActiveFilters"
+              variant="text"
+              color="primary"
+              size="small"
+              @click="clearFilters"
+            >
+              Clear Filters
+            </v-btn>
+          </v-col>
+          <v-spacer />
+          <v-col cols="auto">
+            <v-tooltip
+              :disabled="canCreateAnyOrders"
+              text="You do not have permission to create orders"
+              location="bottom"
+            >
+              <template #activator="{ props }">
+                <span v-bind="props">
+                  <v-btn
+                    color="primary"
+                    prepend-icon="mdi-plus"
+                    :disabled="!canCreateAnyOrders"
+                    @click="openOrderDialog"
+                  >
+                    Create Order
+                  </v-btn>
+                </span>
+              </template>
+            </v-tooltip>
+          </v-col>
+        </v-row>
       </v-card-text>
     </v-card>
 
     <!-- Market Listings Table -->
     <v-card>
       <v-card-title>
-        <v-row>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="search"
-              prepend-icon="mdi-magnify"
-              label="Search market..."
-              single-line
-              hide-details
-              clearable
-              density="compact"
-            />
-          </v-col>
-          <v-col cols="12" md="4" class="text-right">
-            <span class="text-body-2 text-medium-emphasis">
-              {{ filteredItems.length }} order(s)
-            </span>
-          </v-col>
-        </v-row>
+        <v-text-field
+          v-model="search"
+          prepend-icon="mdi-magnify"
+          label="Search market..."
+          single-line
+          hide-details
+          clearable
+          density="compact"
+          style="max-width: 400px"
+        />
       </v-card-title>
 
       <v-data-table
@@ -343,15 +309,7 @@
         </template>
 
         <template #item.fioUploadedAt="{ item }">
-          <v-chip
-            v-if="item.fioUploadedAt"
-            size="small"
-            variant="tonal"
-            :color="getFioAgeColor(item.fioUploadedAt)"
-          >
-            {{ formatRelativeTime(item.fioUploadedAt) }}
-          </v-chip>
-          <span v-else class="text-medium-emphasis text-caption">—</span>
+          <FioAgeChip :fio-uploaded-at="item.fioUploadedAt" />
         </template>
 
         <template #item.price="{ item }">
@@ -369,39 +327,24 @@
             </template>
             <span v-else class="text-medium-emphasis">--</span>
             <!-- Inline pricing chip for small screens -->
-            <v-chip
+            <PricingModeChip
               v-if="item.pricingMode === 'dynamic'"
+              :pricing-mode="item.pricingMode"
+              :price-list-code="item.priceListCode"
               size="x-small"
-              color="info"
-              variant="tonal"
               class="ml-2 d-lg-none"
-            >
-              {{ item.priceListCode }}
-            </v-chip>
+            />
           </div>
         </template>
 
         <template #item.pricingMode="{ item }">
-          <v-chip
-            v-if="item.pricingMode === 'dynamic'"
-            size="small"
-            color="info"
-            variant="tonal"
-            class="clickable-chip"
-            @click.stop="setFilter('pricing', item.priceListCode)"
-          >
-            {{ item.priceListCode }}
-          </v-chip>
-          <v-chip
-            v-else
-            size="small"
-            color="default"
-            variant="outlined"
-            class="clickable-chip"
-            @click.stop="setFilter('pricing', 'custom')"
-          >
-            Custom
-          </v-chip>
+          <PricingModeChip
+            :pricing-mode="item.pricingMode"
+            :price-list-code="item.priceListCode"
+            clickable
+            @click:dynamic="setFilter('pricing', $event)"
+            @click:custom="setFilter('pricing', 'custom')"
+          />
         </template>
 
         <template #item.quantity="{ item }">
@@ -423,15 +366,11 @@
         </template>
 
         <template #item.orderType="{ item }">
-          <v-chip
-            :color="item.orderType === 'partner' ? 'primary' : 'default'"
-            size="small"
-            variant="tonal"
-            class="clickable-chip"
-            @click.stop="setFilter('orderType', item.orderType)"
-          >
-            {{ item.orderType === 'partner' ? 'Partner' : 'Internal' }}
-          </v-chip>
+          <OrderTypeChip
+            :order-type="item.orderType"
+            clickable
+            @click="setFilter('orderType', $event)"
+          />
         </template>
 
         <template #item.reserve="{ item }">
@@ -677,6 +616,10 @@ import {
   useUrlFilters,
   useUrlState,
   useDialogBehavior,
+  useMarketData,
+  getDisplayPrice,
+  type MarketItem,
+  type MarketItemType,
 } from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
@@ -684,46 +627,20 @@ import ReservationDialog from '../components/ReservationDialog.vue'
 import PriceListDisplay from '../components/PriceListDisplay.vue'
 import ConfirmationDialog from '../components/ConfirmationDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
+import FioAgeChip from '../components/FioAgeChip.vue'
+import OrderTypeChip from '../components/OrderTypeChip.vue'
+import PricingModeChip from '../components/PricingModeChip.vue'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { snackbar, showSnackbar } = useSnackbar()
 const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
-const { formatRelativeTime, getFioAgeColor } = useFormatters()
+const { getFioAgeColor } = useFormatters()
 
-// Unified market item type
-type MarketItemType = 'sell' | 'buy'
-type PricingMode = 'fixed' | 'dynamic'
-
-interface MarketItem {
-  id: number
-  itemType: MarketItemType
-  commodityTicker: string
-  locationId: string
-  userName: string // sellerName or buyerName
-  price: number
-  currency: Currency
-  orderType: OrderType
-  quantity: number // availableQuantity or quantity
-  remainingQuantity: number
-  reservedQuantity: number
-  activeReservationCount: number
-  isOwn: boolean
-  fioUploadedAt: string | null // When seller's FIO inventory was last synced
-  pricingMode: PricingMode
-  effectivePrice: number | null
-  priceListCode: string | null
-}
-
-// Get display price for an item (effective price for dynamic, regular price for fixed)
-const getDisplayPrice = (item: MarketItem): number | null => {
-  if (item.pricingMode === 'dynamic') {
-    return item.effectivePrice
-  }
-  return item.price
-}
-
-// Filters interface removed - using useUrlFilters instead
+// Market data from composable
+const { marketItems, loading, loadMarketItems } = useMarketData({
+  onError: () => showSnackbar('Failed to load market items', 'error'),
+})
 
 const headers = [
   {
@@ -782,9 +699,6 @@ const headers = [
   },
   { title: '', key: 'actions', sortable: false, width: 50 },
 ]
-
-const marketItems = ref<MarketItem[]>([])
-const loading = ref(false)
 
 // Search with URL deep linking
 const search = useUrlState<string | null>({
@@ -1008,78 +922,6 @@ const filteredItems = computed(() => {
 
   return result
 })
-
-const loadMarketItems = async () => {
-  try {
-    loading.value = true
-    // Fetch both sell listings and buy requests in parallel
-    const [sellListings, buyRequests] = await Promise.all([
-      api.market.getListings(),
-      api.market.getBuyRequests(),
-    ])
-
-    // Transform sell listings to unified format
-    const sellItems: MarketItem[] = sellListings.map(listing => ({
-      id: listing.id,
-      itemType: 'sell' as MarketItemType,
-      commodityTicker: listing.commodityTicker,
-      locationId: listing.locationId,
-      userName: listing.sellerName,
-      price: listing.price,
-      currency: listing.currency,
-      orderType: listing.orderType,
-      quantity: listing.availableQuantity,
-      remainingQuantity: listing.remainingQuantity,
-      reservedQuantity: listing.reservedQuantity,
-      activeReservationCount: listing.activeReservationCount,
-      isOwn: listing.isOwn,
-      fioUploadedAt: listing.fioUploadedAt,
-      pricingMode: listing.pricingMode,
-      effectivePrice: listing.effectivePrice,
-      priceListCode: listing.priceListCode,
-    }))
-
-    // Transform buy requests to unified format
-    const buyItems: MarketItem[] = buyRequests.map(request => ({
-      id: request.id,
-      itemType: 'buy' as MarketItemType,
-      commodityTicker: request.commodityTicker,
-      locationId: request.locationId,
-      userName: request.buyerName,
-      price: request.price,
-      currency: request.currency,
-      orderType: request.orderType,
-      quantity: request.quantity,
-      remainingQuantity: request.remainingQuantity,
-      reservedQuantity: request.reservedQuantity,
-      activeReservationCount: request.activeReservationCount,
-      isOwn: request.isOwn,
-      fioUploadedAt: request.fioUploadedAt,
-      pricingMode: request.pricingMode,
-      effectivePrice: request.effectivePrice,
-      priceListCode: request.priceListCode,
-    }))
-
-    // Combine and sort by commodity, then location, then price (using effective price for dynamic)
-    marketItems.value = [...sellItems, ...buyItems].sort((a, b) => {
-      if (a.commodityTicker !== b.commodityTicker) {
-        return a.commodityTicker.localeCompare(b.commodityTicker)
-      }
-      if (a.locationId !== b.locationId) {
-        return a.locationId.localeCompare(b.locationId)
-      }
-      // Use display price for sorting (effective for dynamic, regular for fixed)
-      const priceA = getDisplayPrice(a) ?? Infinity
-      const priceB = getDisplayPrice(b) ?? Infinity
-      return priceA - priceB
-    })
-  } catch (error) {
-    console.error('Failed to load market items', error)
-    showSnackbar('Failed to load market items', 'error')
-  } finally {
-    loading.value = false
-  }
-}
 
 const openOrderDialog = () => {
   orderDialogTab.value = 'buy'
@@ -1339,5 +1181,14 @@ onMounted(() => {
   .v-data-table td.col-hidden-below-lg {
     display: none !important;
   }
+}
+</style>
+
+<style>
+/* Unscoped: align all filter inputs to same height */
+.filter-row .v-field__input {
+  min-height: 48px;
+  padding-top: 12px;
+  padding-bottom: 2px;
 }
 </style>

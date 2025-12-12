@@ -56,79 +56,9 @@
 
     <!-- Filters Card -->
     <v-card class="mb-4">
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" sm="6" md="4" lg="2">
-            <KeyValueAutocomplete
-              v-model="filters.commodity"
-              :items="commodityOptions"
-              :favorites="settingsStore.favoritedCommodities.value"
-              label="Commodity"
-              density="compact"
-              clearable
-              hide-details
-              multiple
-              @update:favorites="settingsStore.updateSetting('market.favoritedCommodities', $event)"
-            />
-          </v-col>
-          <v-col cols="12" sm="6" md="4" lg="2">
-            <v-select
-              v-model="filters.category"
-              :items="categoryOptions"
-              label="Category"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" sm="6" md="4" lg="2">
-            <KeyValueAutocomplete
-              v-model="filters.location"
-              :items="locationOptions"
-              :favorites="settingsStore.favoritedLocations.value"
-              label="Location"
-              density="compact"
-              clearable
-              hide-details
-              multiple
-              @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
-            />
-          </v-col>
-          <v-col cols="12" sm="6" md="4" lg="2">
-            <v-select
-              v-model="filters.locationType"
-              :items="locationTypeOptions"
-              label="Location Type"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" sm="6" md="4" lg="2">
-            <v-select
-              v-model="filters.storageType"
-              :items="storageTypeOptions"
-              label="Storage Type"
-              density="compact"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" sm="6" md="4" lg="2" class="d-flex align-center">
-            <v-btn
-              v-if="hasActiveFilters"
-              variant="text"
-              color="primary"
-              size="small"
-              @click="clearFilters"
-            >
-              Clear Filters
-            </v-btn>
-          </v-col>
-        </v-row>
-
-        <!-- Active Filters Display -->
-        <div v-if="hasActiveFilters" class="mt-3 d-flex flex-wrap ga-2">
+      <v-card-text class="py-2">
+        <!-- Active Filters Display - always visible when filters active -->
+        <div v-if="hasActiveFilters" class="d-flex flex-wrap ga-2 mb-3">
           <v-chip
             v-for="ticker in filters.commodity"
             :key="`commodity-${ticker}`"
@@ -177,6 +107,93 @@
             {{ filters.storageType }}
           </v-chip>
         </div>
+
+        <!-- Collapsible filter dropdowns -->
+        <v-expand-transition>
+          <v-row v-if="filtersExpanded" dense class="mb-2 filter-row">
+            <v-col cols="12" sm="6" md="4" lg="2">
+              <KeyValueAutocomplete
+                v-model="filters.commodity"
+                :items="commodityOptions"
+                :favorites="settingsStore.favoritedCommodities.value"
+                label="Commodity"
+                density="compact"
+                clearable
+                hide-details
+                multiple
+                @update:favorites="
+                  settingsStore.updateSetting('market.favoritedCommodities', $event)
+                "
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="4" lg="2">
+              <v-select
+                v-model="filters.category"
+                :items="categoryOptions"
+                label="Category"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="4" lg="2">
+              <KeyValueAutocomplete
+                v-model="filters.location"
+                :items="locationOptions"
+                :favorites="settingsStore.favoritedLocations.value"
+                label="Location"
+                density="compact"
+                clearable
+                hide-details
+                multiple
+                @update:favorites="settingsStore.updateSetting('market.favoritedLocations', $event)"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="4" lg="2">
+              <v-select
+                v-model="filters.locationType"
+                :items="locationTypeOptions"
+                label="Location Type"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="4" lg="2">
+              <v-select
+                v-model="filters.storageType"
+                :items="storageTypeOptions"
+                label="Storage Type"
+                density="compact"
+                clearable
+                hide-details
+              />
+            </v-col>
+          </v-row>
+        </v-expand-transition>
+
+        <!-- Always visible buttons row -->
+        <v-row dense align="center">
+          <v-col cols="auto" class="d-flex ga-2">
+            <v-btn
+              variant="outlined"
+              size="small"
+              :prepend-icon="filtersExpanded ? 'mdi-filter-variant-minus' : 'mdi-filter-variant'"
+              @click="filtersExpanded = !filtersExpanded"
+            >
+              {{ filtersExpanded ? 'Hide Filters' : 'Filters' }}
+            </v-btn>
+            <v-btn
+              v-if="hasActiveFilters"
+              variant="text"
+              color="primary"
+              size="small"
+              @click="clearFilters"
+            >
+              Clear Filters
+            </v-btn>
+          </v-col>
+        </v-row>
       </v-card-text>
     </v-card>
 
@@ -204,12 +221,32 @@
       </v-card-title>
 
       <v-data-table
+        v-model:expanded="expandedItems"
         :headers="headers"
         :items="filteredInventory"
         :loading="loading"
         :items-per-page="25"
+        item-value="id"
+        show-expand
         class="elevation-0"
       >
+        <!-- Custom expand toggle -->
+        <template #item.data-table-expand="{ item, internalItem, isExpanded, toggleExpand }">
+          <v-btn
+            v-if="hasOrders(item)"
+            icon
+            variant="text"
+            size="small"
+            @click="toggleExpand(internalItem)"
+          >
+            <v-icon>{{
+              isExpanded(internalItem) ? 'mdi-chevron-down' : 'mdi-chevron-right'
+            }}</v-icon>
+          </v-btn>
+          <!-- Empty spacer to maintain alignment when no orders -->
+          <div v-else style="width: 40px"></div>
+        </template>
+
         <template #item.commodityTicker="{ item }">
           <div
             class="font-weight-medium clickable-cell"
@@ -249,20 +286,16 @@
         </template>
 
         <template #item.fioUploadedAt="{ item }">
-          <v-chip
-            v-if="item.fioUploadedAt"
-            :color="getSyncStatusColor(item.fioUploadedAt)"
-            size="small"
-            variant="tonal"
-          >
-            {{ formatRelativeTime(item.fioUploadedAt) }}
-          </v-chip>
-          <span v-else class="text-medium-emphasis">-</span>
+          <FioAgeChip
+            :fio-uploaded-at="item.fioUploadedAt"
+            color-mode="syncStatus"
+            empty-text="-"
+          />
         </template>
 
         <template #item.actions="{ item }">
           <!-- Desktop: show buttons -->
-          <div class="d-none d-sm-flex ga-1">
+          <div v-if="!hasOrders(item)" class="d-none d-sm-flex ga-1">
             <v-tooltip
               location="top"
               :text="
@@ -315,6 +348,137 @@
           </v-menu>
         </template>
 
+        <!-- Expanded row showing existing orders -->
+        <template #expanded-row="{ item, columns }">
+          <tr class="expanded-row">
+            <td :colspan="columns.length" class="pa-0">
+              <div class="bg-grey-darken-4 pa-3">
+                <!-- Sell Orders Section -->
+                <template v-if="getSellOrdersForItem(item).length > 0">
+                  <div class="text-caption text-medium-emphasis mb-2">
+                    <v-icon size="small" class="mr-1" color="success">mdi-tag</v-icon>
+                    Sell Orders
+                  </div>
+                  <v-table density="compact" class="bg-transparent mb-3">
+                    <thead>
+                      <tr>
+                        <th class="text-left">Currency</th>
+                        <th class="text-right">Price</th>
+                        <th class="text-right">Available</th>
+                        <th class="text-left">Type</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="order in getSellOrdersForItem(item)"
+                        :key="`sell-${order.id}`"
+                        class="order-row"
+                        @click="viewSellOrder(order)"
+                      >
+                        <td>
+                          <v-chip size="x-small" variant="tonal">{{ order.currency }}</v-chip>
+                        </td>
+                        <td class="text-right font-weight-medium">
+                          <template v-if="order.pricingMode === 'dynamic'">
+                            <span v-if="order.effectivePrice" class="text-info">
+                              {{ order.effectivePrice.toFixed(2) }}
+                            </span>
+                            <span v-else class="text-medium-emphasis">Dynamic</span>
+                          </template>
+                          <template v-else>{{ order.price.toFixed(2) }}</template>
+                        </td>
+                        <td class="text-right">{{ order.remainingQuantity.toLocaleString() }}</td>
+                        <td>
+                          <v-chip
+                            size="x-small"
+                            :color="order.orderType === 'internal' ? 'primary' : 'warning'"
+                            variant="tonal"
+                          >
+                            {{ order.orderType }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right">
+                          <v-btn
+                            size="small"
+                            variant="tonal"
+                            color="primary"
+                            prepend-icon="mdi-pencil"
+                            @click.stop="editSellOrder(order)"
+                          >
+                            Edit
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </template>
+
+                <!-- Buy Orders Section -->
+                <template v-if="getBuyOrdersForItem(item).length > 0">
+                  <div class="text-caption text-medium-emphasis mb-2">
+                    <v-icon size="small" class="mr-1" color="warning">mdi-cart</v-icon>
+                    Buy Orders
+                  </div>
+                  <v-table density="compact" class="bg-transparent">
+                    <thead>
+                      <tr>
+                        <th class="text-left">Currency</th>
+                        <th class="text-right">Price</th>
+                        <th class="text-right">Quantity</th>
+                        <th class="text-left">Type</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="order in getBuyOrdersForItem(item)"
+                        :key="`buy-${order.id}`"
+                        class="order-row"
+                        @click="viewBuyOrder(order)"
+                      >
+                        <td>
+                          <v-chip size="x-small" variant="tonal">{{ order.currency }}</v-chip>
+                        </td>
+                        <td class="text-right font-weight-medium">
+                          <template v-if="order.pricingMode === 'dynamic'">
+                            <span v-if="order.effectivePrice" class="text-info">
+                              {{ order.effectivePrice.toFixed(2) }}
+                            </span>
+                            <span v-else class="text-medium-emphasis">Dynamic</span>
+                          </template>
+                          <template v-else>{{ order.price.toFixed(2) }}</template>
+                        </td>
+                        <td class="text-right">{{ order.remainingQuantity.toLocaleString() }}</td>
+                        <td>
+                          <v-chip
+                            size="x-small"
+                            :color="order.orderType === 'internal' ? 'primary' : 'warning'"
+                            variant="tonal"
+                          >
+                            {{ order.orderType }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right">
+                          <v-btn
+                            size="small"
+                            variant="tonal"
+                            color="primary"
+                            prepend-icon="mdi-pencil"
+                            @click.stop="editBuyOrder(order)"
+                          >
+                            Edit
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </template>
+              </div>
+            </td>
+          </tr>
+        </template>
+
         <template #no-data>
           <div class="text-center py-8">
             <v-icon size="64" color="grey-lighten-1">mdi-package-variant</v-icon>
@@ -362,13 +526,33 @@
       :inventory-item="selectedItem"
       @created="onOrderCreated"
     />
+
+    <!-- Order Detail Dialog -->
+    <OrderDetailDialog
+      v-model="orderDetailDialog"
+      :order-type="orderDetailType"
+      :order-id="orderDetailId"
+      @updated="onOrderUpdated"
+      @deleted="onOrderDeleted"
+    />
+
+    <!-- Sell Order Edit Dialog -->
+    <SellOrderEditDialog v-model="editSellDialog" :order="editingSellOrder" @saved="onEditSaved" />
+
+    <!-- Buy Order Edit Dialog -->
+    <BuyOrderEditDialog v-model="editBuyDialog" :order="editingBuyOrder" @saved="onEditSaved" />
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { PERMISSIONS } from '@kawakawa/types'
-import { api, type FioInventoryItem } from '../services/api'
+import {
+  api,
+  type FioInventoryItem,
+  type SellOrderResponse,
+  type BuyOrderResponse,
+} from '../services/api'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
 import {
@@ -379,7 +563,11 @@ import {
   useUrlState,
 } from '../composables'
 import OrderDialog from '../components/OrderDialog.vue'
+import OrderDetailDialog from '../components/OrderDetailDialog.vue'
+import SellOrderEditDialog from '../components/SellOrderEditDialog.vue'
+import BuyOrderEditDialog from '../components/BuyOrderEditDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
+import FioAgeChip from '../components/FioAgeChip.vue'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
@@ -411,6 +599,7 @@ interface LastSync {
 }
 
 const headers = [
+  { title: '', key: 'data-table-expand', sortable: false, width: 40 },
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'FIO Age', key: 'fioUploadedAt', sortable: true },
@@ -423,8 +612,25 @@ const loading = ref(false)
 const syncing = ref(false)
 const lastSync = ref<LastSync>({ lastSyncedAt: null, fioUploadedAt: null })
 
+// Orders for showing in expanded rows
+const sellOrders = ref<SellOrderResponse[]>([])
+const buyOrders = ref<BuyOrderResponse[]>([])
+const loadingOrders = ref(false)
+const expandedItems = ref<string[]>([]) // Track expanded rows by item id (as string)
+
 const orderDialog = ref(false)
 const selectedItem = ref<FioInventoryItem | null>(null)
+
+// Order detail dialog state
+const orderDetailDialog = ref(false)
+const orderDetailType = ref<'sell' | 'buy'>('sell')
+const orderDetailId = ref<number>(0)
+
+// Edit dialog state
+const editSellDialog = ref(false)
+const editingSellOrder = ref<SellOrderResponse | null>(null)
+const editBuyDialog = ref(false)
+const editingBuyOrder = ref<BuyOrderResponse | null>(null)
 
 // Filters with URL deep linking
 const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
@@ -436,6 +642,7 @@ const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
     storageType: { type: 'string' },
   },
 })
+const filtersExpanded = ref(false)
 
 // Search with URL deep linking
 const search = useUrlState<string | null>({
@@ -564,11 +771,89 @@ const openSellDialog = (item: FioInventoryItem) => {
 
 const onOrderCreated = (type: 'buy' | 'sell') => {
   showSnackbar(`${type === 'buy' ? 'Buy' : 'Sell'} order created successfully`)
+  // Refresh orders to show the new order
+  loadOrders()
+}
+
+// Load user's orders (both sell and buy)
+const loadOrders = async () => {
+  try {
+    loadingOrders.value = true
+    const [sellData, buyData] = await Promise.all([api.sellOrders.list(), api.buyOrders.list()])
+    sellOrders.value = sellData
+    buyOrders.value = buyData
+  } catch (error) {
+    console.error('Failed to load orders', error)
+  } finally {
+    loadingOrders.value = false
+  }
+}
+
+// Get existing sell orders for an inventory item (matches commodity + location)
+const getSellOrdersForItem = (item: FioInventoryItem): SellOrderResponse[] => {
+  return sellOrders.value.filter(
+    order => order.commodityTicker === item.commodityTicker && order.locationId === item.locationId
+  )
+}
+
+// Get existing buy orders for an inventory item (matches commodity + location)
+const getBuyOrdersForItem = (item: FioInventoryItem): BuyOrderResponse[] => {
+  return buyOrders.value.filter(
+    order => order.commodityTicker === item.commodityTicker && order.locationId === item.locationId
+  )
+}
+
+// Check if an inventory item has existing orders
+const hasOrders = (item: FioInventoryItem): boolean => {
+  return getSellOrdersForItem(item).length > 0 || getBuyOrdersForItem(item).length > 0
+}
+
+// Open edit dialog for a sell order
+const editSellOrder = (order: SellOrderResponse) => {
+  editingSellOrder.value = order
+  editSellDialog.value = true
+}
+
+// Open edit dialog for a buy order
+const editBuyOrder = (order: BuyOrderResponse) => {
+  editingBuyOrder.value = order
+  editBuyDialog.value = true
+}
+
+// Open detail dialog for a sell order (clicking on the row)
+const viewSellOrder = (order: SellOrderResponse) => {
+  orderDetailType.value = 'sell'
+  orderDetailId.value = order.id
+  orderDetailDialog.value = true
+}
+
+// Open detail dialog for a buy order (clicking on the row)
+const viewBuyOrder = (order: BuyOrderResponse) => {
+  orderDetailType.value = 'buy'
+  orderDetailId.value = order.id
+  orderDetailDialog.value = true
+}
+
+// Handle edit dialog saved
+const onEditSaved = () => {
+  showSnackbar('Order updated successfully')
+  loadOrders()
+}
+
+// Handle order updated from detail dialog
+const onOrderUpdated = () => {
+  loadOrders()
+}
+
+// Handle order deleted from detail dialog
+const onOrderDeleted = () => {
+  loadOrders()
 }
 
 onMounted(() => {
   loadInventory()
   loadLastSync()
+  loadOrders()
 })
 </script>
 
@@ -581,5 +866,23 @@ onMounted(() => {
 .clickable-cell:hover {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
+}
+
+.order-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.order-row:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+</style>
+
+<style>
+/* Unscoped: align all filter inputs to same height */
+.filter-row .v-field__input {
+  min-height: 48px;
+  padding-top: 12px;
+  padding-bottom: 2px;
 }
 </style>

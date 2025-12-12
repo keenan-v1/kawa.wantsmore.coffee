@@ -2,6 +2,7 @@
   <v-autocomplete
     ref="autocompleteRef"
     v-model="internalValue"
+    v-model:search="searchText"
     v-bind="$attrs"
     :items="sortedFilteredItems"
     item-title="display"
@@ -14,10 +15,14 @@
     :multiple="multiple"
     :chips="multiple"
     :closable-chips="multiple"
-    @update:search="onSearchUpdate"
     @focus="onFocus"
     @keydown="onKeydown"
   >
+    <template v-if="multiple" #chip="{ props: chipProps, item }">
+      <v-chip v-bind="chipProps" class="chip-spacing">
+        {{ item.title }}
+      </v-chip>
+    </template>
     <template v-if="showFavoriteStars" #item="{ item, props: itemProps }">
       <v-list-item v-bind="itemProps">
         <template #prepend>
@@ -125,11 +130,6 @@ const internalValue = computed({
     }
   },
 })
-
-// Handle search input updates
-const onSearchUpdate = (value: string | null) => {
-  searchText.value = value ?? ''
-}
 
 // Clear search when component is focused (but keep the current value)
 const onFocus = () => {
@@ -286,4 +286,9 @@ defineExpose({ focus })
 .favorite-star:hover {
   transform: scale(1.2);
 }
+
+.chip-spacing {
+  margin: 2px;
+}
 </style>
+
