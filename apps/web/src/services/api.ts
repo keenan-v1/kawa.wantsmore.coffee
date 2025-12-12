@@ -705,6 +705,9 @@ interface ReservationWithDetails {
   locationId: string
   price: number
   currency: Currency
+  pricingMode: 'fixed' | 'dynamic'
+  effectivePrice: number | null
+  priceListCode: string | null
   isOrderOwner: boolean
   isCounterparty: boolean
 }

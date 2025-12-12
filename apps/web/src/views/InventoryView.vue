@@ -1,5 +1,5 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <h1 class="text-h4 mb-4">My Inventory</h1>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">

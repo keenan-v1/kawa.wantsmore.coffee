@@ -435,15 +435,23 @@ describe('ReservationsController', () => {
       expect(result.status).toBe('fulfilled')
     })
 
-    it('should throw BadRequest if trying to fulfill a pending reservation', async () => {
-      // Get reservation
+    it('should allow fulfilling a pending reservation', async () => {
+      // Get reservation (pending status)
       mockSelect.where.mockResolvedValueOnce([mockSellOrderReservation])
       // Get sell order for owner info
       mockSelect.where.mockResolvedValueOnce([mockSellOrder])
+      // Update returns
+      mockUpdate.returning.mockResolvedValueOnce([
+        { ...mockSellOrderReservation, status: 'fulfilled', updatedAt: new Date() },
+      ])
+      // Get actor name for notification
+      mockSelect.where.mockResolvedValueOnce([{ displayName: 'Counterparty' }])
 
-      await expect(controller.fulfillReservation(1, {}, mockCounterpartyRequest)).rejects.toThrow(
-        "Cannot transition from 'pending' to 'fulfilled'"
-      )
+      vi.mocked(notificationService.create).mockResolvedValue({} as any)
+
+      const result = await controller.fulfillReservation(1, {}, mockCounterpartyRequest)
+
+      expect(result.status).toBe('fulfilled')
     })
   })
 

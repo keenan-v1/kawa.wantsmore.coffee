@@ -27,6 +27,7 @@ import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { notificationService } from '../services/notificationService.js'
 import { hasPermission } from '../utils/permissionService.js'
+import { calculateEffectivePriceWithFallback } from '../services/price-calculator.js'
 
 interface ReservationResponse {
   id: number
@@ -77,6 +78,7 @@ export class ReservationsController extends Controller {
         locationId: sellOrders.locationId,
         price: sellOrders.price,
         currency: sellOrders.currency,
+        priceListCode: sellOrders.priceListCode,
       })
       .from(orderReservations)
       .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
@@ -106,6 +108,7 @@ export class ReservationsController extends Controller {
         locationId: buyOrders.locationId,
         price: buyOrders.price,
         currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
       })
       .from(orderReservations)
       .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
@@ -147,27 +150,52 @@ export class ReservationsController extends Controller {
     // Sort by createdAt descending
     results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    return results.map(r => ({
-      id: r.id,
-      sellOrderId: r.sellOrderId,
-      buyOrderId: r.buyOrderId,
-      counterpartyUserId: r.counterpartyUserId,
-      quantity: r.quantity,
-      status: r.status,
-      notes: r.notes,
-      expiresAt: r.expiresAt?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-      orderOwnerName: userMap.get(r.orderOwnerUserId) ?? 'Unknown',
-      orderOwnerUserId: r.orderOwnerUserId,
-      counterpartyName: userMap.get(r.counterpartyUserId) ?? 'Unknown',
-      commodityTicker: r.commodityTicker,
-      locationId: r.locationId,
-      price: parseFloat(r.price),
-      currency: r.currency,
-      isOrderOwner: r.orderOwnerUserId === userId,
-      isCounterparty: r.counterpartyUserId === userId,
-    }))
+    // Calculate effective prices for dynamic pricing orders
+    const resultsWithPricing = await Promise.all(
+      results.map(async r => {
+        const orderPrice = parseFloat(r.price)
+        const pricingMode: 'fixed' | 'dynamic' =
+          r.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
+
+        let effectivePrice: number | null = null
+        if (pricingMode === 'dynamic' && r.priceListCode) {
+          const effPrice = await calculateEffectivePriceWithFallback(
+            r.priceListCode,
+            r.commodityTicker,
+            r.locationId,
+            r.currency
+          )
+          effectivePrice = effPrice?.finalPrice ?? null
+        }
+
+        return {
+          id: r.id,
+          sellOrderId: r.sellOrderId,
+          buyOrderId: r.buyOrderId,
+          counterpartyUserId: r.counterpartyUserId,
+          quantity: r.quantity,
+          status: r.status,
+          notes: r.notes,
+          expiresAt: r.expiresAt?.toISOString() ?? null,
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString(),
+          orderOwnerName: userMap.get(r.orderOwnerUserId) ?? 'Unknown',
+          orderOwnerUserId: r.orderOwnerUserId,
+          counterpartyName: userMap.get(r.counterpartyUserId) ?? 'Unknown',
+          commodityTicker: r.commodityTicker,
+          locationId: r.locationId,
+          price: orderPrice,
+          currency: r.currency,
+          pricingMode,
+          effectivePrice,
+          priceListCode: r.priceListCode,
+          isOrderOwner: r.orderOwnerUserId === userId,
+          isCounterparty: r.counterpartyUserId === userId,
+        }
+      })
+    )
+
+    return resultsWithPricing
   }
 
   /**
@@ -198,6 +226,7 @@ export class ReservationsController extends Controller {
         locationId: sellOrders.locationId,
         price: sellOrders.price,
         currency: sellOrders.currency,
+        priceListCode: sellOrders.priceListCode,
       })
       .from(orderReservations)
       .innerJoin(sellOrders, eq(orderReservations.sellOrderId, sellOrders.id))
@@ -221,6 +250,7 @@ export class ReservationsController extends Controller {
         locationId: buyOrders.locationId,
         price: buyOrders.price,
         currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
       })
       .from(orderReservations)
       .innerJoin(buyOrders, eq(orderReservations.buyOrderId, buyOrders.id))
@@ -244,6 +274,22 @@ export class ReservationsController extends Controller {
 
     const userMap = new Map(userRows.map(u => [u.id, u.displayName]))
 
+    // Calculate effective price for dynamic pricing
+    const orderPrice = parseFloat(r.price)
+    const pricingMode: 'fixed' | 'dynamic' =
+      r.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
+
+    let effectivePrice: number | null = null
+    if (pricingMode === 'dynamic' && r.priceListCode) {
+      const effPrice = await calculateEffectivePriceWithFallback(
+        r.priceListCode,
+        r.commodityTicker,
+        r.locationId,
+        r.currency
+      )
+      effectivePrice = effPrice?.finalPrice ?? null
+    }
+
     return {
       id: r.id,
       sellOrderId: r.sellOrderId,
@@ -260,8 +306,11 @@ export class ReservationsController extends Controller {
       counterpartyName: userMap.get(r.counterpartyUserId) ?? 'Unknown',
       commodityTicker: r.commodityTicker,
       locationId: r.locationId,
-      price: parseFloat(r.price),
+      price: orderPrice,
       currency: r.currency,
+      pricingMode,
+      effectivePrice,
+      priceListCode: r.priceListCode,
       isOrderOwner: r.orderOwnerUserId === userId,
       isCounterparty: r.counterpartyUserId === userId,
     }
@@ -623,7 +672,7 @@ export class ReservationsController extends Controller {
 
     // Validate status transition
     const validTransitions: Record<ReservationStatus, ReservationStatus[]> = {
-      pending: ['confirmed', 'rejected', 'cancelled'],
+      pending: ['confirmed', 'rejected', 'cancelled', 'fulfilled'],
       confirmed: ['fulfilled', 'cancelled'],
       rejected: [],
       fulfilled: [],

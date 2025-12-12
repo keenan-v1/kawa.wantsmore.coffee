@@ -1,5 +1,5 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <h1 class="text-h4 mb-4">My Orders</h1>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
@@ -7,17 +7,6 @@
     </v-snackbar>
 
     <v-tabs v-model="activeTab" class="mb-4">
-      <v-tab value="sell">
-        <v-icon start>mdi-tag</v-icon>
-        Sell Orders
-        <v-badge
-          v-if="sellOrders.length > 0"
-          :content="sellOrders.length"
-          color="success"
-          inline
-          class="ml-2"
-        />
-      </v-tab>
       <v-tab value="buy">
         <v-icon start>mdi-cart</v-icon>
         Buy Orders
@@ -25,6 +14,17 @@
           v-if="buyOrders.length > 0"
           :content="buyOrders.length"
           color="primary"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
+      <v-tab value="sell">
+        <v-icon start>mdi-tag</v-icon>
+        Sell Orders
+        <v-badge
+          v-if="sellOrders.length > 0"
+          :content="sellOrders.length"
+          color="success"
           inline
           class="ml-2"
         />
@@ -101,8 +101,10 @@
 
             <template #item.price="{ item }">
               <div class="d-flex align-center">
-                <template v-if="item.price > 0">
-                  <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+                <template v-if="getSellOrderDisplayPrice(item) !== null">
+                  <span class="font-weight-medium">{{
+                    formatPrice(getSellOrderDisplayPrice(item)!)
+                  }}</span>
                   <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
                 </template>
                 <span v-else class="text-medium-emphasis">--</span>
@@ -304,8 +306,10 @@
 
             <template #item.price="{ item }">
               <div class="d-flex align-center">
-                <template v-if="item.price > 0">
-                  <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
+                <template v-if="getBuyOrderDisplayPrice(item) !== null">
+                  <span class="font-weight-medium">{{
+                    formatPrice(getBuyOrderDisplayPrice(item)!)
+                  }}</span>
                   <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
                 </template>
                 <span v-else class="text-medium-emphasis">--</span>
@@ -484,6 +488,96 @@
             </v-row>
           </v-card-title>
 
+          <!-- Reservation Summary Card -->
+          <v-card-text v-if="activeReservations.length > 0" class="pt-0 pb-4">
+            <v-row dense>
+              <!-- Counts -->
+              <v-col cols="12" md="3">
+                <div class="text-caption text-medium-emphasis mb-1">Active Reservations</div>
+                <div class="d-flex align-center ga-4">
+                  <div>
+                    <span class="text-h5 font-weight-bold">{{ activeReservations.length }}</span>
+                    <span class="text-caption text-medium-emphasis ml-1">open</span>
+                  </div>
+                  <v-divider vertical class="mx-2" />
+                  <div>
+                    <v-chip size="small" color="success" variant="tonal" class="mr-1">
+                      {{ fillReservations.length }}
+                    </v-chip>
+                    <span class="text-caption">fills</span>
+                  </div>
+                  <div>
+                    <v-chip size="small" color="warning" variant="tonal" class="mr-1">
+                      {{ reserveReservations.length }}
+                    </v-chip>
+                    <span class="text-caption">reserves</span>
+                  </div>
+                </div>
+              </v-col>
+
+              <!-- Fills Total -->
+              <v-col cols="12" md="3">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  <v-icon size="small" class="mr-1">mdi-arrow-down</v-icon>
+                  Fills (Incoming)
+                </div>
+                <div v-if="Object.keys(fillTotalsByCurrency).length > 0">
+                  <div
+                    v-for="(amount, currency) in fillTotalsByCurrency"
+                    :key="currency"
+                    class="text-success"
+                  >
+                    <span class="font-weight-medium">+{{ formatPrice(amount) }}</span>
+                    <span class="text-caption ml-1">{{ currency }}</span>
+                  </div>
+                </div>
+                <div v-else class="text-medium-emphasis">--</div>
+              </v-col>
+
+              <!-- Reserves Total -->
+              <v-col cols="12" md="3">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  <v-icon size="small" class="mr-1">mdi-arrow-up</v-icon>
+                  Reserves (Outgoing)
+                </div>
+                <div v-if="Object.keys(reserveTotalsByCurrency).length > 0">
+                  <div
+                    v-for="(amount, currency) in reserveTotalsByCurrency"
+                    :key="currency"
+                    class="text-warning"
+                  >
+                    <span class="font-weight-medium">-{{ formatPrice(amount) }}</span>
+                    <span class="text-caption ml-1">{{ currency }}</span>
+                  </div>
+                </div>
+                <div v-else class="text-medium-emphasis">--</div>
+              </v-col>
+
+              <!-- Net Total -->
+              <v-col cols="12" md="3">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  <v-icon size="small" class="mr-1">mdi-scale-balance</v-icon>
+                  Net Position
+                </div>
+                <div v-if="Object.keys(netTotalsByCurrency).length > 0">
+                  <div
+                    v-for="(amount, currency) in netTotalsByCurrency"
+                    :key="currency"
+                    :class="amount >= 0 ? 'text-success' : 'text-error'"
+                  >
+                    <span class="font-weight-medium">
+                      {{ amount >= 0 ? '+' : '' }}{{ formatPrice(amount) }}
+                    </span>
+                    <span class="text-caption ml-1">{{ currency }}</span>
+                  </div>
+                </div>
+                <div v-else class="text-medium-emphasis">--</div>
+              </v-col>
+            </v-row>
+          </v-card-text>
+
+          <v-divider v-if="activeReservations.length > 0" />
+
           <v-data-table
             :headers="reservationHeaders"
             :items="filteredReservations"
@@ -516,12 +610,40 @@
             </template>
 
             <template #item.price="{ item }">
-              <span class="font-weight-medium">{{ formatPrice(item.price) }}</span>
-              <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+              <div class="text-right">
+                <template v-if="getReservationDisplayPrice(item) !== null">
+                  <span class="font-weight-medium">{{
+                    formatPrice(getReservationDisplayPrice(item)!)
+                  }}</span>
+                  <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+                  <v-chip
+                    v-if="item.priceListCode"
+                    size="x-small"
+                    color="info"
+                    variant="tonal"
+                    class="ml-1"
+                  >
+                    {{ item.priceListCode }}
+                  </v-chip>
+                </template>
+                <span v-else class="text-medium-emphasis">--</span>
+              </div>
             </template>
 
             <template #item.quantity="{ item }">
               <span class="font-weight-medium">{{ item.quantity.toLocaleString() }}</span>
+            </template>
+
+            <template #item.total="{ item }">
+              <div class="text-right">
+                <template v-if="getReservationDisplayPrice(item) !== null">
+                  <span class="font-weight-medium">{{
+                    formatPrice(getReservationDisplayPrice(item)! * item.quantity)
+                  }}</span>
+                  <span class="text-medium-emphasis ml-1">{{ item.currency }}</span>
+                </template>
+                <span v-else class="text-medium-emphasis">--</span>
+              </div>
             </template>
 
             <template #item.status="{ item }">
@@ -622,27 +744,8 @@
 
                 <!-- Counterparty Actions -->
                 <template v-if="item.isCounterparty">
-                  <!-- Pending: Cancel -->
-                  <template v-if="item.status === 'pending'">
-                    <v-tooltip location="top">
-                      <template #activator="{ props }">
-                        <v-btn
-                          v-bind="props"
-                          icon
-                          size="small"
-                          variant="text"
-                          color="warning"
-                          :loading="reservationActionLoading === `cancel-${item.id}`"
-                          @click="cancelReservation(item.id)"
-                        >
-                          <v-icon>mdi-cancel</v-icon>
-                        </v-btn>
-                      </template>
-                      Cancel
-                    </v-tooltip>
-                  </template>
-                  <!-- Confirmed: Fulfill / Cancel -->
-                  <template v-if="item.status === 'confirmed'">
+                  <!-- Pending/Confirmed: Fulfill / Cancel -->
+                  <template v-if="item.status === 'pending' || item.status === 'confirmed'">
                     <v-tooltip location="top">
                       <template #activator="{ props }">
                         <v-btn
@@ -815,10 +918,10 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
-const ORDERS_TABS = ['sell', 'buy', 'reservations'] as const
+const ORDERS_TABS = ['buy', 'sell', 'reservations'] as const
 const activeTab = useUrlTab({
   validTabs: ORDERS_TABS,
-  defaultTab: 'sell',
+  defaultTab: 'buy',
 })
 
 const sellHeaders = [
@@ -856,8 +959,9 @@ const reservationHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'With', key: 'counterparty', sortable: true },
-  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Price/Unit', key: 'price', sortable: true, align: 'end' as const },
   { title: 'Qty', key: 'quantity', sortable: true, align: 'end' as const },
+  { title: 'Total', key: 'total', sortable: true, align: 'end' as const },
   { title: 'Status', key: 'status', sortable: true },
   { title: 'Expires', key: 'expiresAt', sortable: true },
   { title: '', key: 'notes', sortable: false, width: 40 },
@@ -1011,8 +1115,88 @@ const activeReservationsCount = computed(() => {
   return reservations.value.filter(r => r.status === 'pending' || r.status === 'confirmed').length
 })
 
+// Summary statistics for reservations - only count active (pending/confirmed) reservations
+const activeReservations = computed(() => {
+  return reservations.value.filter(r => r.status === 'pending' || r.status === 'confirmed')
+})
+
+// Fills: reservations where I'm filling someone else's buy order (I'm selling, money coming in)
+const fillReservations = computed(() => {
+  return activeReservations.value.filter(r => r.buyOrderId && r.isCounterparty)
+})
+
+// Reserves: reservations where I'm reserving from someone else's sell order (I'm buying, money going out)
+const reserveReservations = computed(() => {
+  return activeReservations.value.filter(r => r.sellOrderId && r.isCounterparty)
+})
+
+// Calculate totals by currency
+type CurrencyTotals = Record<string, number>
+
+const fillTotalsByCurrency = computed((): CurrencyTotals => {
+  const totals: CurrencyTotals = {}
+  for (const r of fillReservations.value) {
+    const price = getReservationDisplayPrice(r)
+    if (price !== null) {
+      const total = price * r.quantity
+      totals[r.currency] = (totals[r.currency] ?? 0) + total
+    }
+  }
+  return totals
+})
+
+const reserveTotalsByCurrency = computed((): CurrencyTotals => {
+  const totals: CurrencyTotals = {}
+  for (const r of reserveReservations.value) {
+    const price = getReservationDisplayPrice(r)
+    if (price !== null) {
+      const total = price * r.quantity
+      totals[r.currency] = (totals[r.currency] ?? 0) + total
+    }
+  }
+  return totals
+})
+
+const netTotalsByCurrency = computed((): CurrencyTotals => {
+  const fills = fillTotalsByCurrency.value
+  const reserves = reserveTotalsByCurrency.value
+  const currencies = new Set([...Object.keys(fills), ...Object.keys(reserves)])
+  const totals: CurrencyTotals = {}
+  for (const currency of currencies) {
+    const net = (fills[currency] ?? 0) - (reserves[currency] ?? 0)
+    if (net !== 0) {
+      totals[currency] = net
+    }
+  }
+  return totals
+})
+
 const formatPrice = (price: number): string => {
   return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Get the display price for a sell order - uses effectivePrice for dynamic pricing
+const getSellOrderDisplayPrice = (item: SellOrderResponse): number | null => {
+  if (item.pricingMode === 'dynamic') {
+    return item.effectivePrice
+  }
+  return item.price > 0 ? item.price : null
+}
+
+// Get the display price for a buy order - uses effectivePrice for dynamic pricing
+const getBuyOrderDisplayPrice = (item: BuyOrderResponse): number | null => {
+  if (item.pricingMode === 'dynamic') {
+    return item.effectivePrice
+  }
+  return item.price > 0 ? item.price : null
+}
+
+// Get the display price for a reservation - uses effectivePrice for dynamic pricing
+const getReservationDisplayPrice = (item: ReservationWithDetails): number | null => {
+  if (item.pricingMode === 'dynamic') {
+    return item.effectivePrice
+  }
+  return item.price > 0 ? item.price : null
 }
 
 const formatDate = (dateString: string): string => {

@@ -1,5 +1,5 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h4">Price Adjustments</h1>
       <v-btn variant="text" to="/prices">

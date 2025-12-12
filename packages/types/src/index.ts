@@ -383,8 +383,12 @@ export interface ReservationWithDetails extends OrderReservation {
   // Order details
   commodityTicker: string
   locationId: string
-  price: number // Price from the order
+  price: number // Base price from the order
   currency: Currency
+  // Dynamic pricing info
+  pricingMode: 'fixed' | 'dynamic'
+  effectivePrice: number | null // Calculated price for dynamic pricing
+  priceListCode: string | null // Price list code if using dynamic pricing
   // Helpers for the current user
   isOrderOwner: boolean // true if current user owns the order being reserved/filled
   isCounterparty: boolean // true if current user is the one who created the reservation
