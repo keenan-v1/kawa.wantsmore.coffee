@@ -68,6 +68,8 @@ const props = withDefaults(
     favorites?: string[]
     /** Enable multi-select mode with chips */
     multiple?: boolean
+    /** Hide the favorite stars in dropdown items (useful when selecting favorites themselves) */
+    hideFavoriteStars?: boolean
   }>(),
   {
     rules: () => [],
@@ -75,6 +77,7 @@ const props = withDefaults(
     required: false,
     favorites: () => [],
     multiple: false,
+    hideFavoriteStars: false,
   }
 )
 
@@ -94,8 +97,8 @@ const searchText = ref('')
 // Create a Set for efficient favorite lookups
 const favoritesSet = computed(() => new Set(props.favorites))
 
-// Show stars if favorites prop is provided (even if empty array)
-const showFavoriteStars = computed(() => props.favorites !== undefined)
+// Show stars if favorites prop is provided and not explicitly hidden
+const showFavoriteStars = computed(() => !props.hideFavoriteStars && props.favorites.length > 0)
 
 // Toggle a favorite on/off
 const toggleFavorite = (key: string) => {
@@ -291,4 +294,3 @@ defineExpose({ focus })
   margin: 2px;
 }
 </style>
-

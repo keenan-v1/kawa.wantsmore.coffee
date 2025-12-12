@@ -79,7 +79,7 @@
                     required
                   />
 
-                  <!-- Automatic Pricing Status -->
+                  <!-- Automatic Pricing Status & Visibility -->
                   <div class="d-flex align-center mb-3 text-body-2">
                     <span class="text-medium-emphasis">Automatic Pricing:</span>
                     <a
@@ -119,6 +119,53 @@
                       class="ml-2"
                     >
                       {{ settingsStore.defaultPriceList.value }}
+                    </v-chip>
+
+                    <v-spacer />
+
+                    <!-- Visibility selector -->
+                    <v-menu v-if="orderTypes.length > 1" location="bottom end">
+                      <template #activator="{ props: menuProps }">
+                        <v-chip
+                          v-bind="menuProps"
+                          size="small"
+                          variant="tonal"
+                          :color="buyForm.orderType === 'partner' ? 'primary' : 'default'"
+                          class="cursor-pointer"
+                        >
+                          <v-icon start size="small">
+                            {{ buyForm.orderType === 'partner' ? 'mdi-account-group' : 'mdi-home' }}
+                          </v-icon>
+                          {{ buyForm.orderType === 'partner' ? 'Partner' : 'Internal' }}
+                          <v-icon end size="small">mdi-menu-down</v-icon>
+                        </v-chip>
+                      </template>
+                      <v-list density="compact">
+                        <v-list-item
+                          v-for="type in orderTypes"
+                          :key="type.value"
+                          :active="buyForm.orderType === type.value"
+                          @click="buyForm.orderType = type.value"
+                        >
+                          <template #prepend>
+                            <v-icon size="small">
+                              {{ type.value === 'partner' ? 'mdi-account-group' : 'mdi-home' }}
+                            </v-icon>
+                          </template>
+                          <v-list-item-title>{{ type.title }}</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                    <v-chip
+                      v-else
+                      size="small"
+                      variant="tonal"
+                      :color="buyForm.orderType === 'partner' ? 'primary' : 'default'"
+                    >
+                      <v-icon start size="small">
+                        {{ buyForm.orderType === 'partner' ? 'mdi-account-group' : 'mdi-home' }}
+                      </v-icon>
+                      {{ buyForm.orderType === 'partner' ? 'Partner' : 'Internal' }}
                     </v-chip>
                   </div>
 
@@ -245,17 +292,27 @@
                     </div>
                   </template>
 
-                  <!-- Order Type -->
-                  <v-select
-                    v-model="buyForm.orderType"
-                    :items="orderTypes"
-                    item-title="title"
-                    item-value="value"
-                    label="Visibility"
-                    hint="Who can see this order"
-                    persistent-hint
-                    :disabled="orderTypes.length === 1"
-                  />
+                  <!-- Total Value for Buy Order -->
+                  <v-alert
+                    v-if="buyOrderTotalValue !== null"
+                    color="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-4"
+                  >
+                    <div class="d-flex justify-space-between align-center">
+                      <span class="text-body-1">Total Value</span>
+                      <span class="text-h6 font-weight-bold">
+                        {{
+                          buyOrderTotalValue.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        }}
+                        {{ buyForm.usePriceList ? suggestedPrice?.currency : buyForm.currency }}
+                      </span>
+                    </div>
+                  </v-alert>
                 </v-form>
               </v-tabs-window-item>
 
@@ -324,7 +381,7 @@
                     </div>
                   </v-alert>
 
-                  <!-- Automatic Pricing Status -->
+                  <!-- Automatic Pricing Status & Visibility -->
                   <div class="d-flex align-center mb-3 text-body-2">
                     <span class="text-medium-emphasis">Automatic Pricing:</span>
                     <a
@@ -364,6 +421,55 @@
                       class="ml-2"
                     >
                       {{ settingsStore.defaultPriceList.value }}
+                    </v-chip>
+
+                    <v-spacer />
+
+                    <!-- Visibility selector -->
+                    <v-menu v-if="orderTypes.length > 1" location="bottom end">
+                      <template #activator="{ props: menuProps }">
+                        <v-chip
+                          v-bind="menuProps"
+                          size="small"
+                          variant="tonal"
+                          :color="sellForm.orderType === 'partner' ? 'primary' : 'default'"
+                          class="cursor-pointer"
+                        >
+                          <v-icon start size="small">
+                            {{
+                              sellForm.orderType === 'partner' ? 'mdi-account-group' : 'mdi-home'
+                            }}
+                          </v-icon>
+                          {{ sellForm.orderType === 'partner' ? 'Partner' : 'Internal' }}
+                          <v-icon end size="small">mdi-menu-down</v-icon>
+                        </v-chip>
+                      </template>
+                      <v-list density="compact">
+                        <v-list-item
+                          v-for="type in orderTypes"
+                          :key="type.value"
+                          :active="sellForm.orderType === type.value"
+                          @click="sellForm.orderType = type.value"
+                        >
+                          <template #prepend>
+                            <v-icon size="small">
+                              {{ type.value === 'partner' ? 'mdi-account-group' : 'mdi-home' }}
+                            </v-icon>
+                          </template>
+                          <v-list-item-title>{{ type.title }}</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                    <v-chip
+                      v-else
+                      size="small"
+                      variant="tonal"
+                      :color="sellForm.orderType === 'partner' ? 'primary' : 'default'"
+                    >
+                      <v-icon start size="small">
+                        {{ sellForm.orderType === 'partner' ? 'mdi-account-group' : 'mdi-home' }}
+                      </v-icon>
+                      {{ sellForm.orderType === 'partner' ? 'Partner' : 'Internal' }}
                     </v-chip>
                   </div>
 
@@ -511,18 +617,27 @@
                     class="mt-2"
                   />
 
-                  <!-- Order Type -->
-                  <v-select
-                    v-model="sellForm.orderType"
-                    :items="orderTypes"
-                    item-title="title"
-                    item-value="value"
-                    label="Visibility"
-                    hint="Who can see this order"
-                    persistent-hint
-                    :disabled="orderTypes.length === 1"
+                  <!-- Total Value for Sell Order with max_sell limit -->
+                  <v-alert
+                    v-if="sellOrderTotalValue !== null"
+                    color="success"
+                    variant="tonal"
+                    density="compact"
                     class="mt-4"
-                  />
+                  >
+                    <div class="d-flex justify-space-between align-center">
+                      <span class="text-body-1">Total Value</span>
+                      <span class="text-h6 font-weight-bold">
+                        {{
+                          sellOrderTotalValue.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        }}
+                        {{ sellForm.usePriceList ? suggestedPrice?.currency : sellForm.currency }}
+                      </span>
+                    </div>
+                  </v-alert>
                 </v-form>
               </v-tabs-window-item>
             </v-tabs-window>
@@ -993,6 +1108,34 @@ const remainingBuyOrderQuantity = computed(() => {
 
 const selectedReservationsCount = computed(() => {
   return Object.values(reservationQuantities.value).filter(qty => qty && qty > 0).length
+})
+
+// Display price - uses price list price when enabled, otherwise manual price
+const displayBuyPrice = computed((): number | null => {
+  if (buyForm.value.usePriceList) {
+    return suggestedPrice.value?.finalPrice ?? null
+  }
+  return buyForm.value.price > 0 ? buyForm.value.price : null
+})
+
+const displaySellPrice = computed((): number | null => {
+  if (sellForm.value.usePriceList) {
+    return suggestedPrice.value?.finalPrice ?? null
+  }
+  return sellForm.value.price > 0 ? sellForm.value.price : null
+})
+
+// Total value for buy orders (always have fixed quantity)
+const buyOrderTotalValue = computed((): number | null => {
+  if (!displayBuyPrice.value || !buyForm.value.quantity) return null
+  return displayBuyPrice.value * buyForm.value.quantity
+})
+
+// Total value for sell orders with max_sell limit (fixed quantity)
+const sellOrderTotalValue = computed((): number | null => {
+  if (sellForm.value.limitMode !== 'max_sell') return null
+  if (!displaySellPrice.value || !sellForm.value.limitQuantity) return null
+  return displaySellPrice.value * sellForm.value.limitQuantity
 })
 
 // Check if an existing sell order matches the current form (commodity + location + currency)

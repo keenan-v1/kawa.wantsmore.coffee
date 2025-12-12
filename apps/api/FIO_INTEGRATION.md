@@ -40,10 +40,10 @@ Syncs from `/csv/materials` endpoint to `commodities` table:
 Syncs from `/csv/planets` and `/csv/systems` endpoints to `locations` table:
 
 - `id` - Planet natural ID (UV-351a, KW-689c, etc.)
-- `name` - Planet name (Benton, Katoa, etc.)
+- `name` - Planet name (Benten, Katoa, etc.)
 - `type` - Station or Planet (auto-detected)
 - `systemCode` - System code (UV-351, KW-689, etc.)
-- `systemName` - System name (Benton, Shadow Garden, etc.)
+- `systemName` - System name (Benten, Shadow Garden, etc.)
 
 ## CLI Commands
 

@@ -12,10 +12,10 @@ export interface Commodity {
 
 export interface Location {
   id: string // Destination code (e.g., BEN, KW-020c)
-  name: string // Destination name (e.g., Benton Station, Katoa, KW-689c)
+  name: string // Destination name (e.g., Benten Station, Katoa, KW-689c)
   type: 'Station' | 'Planet' | 'Platform' | 'Ship'
   systemCode: string // System code (e.g., UV-351, KW-689)
-  systemName: string // System name (e.g., Benton, Shadow Garden)
+  systemName: string // System name (e.g., Benten, Shadow Garden)
 }
 
 export type LocationDisplayMode = 'names-only' | 'natural-ids-only' | 'both'

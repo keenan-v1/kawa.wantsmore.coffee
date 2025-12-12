@@ -493,15 +493,14 @@
 
                 <div class="text-subtitle-1 font-weight-bold mb-3">Favorites</div>
 
-                <v-autocomplete
+                <KeyValueAutocomplete
                   v-model="settingsStore.favoritedLocations.value"
-                  :items="locationOptions"
+                  :items="locationKeyValueItems"
                   :loading="loadingLocations"
                   label="Favorite Locations"
                   prepend-icon="mdi-star-outline"
                   multiple
-                  chips
-                  closable-chips
+                  hide-favorite-stars
                   class="mb-4"
                   @update:model-value="autoSaveSetting('market.favoritedLocations', $event)"
                 >
@@ -512,17 +511,16 @@
                       </template>
                     </v-tooltip>
                   </template>
-                </v-autocomplete>
+                </KeyValueAutocomplete>
 
-                <v-autocomplete
+                <KeyValueAutocomplete
                   v-model="settingsStore.favoritedCommodities.value"
-                  :items="commodityOptions"
+                  :items="commodityKeyValueItems"
                   :loading="loadingCommodities"
                   label="Favorite Commodities"
                   prepend-icon="mdi-star-outline"
                   multiple
-                  chips
-                  closable-chips
+                  hide-favorite-stars
                   class="mb-4"
                   @update:model-value="autoSaveSetting('market.favoritedCommodities', $event)"
                 >
@@ -536,7 +534,7 @@
                       </template>
                     </v-tooltip>
                   </template>
-                </v-autocomplete>
+                </KeyValueAutocomplete>
               </v-card-text>
             </v-card>
           </v-tabs-window-item>
@@ -1060,6 +1058,7 @@ import { useUrlTab } from '../composables'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
 import DiscordIcon from '../components/DiscordIcon.vue'
+import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 import { CURRENCIES } from '../types'
 import type { LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
 import type { DiscordConnectionStatus } from '@kawakawa/types'
@@ -1073,9 +1072,9 @@ const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const currencies = CURRENCIES
 const locationDisplayModes: { title: string; value: LocationDisplayMode }[] = [
-  { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
+  { title: 'Names Only (e.g., Benten Station, Katoa)', value: 'names-only' },
   { title: 'Natural IDs Only (e.g., BEN, UV-351a)', value: 'natural-ids-only' },
-  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' },
+  { title: 'Both (e.g., Benten Station (BEN), Katoa (UV-351a))', value: 'both' },
 ]
 const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = [
   { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
@@ -1156,6 +1155,14 @@ const fioStorageLocationIds = ref<string[]>([])
 const loadingPriceLists = ref(false)
 const loadingLocations = ref(false)
 const loadingCommodities = ref(false)
+
+// Convert options to KeyValueItem format for KeyValueAutocomplete
+const locationKeyValueItems = computed<KeyValueItem[]>(() =>
+  locationOptions.value.map(opt => ({ key: opt.value, display: opt.title }))
+)
+const commodityKeyValueItems = computed<KeyValueItem[]>(() =>
+  commodityOptions.value.map(opt => ({ key: opt.value, display: opt.title }))
+)
 
 // Sorted location options with icons: favorites (star), FIO storage (house), then alphabetical
 const sortedLocationOptions = computed(() => {

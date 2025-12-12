@@ -238,11 +238,11 @@ export const fioCommodities = pgTable('fio_commodities', {
 // ==================== FIO LOCATIONS (Planets/Stations from FIO API) ====================
 export const fioLocations = pgTable('fio_locations', {
   naturalId: varchar('natural_id', { length: 20 }).primaryKey(), // 'BEN', 'UV-351a', 'KW-689c', etc.
-  name: varchar('name', { length: 100 }).notNull(), // 'Benton Station', 'Katoa', etc.
+  name: varchar('name', { length: 100 }).notNull(), // 'Benten Station', 'Katoa', etc.
   type: locationTypeEnum('type').notNull(), // 'Station' or 'Planet'
   systemId: varchar('system_id', { length: 40 }), // FIO system UUID
   systemNaturalId: varchar('system_natural_id', { length: 20 }).notNull(), // 'UV-351', 'KW-689', etc.
-  systemName: varchar('system_name', { length: 100 }).notNull(), // 'Benton', 'Shadow Garden', 'Hubur', etc.
+  systemName: varchar('system_name', { length: 100 }).notNull(), // 'Benten', 'Shadow Garden', 'Hubur', etc.
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -402,7 +402,7 @@ export const orderReservations = pgTable(
 // Defines available price lists/exchanges and their properties
 export const priceLists = pgTable('price_lists', {
   code: varchar('code', { length: 20 }).primaryKey(), // CI1, NC1, IC1, AI1, KAWA, etc.
-  name: varchar('name', { length: 100 }).notNull(), // "Commodity Exchange - Benton", "KAWA Internal", etc.
+  name: varchar('name', { length: 100 }).notNull(), // "Commodity Exchange - Benten", "KAWA Internal", etc.
   description: text('description'), // Optional description
   type: priceListTypeEnum('type').notNull(), // 'fio' = synced from FIO API, 'custom' = user-managed
   currency: currencyEnum('currency').notNull(), // Fixed currency for this price list

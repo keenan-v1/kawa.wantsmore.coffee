@@ -40,15 +40,29 @@
             <span class="text-medium-emphasis">{{ isBuying ? 'Seller' : 'Buyer' }}:</span>
             {{ order?.userName }}
           </div>
-          <div>
+          <div class="d-flex align-center">
             <span class="text-medium-emphasis">Price:</span>
-            {{
-              order?.price.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })
-            }}
-            {{ order?.currency }}
+            <template v-if="displayPrice !== null">
+              <span class="ml-1">
+                {{
+                  displayPrice.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                }}
+                {{ order?.currency }}
+              </span>
+              <v-chip
+                v-if="order?.priceListCode"
+                size="x-small"
+                color="info"
+                variant="tonal"
+                class="ml-2"
+              >
+                {{ order.priceListCode }}
+              </v-chip>
+            </template>
+            <span v-else class="ml-1 text-medium-emphasis">--</span>
           </div>
           <div>
             <span class="text-medium-emphasis">Available:</span>
@@ -71,20 +85,6 @@
             persistent-hint
           />
 
-          <!-- Total Value -->
-          <div v-if="quantity" class="text-body-2 mt-2 mb-4">
-            <span class="text-medium-emphasis">Total value:</span>
-            <strong>
-              {{
-                totalValue.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-              }}
-              {{ order?.currency }}
-            </strong>
-          </div>
-
           <!-- Expiration Date -->
           <v-text-field
             v-model="expiresAt"
@@ -99,6 +99,28 @@
           <!-- Notes -->
           <v-textarea v-model="notes" label="Notes (optional)" rows="2" hide-details class="mt-2" />
         </v-form>
+
+        <!-- Total Value - Prominent display at bottom -->
+        <v-alert
+          v-if="quantity && displayPrice !== null"
+          :color="isBuying ? 'warning' : 'success'"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          <div class="d-flex justify-space-between align-center">
+            <span class="text-body-1">Total Value</span>
+            <span class="text-h6 font-weight-bold">
+              {{
+                totalValue.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              }}
+              {{ order?.currency }}
+            </span>
+          </div>
+        </v-alert>
 
         <!-- Info about what will happen -->
         <v-alert v-if="quantity" type="warning" variant="tonal" class="mt-4" density="compact">
@@ -131,29 +153,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import type { Currency, OrderType } from '@kawakawa/types'
 import { api } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
-import { useDialogBehavior } from '../composables'
-
-// MarketItem type matching what MarketView uses
-interface MarketItem {
-  id: number
-  itemType: 'sell' | 'buy'
-  commodityTicker: string
-  locationId: string
-  userName: string
-  price: number
-  currency: Currency
-  orderType: OrderType
-  quantity: number
-  remainingQuantity: number
-  reservedQuantity: number
-  activeReservationCount: number
-  isOwn: boolean
-}
+import { useDialogBehavior, type MarketItem } from '../composables'
 
 const props = defineProps<{
   modelValue: boolean
@@ -236,8 +240,17 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
+// Get display price - effective price for dynamic, regular price for fixed
+const displayPrice = computed((): number | null => {
+  if (!props.order) return null
+  if (props.order.pricingMode === 'dynamic') {
+    return props.order.effectivePrice ?? null
+  }
+  return props.order.price
+})
+
 const totalValue = computed(() => {
-  return (props.order?.price ?? 0) * (quantity.value ?? 0)
+  return (displayPrice.value ?? 0) * (quantity.value ?? 0)
 })
 
 const quantityRules = computed(() => [

@@ -2056,9 +2056,9 @@ const timezoneOptions = computed(() => {
 
 // Display mode options
 const locationDisplayModes = [
-  { title: 'Names Only (e.g., Benton Station, Katoa)', value: 'names-only' },
+  { title: 'Names Only (e.g., Benten Station, Katoa)', value: 'names-only' },
   { title: 'Natural IDs Only (e.g., BEN, UV-351a)', value: 'natural-ids-only' },
-  { title: 'Both (e.g., Benton Station (BEN), Katoa (UV-351a))', value: 'both' },
+  { title: 'Both (e.g., Benten Station (BEN), Katoa (UV-351a))', value: 'both' },
 ]
 const commodityDisplayModes = [
   { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },

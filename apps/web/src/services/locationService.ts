@@ -94,9 +94,9 @@ export const locationService = {
   //   natural-ids-only: "UV-351a"
   //   both: "Katoa (UV-351a)"
   // For stations:
-  //   names-only: "Benton Station"
+  //   names-only: "Benten Station"
   //   natural-ids-only: "BEN"
-  //   both: "Benton Station (BEN)"
+  //   both: "Benten Station (BEN)"
   getLocationDisplay: (id: string, mode: LocationDisplayMode = 'names-only'): string => {
     // Synchronous fallback for display - shows ID until data loads
     if (!cachedLocations) {

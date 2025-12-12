@@ -79,7 +79,7 @@ describe('FioInventoryController', () => {
           fioUploadedAt: new Date('2024-01-01T00:00:00Z'),
           // Location fields
           locationId: 'BEN',
-          locationName: 'Benton Station',
+          locationName: 'Benten Station',
           locationType: 'Station',
           // Commodity fields
           commodityName: 'Water',
@@ -113,7 +113,7 @@ describe('FioInventoryController', () => {
         lastSyncedAt: '2024-01-01T00:00:00.000Z',
         commodityName: 'Water',
         commodityCategory: 'consumables',
-        locationName: 'Benton Station',
+        locationName: 'Benten Station',
         locationType: 'Station',
         storageType: 'STORE',
         fioUploadedAt: '2024-01-01T00:00:00.000Z',

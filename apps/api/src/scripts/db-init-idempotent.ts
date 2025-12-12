@@ -136,8 +136,8 @@ async function runSeed() {
   }[] = [
     {
       code: 'CI1',
-      name: 'Commodity Exchange - Benton',
-      description: 'FIO CI1 exchange at Benton station',
+      name: 'Commodity Exchange - Benten',
+      description: 'FIO CI1 exchange at Benten station',
       type: 'fio',
       defaultLocationId: 'BEN',
       currency: 'CIS',

@@ -128,12 +128,12 @@ describe('PriceListsController', () => {
       mockPriceListsResult = [
         {
           code: 'CI1',
-          name: 'Benton Exchange',
+          name: 'Benten Exchange',
           description: 'FIO CI1',
           type: 'fio',
           currency: 'CIS',
           defaultLocationId: 'BEN',
-          defaultLocationName: 'Benton',
+          defaultLocationName: 'Benten',
           isActive: true,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -143,7 +143,7 @@ describe('PriceListsController', () => {
       const result = await controller.getPriceList('ci1')
 
       expect(result.code).toBe('CI1')
-      expect(result.name).toBe('Benton Exchange')
+      expect(result.name).toBe('Benten Exchange')
     })
 
     it('should throw NotFound when price list does not exist', async () => {

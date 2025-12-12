@@ -359,51 +359,11 @@
     </v-dialog>
 
     <!-- Reserve Dialog -->
-    <v-dialog
+    <ReservationDialog
       v-model="reserveDialog"
-      max-width="500"
-      :persistent="reserveDialogBehavior.persistent.value"
-      :no-click-animation="reserveDialogBehavior.noClickAnimation"
-    >
-      <v-card>
-        <v-card-title>
-          {{ orderType === 'sell' ? 'Reserve from Order' : 'Fill Order' }}
-        </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model.number="reserveQuantity"
-            type="number"
-            label="Quantity"
-            :min="1"
-            :max="order?.remainingQuantity"
-            :rules="[
-              v => !!v || 'Quantity is required',
-              v => v >= 1 || 'Minimum quantity is 1',
-              v =>
-                v <= (order?.remainingQuantity ?? 0) ||
-                `Maximum quantity is ${order?.remainingQuantity}`,
-            ]"
-          />
-          <v-textarea v-model="reserveNotes" label="Notes (optional)" rows="2" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="reserveDialog = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            :loading="reserving"
-            :disabled="
-              !reserveQuantity ||
-              reserveQuantity < 1 ||
-              reserveQuantity > (order?.remainingQuantity ?? 0)
-            "
-            @click="createReservation"
-          >
-            {{ orderType === 'sell' ? 'Reserve' : 'Fill' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      :order="reserveMarketItem"
+      @reserved="onReservationCreated"
+    />
   </v-dialog>
 </template>
 
@@ -424,6 +384,8 @@ import { useUserStore } from '../stores/user'
 import { useFormatters, useDialogBehavior } from '../composables'
 import { formatRelativeDate, formatDateTime } from '../utils/dateFormat'
 import ReservationStatusChip from './ReservationStatusChip.vue'
+import ReservationDialog from './ReservationDialog.vue'
+import type { MarketItem } from '../composables'
 
 // Pricing mode type
 type PricingMode = 'fixed' | 'dynamic'
@@ -509,10 +471,6 @@ const deleteDialog = ref(false)
 const deleteDialogBehavior = useDialogBehavior({ modelValue: deleteDialog })
 const deleting = ref(false)
 const reserveDialog = ref(false)
-const reserveDialogBehavior = useDialogBehavior({ modelValue: reserveDialog })
-const reserveQuantity = ref(1)
-const reserveNotes = ref('')
-const reserving = ref(false)
 
 // Snackbar
 const snackbar = ref({
@@ -694,40 +652,42 @@ async function deleteOrder() {
   }
 }
 
-// Reserve dialog
+// Reserve dialog - convert order data to MarketItem format for ReservationDialog
+const reserveMarketItem = computed((): MarketItem | null => {
+  if (!order.value) return null
+
+  const o = order.value
+  const isSellOrder = props.orderType === 'sell'
+
+  return {
+    id: o.id,
+    itemType: props.orderType,
+    commodityTicker: o.commodityTicker,
+    locationId: o.locationId,
+    userName: ownerName.value ?? '',
+    price: o.price,
+    currency: o.currency,
+    orderType: o.orderType,
+    quantity: isSellOrder ? (o as SellOrderData).availableQuantity : (o as BuyOrderData).quantity,
+    remainingQuantity: o.remainingQuantity,
+    reservedQuantity: o.reservedQuantity,
+    activeReservationCount: o.activeReservationCount,
+    isOwn: isOwnOrder.value,
+    fioUploadedAt: isSellOrder ? ((o as SellOrderData).fioUploadedAt ?? null) : null,
+    pricingMode: o.pricingMode ?? 'fixed',
+    effectivePrice: o.effectivePrice ?? null,
+    priceListCode: o.priceListCode ?? null,
+  }
+})
+
 function openReserveDialog() {
-  reserveQuantity.value = Math.min(order.value?.remainingQuantity ?? 1, 100)
-  reserveNotes.value = ''
   reserveDialog.value = true
 }
 
-async function createReservation() {
-  if (!order.value) return
-
-  reserving.value = true
-  try {
-    if (props.orderType === 'sell') {
-      await api.reservations.createForSellOrder({
-        sellOrderId: props.orderId,
-        quantity: reserveQuantity.value,
-        notes: reserveNotes.value || undefined,
-      })
-    } else {
-      await api.reservations.createForBuyOrder({
-        buyOrderId: props.orderId,
-        quantity: reserveQuantity.value,
-        notes: reserveNotes.value || undefined,
-      })
-    }
-    showSnackbar('Reservation created successfully')
-    reserveDialog.value = false
-    emit('updated')
-    close()
-  } catch (e) {
-    showSnackbar(e instanceof Error ? e.message : 'Failed to create reservation', 'error')
-  } finally {
-    reserving.value = false
-  }
+function onReservationCreated() {
+  showSnackbar('Reservation created successfully')
+  emit('updated')
+  close()
 }
 
 // Reservation actions
