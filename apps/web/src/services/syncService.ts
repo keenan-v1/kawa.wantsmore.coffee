@@ -12,6 +12,9 @@ let currentSyncState: SyncState | null = null
 let pollIntervalId: ReturnType<typeof setInterval> | null = null
 let isPolling = false
 
+// Initial app version captured on first sync
+let initialAppVersion: string | null = null
+
 // Event names
 export const SYNC_EVENTS = {
   UNREAD_COUNT_CHANGED: 'sync:unread-count-changed',
@@ -24,7 +27,7 @@ async function fetchSyncState(): Promise<SyncState | null> {
   try {
     const response = await fetch('/api/notifications/unread-count', {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        Authorization: `Bearer ${localStorage.getItem('jwt')}`,
       },
     })
 
@@ -60,13 +63,19 @@ async function processSyncState(newState: SyncState): Promise<void> {
     )
   }
 
-  // Check for app version changes
-  if (oldState && newState.appVersion !== oldState.appVersion) {
+  // Capture initial app version on first sync
+  if (!initialAppVersion) {
+    initialAppVersion = newState.appVersion
+  }
+
+  // Check for app version changes - compare against initial version, not previous poll
+  // This detects deployments that happened after the page was loaded
+  if (newState.appVersion !== initialAppVersion) {
     window.dispatchEvent(
       new CustomEvent(SYNC_EVENTS.APP_VERSION_CHANGED, {
         detail: {
           newVersion: newState.appVersion,
-          oldVersion: oldState.appVersion,
+          oldVersion: initialAppVersion,
         },
       })
     )
@@ -168,29 +177,20 @@ export function getDataVersions(): DataVersions {
 
 // Check if app has been updated
 export function hasAppUpdate(): boolean {
-  // Compare current app version with the one loaded when the page started
-  const initialVersion = (window as unknown as { __INITIAL_APP_VERSION__?: string })
-    .__INITIAL_APP_VERSION__
-  return !!(currentSyncState && initialVersion && currentSyncState.appVersion !== initialVersion)
-}
-
-// Initialize - call once on app startup
-export function initSync(): void {
-  // Store the initial app version
-  if (currentSyncState?.appVersion) {
-    ;(window as unknown as { __INITIAL_APP_VERSION__?: string }).__INITIAL_APP_VERSION__ =
-      currentSyncState.appVersion
-  }
+  return !!(
+    currentSyncState &&
+    initialAppVersion &&
+    currentSyncState.appVersion !== initialAppVersion
+  )
 }
 
 // Force refresh sync state (useful after login)
 export async function refreshSyncState(): Promise<SyncState | null> {
   const state = await fetchSyncState()
   if (state) {
-    // Store initial app version if not set
-    if (!(window as unknown as { __INITIAL_APP_VERSION__?: string }).__INITIAL_APP_VERSION__) {
-      ;(window as unknown as { __INITIAL_APP_VERSION__?: string }).__INITIAL_APP_VERSION__ =
-        state.appVersion
+    // Capture initial app version if not set
+    if (!initialAppVersion) {
+      initialAppVersion = state.appVersion
     }
     currentSyncState = state
   }
@@ -204,7 +204,6 @@ export const syncService = {
   getUnreadCount,
   getDataVersions,
   hasAppUpdate,
-  initSync,
   refreshSyncState,
   EVENTS: SYNC_EVENTS,
 }
