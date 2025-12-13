@@ -112,7 +112,7 @@
             color="secondary"
             @click:close="filters.category = null"
           >
-            Category: {{ filters.category }}
+            Category: {{ localizeMaterialCategory(filters.category as CommodityCategory) }}
           </v-chip>
           <v-chip
             v-if="filters.currency"
@@ -201,22 +201,29 @@
         :items="filteredPrices"
         :loading="loading"
         :items-per-page="25"
-        class="elevation-0"
+        :class="['elevation-0', { 'icon-rows': hasIcons }]"
       >
         <template #item.commodityTicker="{ item }">
           <div
             class="font-weight-medium clickable-cell"
             @click="setFilter('commodity', item.commodityTicker)"
           >
-            {{ getCommodityDisplay(item.commodityTicker) }}
+            <CommodityDisplay :ticker="item.commodityTicker" />
           </div>
-          <div
+        </template>
+
+        <template #item.category="{ item }">
+          <span
             v-if="getCommodityCategory(item.commodityTicker)"
-            class="text-caption text-medium-emphasis clickable-cell"
+            class="clickable-cell"
             @click="setFilter('category', getCommodityCategory(item.commodityTicker))"
           >
-            {{ getCommodityCategory(item.commodityTicker) }}
-          </div>
+            {{
+              localizeMaterialCategory(
+                getCommodityCategory(item.commodityTicker) as CommodityCategory
+              )
+            }}
+          </span>
         </template>
 
         <template #item.locationId="{ item }">
@@ -408,6 +415,9 @@ import {
   useDialogBehavior,
 } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
+import CommodityDisplay from '../components/CommodityDisplay.vue'
+import { localizeMaterialCategory } from '../utils/materials'
+import type { CommodityCategory } from '@kawakawa/types'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
@@ -533,9 +543,13 @@ const getAdjustmentsSummary = (price: PriceListResponse): string => {
     .join(', ')
 }
 
+// Check if icons are enabled for dynamic row height
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
+
 const headers = computed(() => {
   const base = [
     { title: 'Commodity', key: 'commodityTicker', sortable: true },
+    { title: 'Category', key: 'category', sortable: true },
     { title: 'Location', key: 'locationId', sortable: true },
     { title: 'Price', key: 'price', sortable: true, align: 'end' as const },
     { title: 'Source', key: 'source', sortable: true },
@@ -570,7 +584,12 @@ const categoryOptions = computed(() => {
   const categories = new Set(
     prices.value.map(p => getCommodityCategory(p.commodityTicker)).filter(Boolean)
   )
-  return Array.from(categories).sort() as string[]
+  return Array.from(categories)
+    .sort()
+    .map(cat => ({
+      title: localizeMaterialCategory(cat as CommodityCategory),
+      value: cat,
+    }))
 })
 
 // All options for create dialog (use sync methods - data is prefetched on app startup)
@@ -801,5 +820,12 @@ onMounted(async () => {
 .clickable-cell:hover {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
+}
+</style>
+
+<style>
+/* Unscoped: taller rows when icons are enabled */
+.icon-rows tbody tr td {
+  height: 64px !important;
 }
 </style>

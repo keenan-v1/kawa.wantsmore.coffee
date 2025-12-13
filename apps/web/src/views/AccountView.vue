@@ -234,13 +234,33 @@
                   :items="commodityDisplayModes"
                   label="Commodity Display Mode"
                   prepend-icon="mdi-package-variant"
-                  class="mb-4"
+                  class="mb-2"
                   @update:model-value="autoSaveSetting('display.commodityDisplayMode', $event)"
                 >
                   <template #append-inner>
                     <v-tooltip
                       location="top"
                       text="How to display commodity names in dropdowns and tables"
+                    >
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </v-select>
+
+                <v-select
+                  v-model="settingsStore.commodityIconStyle.value"
+                  :items="commodityIconStyles"
+                  label="Commodity Icons"
+                  prepend-icon="mdi-shape"
+                  class="mb-4"
+                  @update:model-value="autoSaveSetting('display.commodityIconStyle', $event)"
+                >
+                  <template #append-inner>
+                    <v-tooltip
+                      location="top"
+                      text="Icon style for commodity displays. Refined PRUN uses Font Awesome icons, Classic PRUN uses the original game gradients."
                     >
                       <template #activator="{ props }">
                         <v-icon v-bind="props" size="small">mdi-help-circle-outline</v-icon>
@@ -1060,7 +1080,7 @@ import { useSettingsStore } from '../stores/settings'
 import DiscordIcon from '../components/DiscordIcon.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 import { CURRENCIES } from '../types'
-import type { LocationDisplayMode, CommodityDisplayMode, Role } from '../types'
+import type { LocationDisplayMode, CommodityDisplayMode, CommodityIconStyle, Role } from '../types'
 import type { DiscordConnectionStatus } from '@kawakawa/types'
 import { api } from '../services/api'
 import { locationService } from '../services/locationService'
@@ -1080,6 +1100,11 @@ const commodityDisplayModes: { title: string; value: CommodityDisplayMode }[] = 
   { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
   { title: 'Name Only (e.g., Basic Rations)', value: 'name-only' },
   { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
+]
+const commodityIconStyles: { title: string; value: CommodityIconStyle }[] = [
+  { title: 'Refined PRUN', value: 'rprun' },
+  { title: 'Classic PRUN', value: 'prun' },
+  { title: 'None', value: 'none' },
 ]
 
 const ACCOUNT_TABS = [

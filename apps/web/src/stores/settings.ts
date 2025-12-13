@@ -8,7 +8,12 @@ import {
   SETTING_CATEGORY_INFO,
   type SettingKey,
 } from '@kawakawa/types/settings'
-import type { Currency, LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
+import type {
+  Currency,
+  LocationDisplayMode,
+  CommodityDisplayMode,
+  CommodityIconStyle,
+} from '@kawakawa/types'
 import { api } from '../services/api'
 
 // ==================== STATE ====================
@@ -155,6 +160,11 @@ export const useSettingsStore = () => {
     set: (value: CommodityDisplayMode) => updateSetting('display.commodityDisplayMode', value),
   })
 
+  const commodityIconStyle = computed({
+    get: () => settingsValues.value['display.commodityIconStyle'] as CommodityIconStyle,
+    set: (value: CommodityIconStyle) => updateSetting('display.commodityIconStyle', value),
+  })
+
   // Market settings
   const preferredCurrency = computed({
     get: () => settingsValues.value['market.preferredCurrency'] as Currency,
@@ -261,6 +271,7 @@ export const useSettingsStore = () => {
     // Typed computed properties - Display
     locationDisplayMode,
     commodityDisplayMode,
+    commodityIconStyle,
 
     // Typed computed properties - Market
     preferredCurrency,

@@ -76,7 +76,7 @@
             color="secondary"
             @click:close="filters.category = null"
           >
-            Category: {{ filters.category }}
+            Category: {{ localizeMaterialCategory(filters.category as CommodityCategory) }}
           </v-chip>
           <v-chip
             v-for="locId in filters.location"
@@ -228,7 +228,7 @@
         :items-per-page="25"
         item-value="id"
         show-expand
-        class="elevation-0"
+        :class="['elevation-0', { 'icon-rows': hasIcons }]"
       >
         <!-- Custom expand toggle -->
         <template #item.data-table-expand="{ item, internalItem, isExpanded, toggleExpand }">
@@ -252,15 +252,18 @@
             class="font-weight-medium clickable-cell"
             @click="setFilter('commodity', item.commodityTicker)"
           >
-            {{ getCommodityDisplay(item.commodityTicker) }}
+            <CommodityDisplay :ticker="item.commodityTicker" />
           </div>
-          <div
+        </template>
+
+        <template #item.commodityCategory="{ item }">
+          <span
             v-if="item.commodityCategory"
-            class="text-caption text-medium-emphasis clickable-cell"
+            class="clickable-cell"
             @click="setFilter('category', item.commodityCategory)"
           >
-            {{ item.commodityCategory }}
-          </div>
+            {{ localizeMaterialCategory(item.commodityCategory as CommodityCategory) }}
+          </span>
         </template>
 
         <template #item.locationId="{ item }">
@@ -568,6 +571,9 @@ import SellOrderEditDialog from '../components/SellOrderEditDialog.vue'
 import BuyOrderEditDialog from '../components/BuyOrderEditDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 import FioAgeChip from '../components/FioAgeChip.vue'
+import CommodityDisplay from '../components/CommodityDisplay.vue'
+import { localizeMaterialCategory } from '../utils/materials'
+import type { CommodityCategory } from '@kawakawa/types'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
@@ -601,11 +607,15 @@ interface LastSync {
 const headers = [
   { title: '', key: 'data-table-expand', sortable: false, width: 40 },
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
+  { title: 'Category', key: 'commodityCategory', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'FIO Age', key: 'fioUploadedAt', sortable: true },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Actions', key: 'actions', sortable: false, width: 100 },
 ]
+
+// Check if icons are enabled for dynamic row height
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
 
 const inventory = ref<FioInventoryItem[]>([])
 const loading = ref(false)
@@ -662,7 +672,12 @@ const commodityOptions = computed((): KeyValueItem[] => {
 
 const categoryOptions = computed(() => {
   const categories = new Set(inventory.value.map(i => i.commodityCategory).filter(Boolean))
-  return Array.from(categories).sort() as string[]
+  return Array.from(categories)
+    .sort()
+    .map(cat => ({
+      title: localizeMaterialCategory(cat as CommodityCategory),
+      value: cat,
+    }))
 })
 
 const locationOptions = computed((): KeyValueItem[] => {
@@ -884,5 +899,10 @@ onMounted(() => {
   min-height: 48px;
   padding-top: 12px;
   padding-bottom: 2px;
+}
+
+/* Unscoped: taller rows when icons are enabled */
+.icon-rows tbody tr td {
+  height: 64px !important;
 }
 </style>

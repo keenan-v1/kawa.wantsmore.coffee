@@ -53,7 +53,7 @@
             color="secondary"
             @click:close="filters.category = null"
           >
-            Category: {{ filters.category }}
+            Category: {{ localizeMaterialCategory(filters.category as CommodityCategory) }}
           </v-chip>
           <v-chip
             v-for="locId in filters.location"
@@ -251,7 +251,7 @@
         :loading="loading"
         :items-per-page="25"
         :row-props="getRowProps"
-        class="elevation-0 clickable-rows"
+        :class="['elevation-0', 'clickable-rows', { 'icon-rows': hasIcons }]"
         @click:row="onRowClick"
       >
         <template #item.itemType="{ item }">
@@ -272,19 +272,23 @@
             class="font-weight-medium filter-link"
             @click.stop.prevent="setFilter('commodity', item.commodityTicker)"
           >
-            {{ getCommodityDisplay(item.commodityTicker) }}
+            <CommodityDisplay :ticker="item.commodityTicker" />
           </a>
-          <div v-if="getCommodityCategory(item.commodityTicker)" class="d-none d-lg-block">
-            <a
-              href="#"
-              class="text-caption text-medium-emphasis filter-link"
-              @click.stop.prevent="
-                setFilter('category', getCommodityCategory(item.commodityTicker))
-              "
-            >
-              {{ getCommodityCategory(item.commodityTicker) }}
-            </a>
-          </div>
+        </template>
+
+        <template #item.category="{ item }">
+          <a
+            v-if="getCommodityCategory(item.commodityTicker)"
+            href="#"
+            class="filter-link"
+            @click.stop.prevent="setFilter('category', getCommodityCategory(item.commodityTicker))"
+          >
+            {{
+              localizeMaterialCategory(
+                getCommodityCategory(item.commodityTicker) as CommodityCategory
+              )
+            }}
+          </a>
         </template>
 
         <template #item.locationId="{ item }">
@@ -630,12 +634,18 @@ import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueA
 import FioAgeChip from '../components/FioAgeChip.vue'
 import OrderTypeChip from '../components/OrderTypeChip.vue'
 import PricingModeChip from '../components/PricingModeChip.vue'
+import CommodityDisplay from '../components/CommodityDisplay.vue'
+import { localizeMaterialCategory } from '../utils/materials'
+import type { CommodityCategory } from '@kawakawa/types'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { snackbar, showSnackbar } = useSnackbar()
 const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
 const { getFioAgeColor } = useFormatters()
+
+// Check if commodity icons are enabled
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
 
 // Market data from composable
 const { marketItems, loading, loadMarketItems } = useMarketData({
@@ -658,6 +668,13 @@ const headers = [
     sortable: true,
     cellProps: { class: 'col-commodity' },
     headerProps: { class: 'col-commodity' },
+  },
+  {
+    title: 'Category',
+    key: 'category',
+    sortable: true,
+    cellProps: { class: 'd-none d-lg-table-cell' },
+    headerProps: { class: 'd-none d-lg-table-cell' },
   },
   {
     title: 'Location',
@@ -842,7 +859,12 @@ const categoryOptions = computed(() => {
   const categories = new Set(
     marketItems.value.map(l => getCommodityCategory(l.commodityTicker)).filter(Boolean)
   )
-  return Array.from(categories).sort() as string[]
+  return Array.from(categories)
+    .sort()
+    .map(cat => ({
+      title: localizeMaterialCategory(cat as CommodityCategory),
+      value: cat,
+    }))
 })
 
 const locationOptions = computed((): KeyValueItem[] => {
@@ -1134,6 +1156,11 @@ onMounted(() => {
 
 .clickable-rows tbody tr:hover {
   background-color: rgba(var(--v-theme-on-surface), 0.08) !important;
+}
+
+/* Larger row height when commodity icons are enabled */
+.icon-rows tbody tr td {
+  height: 64px !important;
 }
 
 .own-listing-row {

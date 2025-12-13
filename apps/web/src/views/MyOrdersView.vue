@@ -87,12 +87,10 @@
             :items="filteredSellOrders"
             :loading="loadingSell"
             :items-per-page="25"
-            class="elevation-0"
+            :class="['elevation-0', { 'icon-rows': hasIcons }]"
           >
             <template #item.commodityTicker="{ item }">
-              <span class="font-weight-medium">{{
-                getCommodityDisplay(item.commodityTicker)
-              }}</span>
+              <CommodityDisplay :ticker="item.commodityTicker" class="font-weight-medium" />
             </template>
 
             <template #item.locationId="{ item }">
@@ -292,12 +290,10 @@
             :items="filteredBuyOrders"
             :loading="loadingBuy"
             :items-per-page="25"
-            class="elevation-0"
+            :class="['elevation-0', { 'icon-rows': hasIcons }]"
           >
             <template #item.commodityTicker="{ item }">
-              <span class="font-weight-medium">{{
-                getCommodityDisplay(item.commodityTicker)
-              }}</span>
+              <CommodityDisplay :ticker="item.commodityTicker" class="font-weight-medium" />
             </template>
 
             <template #item.locationId="{ item }">
@@ -583,7 +579,7 @@
             :items="filteredReservations"
             :loading="loadingReservations"
             :items-per-page="25"
-            class="elevation-0"
+            :class="['elevation-0', { 'icon-rows': hasIcons }]"
           >
             <template #item.orderType="{ item }">
               <v-chip
@@ -596,9 +592,7 @@
             </template>
 
             <template #item.commodityTicker="{ item }">
-              <span class="font-weight-medium">{{
-                getCommodityDisplay(item.commodityTicker)
-              }}</span>
+              <CommodityDisplay :ticker="item.commodityTicker" class="font-weight-medium" />
             </template>
 
             <template #item.locationId="{ item }">
@@ -906,8 +900,14 @@ import SellOrderEditDialog from '../components/SellOrderEditDialog.vue'
 import BuyOrderEditDialog from '../components/BuyOrderEditDialog.vue'
 import ReservationStatusChip from '../components/ReservationStatusChip.vue'
 import OrderTypeChip from '../components/OrderTypeChip.vue'
+import CommodityDisplay from '../components/CommodityDisplay.vue'
+import { useSettingsStore } from '../stores/settings'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
+
+// Check if icons are enabled for dynamic row height
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
 
 // Display helpers that respect user preferences
 const getLocationDisplay = (locationId: string): string => {
@@ -1451,3 +1451,10 @@ onMounted(() => {
   loadReservations()
 })
 </script>
+
+<style>
+/* Unscoped: taller rows when icons are enabled */
+.icon-rows tbody tr td {
+  height: 64px !important;
+}
+</style>

@@ -8,6 +8,7 @@ import type {
   Currency,
   LocationDisplayMode,
   CommodityDisplayMode,
+  CommodityIconStyle,
 } from './index'
 
 // Categories for grouping settings in the UI
@@ -110,6 +111,16 @@ export const SETTING_DEFINITIONS = {
     description: 'How to display commodity names in the UI',
     enumOptions: ['ticker-only', 'name-only', 'both'] as const,
   } satisfies SettingDef<CommodityDisplayMode, 'enum'>,
+
+  'display.commodityIconStyle': {
+    key: 'display.commodityIconStyle',
+    type: 'enum',
+    defaultValue: 'prun' as CommodityIconStyle,
+    category: SETTING_CATEGORIES.DISPLAY,
+    label: 'Commodity Icons',
+    description: 'Icon style for commodity displays',
+    enumOptions: ['rprun', 'prun', 'none'] as const,
+  } satisfies SettingDef<CommodityIconStyle, 'enum'>,
 
   // ==================== MARKET SETTINGS ====================
   'market.preferredCurrency': {
