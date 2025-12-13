@@ -1,0 +1,37 @@
+import type { Command } from '../client.js'
+// Auth commands
+import { whoami } from './auth/whoami.js'
+import { register } from './auth/register.js'
+import { link } from './auth/link.js'
+import { unlink } from './auth/unlink.js'
+// Market commands
+import { orders } from './market/orders.js'
+import { query } from './market/query.js'
+// Inventory commands
+import { inventory } from './inventory/inventory.js'
+import { sync } from './inventory/sync.js'
+import { sell } from './inventory/sell.js'
+import { buy } from './inventory/buy.js'
+import { bulksell } from './inventory/bulksell.js'
+import { bulkbuy } from './inventory/bulkbuy.js'
+
+/**
+ * All registered slash commands.
+ */
+export const commands: Command[] = [
+  // Auth
+  whoami,
+  register,
+  link,
+  unlink,
+  // Market
+  orders,
+  query,
+  // Inventory
+  inventory,
+  sync,
+  sell,
+  buy,
+  bulksell,
+  bulkbuy,
+]

@@ -10,9 +10,10 @@ import {
   getGuildIconUrl,
   getUserAvatarUrl,
 } from './discordService.js'
+import { settingsService } from '@kawakawa/services/settings'
 
 // Mock the settings service
-vi.mock('./settingsService.js', () => ({
+vi.mock('@kawakawa/services/settings', () => ({
   settingsService: {
     getAll: vi.fn(),
   },
@@ -21,8 +22,6 @@ vi.mock('./settingsService.js', () => ({
 // Mock fetch globally
 const mockFetch = vi.fn()
 global.fetch = mockFetch
-
-import { settingsService } from './settingsService.js'
 
 describe('discordService', () => {
   beforeEach(() => {

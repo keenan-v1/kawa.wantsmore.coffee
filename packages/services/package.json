@@ -1,0 +1,43 @@
+{
+  "name": "@kawakawa/services",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./settings": {
+      "types": "./dist/settings/index.d.ts",
+      "import": "./dist/settings/index.js"
+    },
+    "./discord": {
+      "types": "./dist/discord/index.d.ts",
+      "import": "./dist/discord/index.js"
+    },
+    "./permissions": {
+      "types": "./dist/permissions/index.d.ts",
+      "import": "./dist/permissions/index.js"
+    },
+    "./market": {
+      "types": "./dist/market/index.d.ts",
+      "import": "./dist/market/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@kawakawa/db": "workspace:*",
+    "@kawakawa/types": "workspace:*",
+    "drizzle-orm": "^0.44.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "~5.3.0"
+  }
+}

@@ -13,6 +13,10 @@
     "./settings": {
       "types": "./dist/settings.d.ts",
       "import": "./dist/settings.js"
+    },
+    "./materials": {
+      "types": "./dist/materials.d.ts",
+      "import": "./dist/materials.js"
     }
   },
   "scripts": {

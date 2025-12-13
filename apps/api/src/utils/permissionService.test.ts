@@ -7,9 +7,9 @@ import {
   clearPermissionCache,
   invalidatePermissionCache,
 } from './permissionService.js'
-import { db } from '../db/index.js'
+import { db } from '@kawakawa/db'
 
-vi.mock('../db/index.js', () => ({
+vi.mock('@kawakawa/db', () => ({
   db: {
     select: vi.fn(),
   },

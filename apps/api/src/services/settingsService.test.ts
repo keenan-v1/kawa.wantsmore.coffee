@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { settingsService, invalidateCache } from './settingsService.js'
+import { db } from '@kawakawa/db'
 
 // Mock the database
-vi.mock('../db/index.js', () => ({
+vi.mock('@kawakawa/db', () => ({
   db: {
     execute: vi.fn(),
     insert: vi.fn(),
@@ -16,8 +17,6 @@ vi.mock('../db/index.js', () => ({
     createdAt: 'createdAt',
   },
 }))
-
-import { db } from '../db/index.js'
 
 describe('settingsService', () => {
   let mockExecute: ReturnType<typeof vi.fn>

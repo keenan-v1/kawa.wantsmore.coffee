@@ -4,6 +4,27 @@ export type Currency = 'ICA' | 'CIS' | 'AIC' | 'NCC'
 
 export const CURRENCIES: Currency[] = ['ICA', 'CIS', 'AIC', 'NCC']
 
+/**
+ * Currency symbols for display
+ * - NCC: ₦ (Naira sign)
+ * - AIC: ₳ (Austral sign)
+ * - CIS: ₡ (Colon sign)
+ * - ICA: ǂ (Alveolar click)
+ */
+export const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  NCC: '₦',
+  AIC: '₳',
+  CIS: '₡',
+  ICA: 'ǂ',
+}
+
+/**
+ * Format a currency code to its symbol
+ */
+export function formatCurrencySymbol(currency: Currency): string {
+  return CURRENCY_SYMBOLS[currency] ?? currency
+}
+
 export interface Commodity {
   ticker: string
   name: string

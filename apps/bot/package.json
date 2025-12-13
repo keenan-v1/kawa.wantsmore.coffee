@@ -1,0 +1,31 @@
+{
+  "name": "@kawakawa/bot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "deploy-commands": "tsx src/deploy-commands.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@kawakawa/db": "workspace:*",
+    "@kawakawa/services": "workspace:*",
+    "@kawakawa/types": "workspace:*",
+    "bcrypt": "^5.1.1",
+    "discord.js": "^14.18.0",
+    "drizzle-orm": "^0.44.7"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.3.0",
+    "vitest": "^4.0.14"
+  }
+}

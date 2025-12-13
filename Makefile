@@ -1,6 +1,6 @@
 # Kawakawa CX - Development Commands
 
-.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-reset-mock db-drop db-mock-data db-studio fio-sync clean kill-dev
+.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-reset-mock db-drop db-mock-data db-studio fio-sync clean kill-dev dev-bot bot-deploy
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -102,3 +102,9 @@ kill-dev: ## Kill all running dev servers (tsx, vite, turbo)
 	@-pkill -f "vite" 2>/dev/null || true
 	@-pkill -f "turbo run dev" 2>/dev/null || true
 	@echo "Done. Any zombie processes will be cleaned up when VSCode restarts."
+
+dev-bot: ## Start Discord bot dev server with hot reload
+	pnpm --filter @kawakawa/bot dev
+
+bot-deploy: ## Deploy slash commands to Discord
+	pnpm --filter @kawakawa/bot deploy-commands
