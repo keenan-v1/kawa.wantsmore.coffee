@@ -205,6 +205,48 @@ export async function getFioUsernames(userIds: number[]): Promise<Map<number, st
 }
 
 /**
+ * Set a user setting value
+ */
+export async function setSetting(userId: number, key: string, value: unknown): Promise<void> {
+  // Validate the key is a known setting
+  if (!(key in DEFAULTS)) {
+    throw new Error(`Unknown setting key: ${key}`)
+  }
+
+  const jsonValue = JSON.stringify(value)
+
+  await db
+    .insert(userSettings)
+    .values({
+      userId,
+      settingKey: key,
+      value: jsonValue,
+    })
+    .onConflictDoUpdate({
+      target: [userSettings.userId, userSettings.settingKey],
+      set: {
+        value: jsonValue,
+        updatedAt: new Date(),
+      },
+    })
+
+  // Invalidate cache
+  invalidateCache(userId)
+}
+
+/**
+ * Delete a user setting (revert to default)
+ */
+export async function deleteSetting(userId: number, key: string): Promise<void> {
+  await db
+    .delete(userSettings)
+    .where(and(eq(userSettings.userId, userId), eq(userSettings.settingKey, key)))
+
+  // Invalidate cache
+  invalidateCache(userId)
+}
+
+/**
  * Invalidate cache for a user
  */
 export function invalidateCache(userId: number): void {
