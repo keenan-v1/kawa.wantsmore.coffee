@@ -38,6 +38,13 @@ jobs:
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
   kind: PRE_DEPLOY
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: db-migrate
   run_command: node apps/api/dist/scripts/db-migrate.js
 - envs:
@@ -52,6 +59,13 @@ jobs:
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
   kind: POST_DEPLOY
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: db-init
   run_command: node apps/api/dist/scripts/db-init-idempotent.js
 - envs:
@@ -66,6 +80,13 @@ jobs:
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
   kind: SCHEDULED
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: fio-sync
   run_command: node apps/api/dist/scripts/sync-fio.js && node apps/api/dist/scripts/sync-all-users.js
   schedule:
@@ -88,6 +109,13 @@ services:
     tag: main
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: kawa-api
 - http_port: 80
   image:
@@ -97,6 +125,13 @@ services:
     tag: main
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: kawa-web
 workers:
 - envs:
@@ -110,4 +145,11 @@ workers:
     tag: main
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
+  log_destinations:
+  - name: prod-kawakawa-cx
+    open_search:
+      basic_auth:
+        user: doadmin
+      cluster_name: db-opensearch-kawakawa-cx
+      index_name: logs-prod-kawakawa-cx
   name: kawa-bot
