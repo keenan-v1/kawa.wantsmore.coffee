@@ -29,6 +29,13 @@
       "when": 1765302654572,
       "tag": "0003_motionless_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1765740913646,
+      "tag": "0004_curvy_shockwave",
+      "breakpoints": true
     }
   ]
 }
