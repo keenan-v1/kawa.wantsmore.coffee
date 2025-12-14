@@ -1,0 +1,86 @@
+name: Deploy to DigitalOcean
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      image_tag:
+        description: 'Image tag (commit SHA)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/kawakawa
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Set app name
+        id: app
+        run: |
+          if [ "${{ inputs.environment }}" = "prod" ]; then
+            echo "name=prod-kawakawa-cx" >> $GITHUB_OUTPUT
+            echo "spec_file=.do/prod.kawakawa.cx.yaml" >> $GITHUB_OUTPUT
+          else
+            echo "name=dev-kawakawa-cx" >> $GITHUB_OUTPUT
+            echo "spec_file=.do/dev.kawakawa.cx.yaml" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update app spec with image tags
+        run: |
+          export IMAGE_TAG="${{ inputs.image_tag }}"
+          export REGISTRY="${{ env.REGISTRY }}"
+          export IMAGE_PREFIX="${{ env.IMAGE_PREFIX }}"
+
+          # Update the spec file with container image references
+          # This uses yq to update the YAML in place
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Update API service
+          yq -i '(.services[] | select(.name == "kawa-api")).image.registry_type = "GHCR"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-api")).image.registry = env(REGISTRY)' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-api")).image.repository = env(IMAGE_PREFIX) + "-api"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-api")).image.tag = env(IMAGE_TAG)' ${{ steps.app.outputs.spec_file }}
+
+          # Update Bot worker
+          yq -i '(.workers[] | select(.name == "kawa-bot")).image.registry_type = "GHCR"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.workers[] | select(.name == "kawa-bot")).image.registry = env(REGISTRY)' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.workers[] | select(.name == "kawa-bot")).image.repository = env(IMAGE_PREFIX) + "-bot"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.workers[] | select(.name == "kawa-bot")).image.tag = env(IMAGE_TAG)' ${{ steps.app.outputs.spec_file }}
+
+          # Update Web static site (uses container now)
+          yq -i '(.services[] | select(.name == "kawa-web")).image.registry_type = "GHCR"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-web")).image.registry = env(REGISTRY)' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-web")).image.repository = env(IMAGE_PREFIX) + "-web"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.services[] | select(.name == "kawa-web")).image.tag = env(IMAGE_TAG)' ${{ steps.app.outputs.spec_file }}
+
+          # Update jobs to use API image
+          yq -i '(.jobs[]).image.registry_type = "GHCR"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.jobs[]).image.registry = env(REGISTRY)' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.jobs[]).image.repository = env(IMAGE_PREFIX) + "-api"' ${{ steps.app.outputs.spec_file }}
+          yq -i '(.jobs[]).image.tag = env(IMAGE_TAG)' ${{ steps.app.outputs.spec_file }}
+
+          cat ${{ steps.app.outputs.spec_file }}
+
+      - name: Deploy to DigitalOcean App Platform
+        run: |
+          doctl apps update ${{ steps.app.outputs.name }} --spec ${{ steps.app.outputs.spec_file }} --wait
