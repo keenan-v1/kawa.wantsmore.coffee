@@ -210,6 +210,7 @@ export interface DiscordSettings {
   guildName: string | null
   guildIcon: string | null // Icon hash for CDN URL construction
   autoApprovalEnabled: boolean
+  webUrl: string | null // Web application URL for password reset links, etc.
 }
 
 // Request to update Discord settings
@@ -220,6 +221,7 @@ export interface UpdateDiscordSettingsRequest {
   redirectUri?: string // OAuth redirect URI
   guildId?: string
   autoApprovalEnabled?: boolean
+  webUrl?: string // Web application URL
 }
 
 // Discord role mapping for auto-approval
@@ -247,6 +249,59 @@ export interface DiscordRole {
   color: number // Integer color value
   position: number // Role hierarchy position
   managed: boolean // Is this role managed by an integration?
+}
+
+// Discord channel config keys (key-value settings per channel)
+export type ChannelConfigKey =
+  | 'priceList' // Default price list code
+  | 'visibility' // Default visibility: 'internal' | 'partner'
+  | 'currency' // Default currency: Currency
+  | 'priceListEnforced' // 'true' | 'false' - lock price list
+  | 'visibilityEnforced' // 'true' | 'false' - lock visibility
+  | 'currencyEnforced' // 'true' | 'false' - lock currency
+  | 'announceInternal' // Channel ID to announce internal visibility queries
+  | 'announcePartner' // Channel ID to announce partner visibility queries
+
+// Single channel config entry (database row)
+export interface ChannelConfigEntry {
+  id: number
+  channelId: string
+  key: ChannelConfigKey
+  value: string
+  createdAt: string // ISO date string
+  updatedAt: string // ISO date string
+}
+
+// Aggregated channel config (all settings for a channel as an object)
+export interface ChannelConfigMap {
+  channelId: string
+  priceList?: string
+  visibility?: 'internal' | 'partner'
+  currency?: Currency
+  priceListEnforced?: boolean
+  visibilityEnforced?: boolean
+  currencyEnforced?: boolean
+  announceInternal?: string // Channel ID
+  announcePartner?: string // Channel ID
+}
+
+// Request to update channel config (partial update)
+export interface UpdateChannelConfigRequest {
+  priceList?: string | null
+  visibility?: 'internal' | 'partner' | null
+  currency?: Currency | null
+  priceListEnforced?: boolean | null
+  visibilityEnforced?: boolean | null
+  currencyEnforced?: boolean | null
+  announceInternal?: string | null
+  announcePartner?: string | null
+}
+
+// Response listing all configured channels
+export interface ChannelConfigListItem {
+  channelId: string
+  channelName?: string // From Discord API, not stored
+  settingsCount: number
 }
 
 // User's Discord profile (stored connection)

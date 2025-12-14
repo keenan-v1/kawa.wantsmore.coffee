@@ -462,6 +462,40 @@ describe('orderFormatter', () => {
       expect(result).toContain(' | ')
       expect(result).not.toContain('\n')
     })
+
+    it('shows lock icon when visibility is enforced', () => {
+      const result = buildFilterDescription([], [], [], 'sell', 'internal', {
+        visibilityEnforced: true,
+      })
+      expect(result).toBe('📤 Sell | 🔒 👤 Internal')
+    })
+
+    it('shows lock icon with partner visibility when enforced', () => {
+      const result = buildFilterDescription([], [], [], 'sell', 'partner', {
+        visibilityEnforced: true,
+      })
+      expect(result).toBe('📤 Sell | 🔒 👥 Partner')
+    })
+
+    it('shows lock icon with all visibility when enforced', () => {
+      const result = buildFilterDescription([], [], [], 'sell', 'all', {
+        visibilityEnforced: true,
+      })
+      expect(result).toBe('📤 Sell | 🔒 👤 Internal & 👥 Partner')
+    })
+
+    it('does not show lock icon when visibility is not enforced', () => {
+      const result = buildFilterDescription([], [], [], 'sell', 'internal', {
+        visibilityEnforced: false,
+      })
+      expect(result).toBe('📤 Sell | 👤 Internal')
+      expect(result).not.toContain('🔒')
+    })
+
+    it('does not show lock icon when options not provided', () => {
+      const result = buildFilterDescription([], [], [], 'sell', 'internal')
+      expect(result).not.toContain('🔒')
+    })
   })
 
   describe('determineGroupingMulti', () => {

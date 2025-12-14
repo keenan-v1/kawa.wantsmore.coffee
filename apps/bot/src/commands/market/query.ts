@@ -11,6 +11,7 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
+import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
 import { sendPaginatedResponse } from '../../components/pagination.js'
 import { enrichSellOrdersWithQuantities } from '@kawakawa/services/market'
 import {
@@ -131,12 +132,28 @@ export const query: Command = {
     const queryInput = interaction.options.getString('query')
     const orderType =
       (interaction.options.getString('type') as 'all' | 'sell' | 'buy' | null) || 'sell'
-    const visibility =
-      (interaction.options.getString('visibility') as 'all' | 'internal' | 'partner' | null) ||
-      'internal'
+    const visibilityOption = interaction.options.getString('visibility') as
+      | 'all'
+      | 'internal'
+      | 'partner'
+      | null
 
     // Get user's display preferences
     const displaySettings = await getDisplaySettings(interaction.user.id)
+
+    // Get channel defaults (if configured)
+    const channelId = interaction.channelId
+    const channelSettings = await getChannelDefaults(channelId)
+
+    // Determine visibility using channel defaults
+    // For query, 'internal' is the system default
+    const visibility: 'all' | 'internal' | 'partner' = resolveEffectiveValue(
+      visibilityOption,
+      channelSettings?.visibility,
+      channelSettings?.visibilityEnforced ?? false,
+      'internal' as const,
+      'internal' as const
+    )
 
     // Parse all tokens from query input - collect multiple values for each type
     const resolvedCommodities: { ticker: string; name: string }[] = []
@@ -199,7 +216,8 @@ export const query: Command = {
       locationDisplayStrings,
       resolvedDisplayNames.filter(Boolean),
       orderType,
-      visibility
+      visibility,
+      { visibilityEnforced: channelSettings?.visibilityEnforced ?? false }
     )
 
     // Fetch sell orders (no limit - we paginate client-side)
@@ -309,7 +327,51 @@ export const query: Command = {
       .setDescription(filterDesc)
       .setTimestamp()
 
-    // Send paginated response
+    // Send announcement to configured channel if enabled
+    // Pick the announce channel based on effective visibility
+    const announceChannelId =
+      visibility === 'internal'
+        ? channelSettings?.announceInternal
+        : visibility === 'partner'
+          ? channelSettings?.announcePartner
+          : null // 'all' visibility doesn't trigger announcements
+
+    if (announceChannelId && (resolvedCommodities.length > 0 || resolvedLocations.length > 0)) {
+      const parts: string[] = []
+
+      if (resolvedCommodities.length > 0) {
+        const commodityList = resolvedCommodities.map(c => `**${formatCommodity(c.ticker)}**`)
+        parts.push(commodityList.join(', '))
+      }
+
+      if (resolvedLocations.length > 0) {
+        const locationList = await Promise.all(
+          resolvedLocations.map(l =>
+            formatLocation(l.naturalId, displaySettings.locationDisplayMode)
+          )
+        )
+        parts.push(`at ${locationList.map(l => `**${l}**`).join(', ')}`)
+      }
+
+      // Get the member's server display name (nickname or fallback to username)
+      const member = interaction.member
+      const memberName =
+        member && 'displayName' in member ? member.displayName : interaction.user.displayName
+
+      const announcement = `👀 **${memberName}** is interested in ${parts.join(' ')}`
+
+      // Send to the configured announce channel (different from current channel)
+      try {
+        const announceChannel = await interaction.client.channels.fetch(announceChannelId)
+        if (announceChannel && 'send' in announceChannel) {
+          await announceChannel.send(announcement)
+        }
+      } catch {
+        // Silently ignore if announce channel is inaccessible
+      }
+    }
+
+    // Send paginated response (ephemeral to user) after announcement is delivered
     await sendPaginatedResponse(interaction, embed, allItems, {
       pageSize: ORDERS_PER_PAGE,
       allowShare: true,

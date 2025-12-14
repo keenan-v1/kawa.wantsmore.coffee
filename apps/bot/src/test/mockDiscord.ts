@@ -87,7 +87,13 @@ export class MockActionRowBuilder {
 
 // Mock ButtonBuilder class
 export class MockButtonBuilder {
-  private data: { customId?: string; label?: string; style?: number; disabled?: boolean } = {}
+  private data: {
+    customId?: string
+    label?: string
+    style?: number
+    disabled?: boolean
+    url?: string
+  } = {}
 
   setCustomId(id: string) {
     this.data.customId = id
@@ -105,18 +111,23 @@ export class MockButtonBuilder {
     this.data.disabled = disabled
     return this
   }
+  setURL(url: string) {
+    this.data.url = url
+    return this
+  }
 }
 
 // Mock SlashCommandBuilder class
 class MockSlashCommandBuilder {
-  private data: { name?: string; description?: string } = {}
+  public name?: string
+  public description?: string
 
   setName(name: string) {
-    this.data.name = name
+    this.name = name
     return this
   }
   setDescription(desc: string) {
-    this.data.description = desc
+    this.description = desc
     return this
   }
   addStringOption(fn: (option: MockStringOption) => MockStringOption) {

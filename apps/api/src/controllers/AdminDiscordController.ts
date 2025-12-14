@@ -19,9 +19,12 @@ import type {
   DiscordRole,
   DiscordTestConnectionResponse,
   SettingHistoryEntry,
+  ChannelConfigMap,
+  UpdateChannelConfigRequest,
+  ChannelConfigKey,
 } from '@kawakawa/types'
-import { db, discordRoleMappings, roles } from '../db/index.js'
-import { eq, desc } from 'drizzle-orm'
+import { db, discordRoleMappings, roles, channelConfig } from '../db/index.js'
+import { eq, desc, asc, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { NotFound, BadRequest } from '../utils/errors.js'
 import { settingsService } from '../services/settingsService.js'
@@ -48,6 +51,7 @@ export class AdminDiscordController extends Controller {
       guildName: settings.guildName,
       guildIcon: settings.guildIcon,
       autoApprovalEnabled: settings.autoApprovalEnabled,
+      webUrl: settings.webUrl,
     }
   }
 
@@ -80,6 +84,9 @@ export class AdminDiscordController extends Controller {
     }
     if (body.autoApprovalEnabled !== undefined) {
       updates[DISCORD_SETTINGS_KEYS.AUTO_APPROVAL_ENABLED] = String(body.autoApprovalEnabled)
+    }
+    if (body.webUrl !== undefined) {
+      updates[DISCORD_SETTINGS_KEYS.WEB_URL] = body.webUrl
     }
 
     if (Object.keys(updates).length > 0) {
@@ -139,6 +146,20 @@ export class AdminDiscordController extends Controller {
     }
 
     return discordService.getGuildRoles(settings.guildId)
+  }
+
+  /**
+   * Get text channels from the configured Discord server
+   */
+  @Get('guild/channels')
+  public async getGuildChannels(): Promise<Array<{ id: string; name: string }>> {
+    const settings = await discordService.getDiscordSettings()
+
+    if (!settings.guildId) {
+      throw BadRequest('Guild ID not configured')
+    }
+
+    return discordService.getGuildChannels(settings.guildId)
   }
 
   /**
@@ -288,5 +309,213 @@ export class AdminDiscordController extends Controller {
     }
 
     return settingsService.getHistory(key)
+  }
+
+  // ==================== CHANNEL CONFIG ====================
+
+  /**
+   * List all configured channels with their full config
+   */
+  @Get('channel-config')
+  public async listChannelConfigs(): Promise<ChannelConfigMap[]> {
+    // Get all config rows, ordered by channel ID
+    const allRows = await db
+      .select({
+        channelId: channelConfig.channelId,
+        key: channelConfig.key,
+        value: channelConfig.value,
+      })
+      .from(channelConfig)
+      .orderBy(asc(channelConfig.channelId))
+
+    // Group by channel ID and build config maps
+    const channelMap = new Map<string, ChannelConfigMap>()
+
+    for (const row of allRows) {
+      let config = channelMap.get(row.channelId)
+      if (!config) {
+        config = { channelId: row.channelId }
+        channelMap.set(row.channelId, config)
+      }
+
+      const key = row.key as ChannelConfigKey
+      const value = row.value
+
+      switch (key) {
+        case 'visibility':
+          config.visibility = value as 'internal' | 'partner'
+          break
+        case 'priceList':
+          config.priceList = value
+          break
+        case 'currency':
+          config.currency = value as 'CIS' | 'ICA' | 'AIC' | 'NCC'
+          break
+        case 'visibilityEnforced':
+          config.visibilityEnforced = value === 'true'
+          break
+        case 'priceListEnforced':
+          config.priceListEnforced = value === 'true'
+          break
+        case 'currencyEnforced':
+          config.currencyEnforced = value === 'true'
+          break
+        case 'announceInternal':
+          config.announceInternal = value
+          break
+        case 'announcePartner':
+          config.announcePartner = value
+          break
+      }
+    }
+
+    return Array.from(channelMap.values())
+  }
+
+  /**
+   * Get all config for a specific channel as a map
+   */
+  @Get('channel-config/{channelId}')
+  public async getChannelConfig(@Path() channelId: string): Promise<ChannelConfigMap> {
+    const rows = await db
+      .select({
+        key: channelConfig.key,
+        value: channelConfig.value,
+      })
+      .from(channelConfig)
+      .where(eq(channelConfig.channelId, channelId))
+
+    // Build the config map
+    const config: ChannelConfigMap = { channelId }
+
+    for (const row of rows) {
+      const key = row.key as ChannelConfigKey
+      const value = row.value
+
+      switch (key) {
+        case 'visibility':
+          config.visibility = value as 'internal' | 'partner'
+          break
+        case 'priceList':
+          config.priceList = value
+          break
+        case 'currency':
+          config.currency = value as 'CIS' | 'ICA' | 'AIC' | 'NCC'
+          break
+        case 'visibilityEnforced':
+          config.visibilityEnforced = value === 'true'
+          break
+        case 'priceListEnforced':
+          config.priceListEnforced = value === 'true'
+          break
+        case 'currencyEnforced':
+          config.currencyEnforced = value === 'true'
+          break
+        case 'announceInternal':
+          config.announceInternal = value
+          break
+        case 'announcePartner':
+          config.announcePartner = value
+          break
+      }
+    }
+
+    return config
+  }
+
+  /**
+   * Update channel config (partial update - upserts each key)
+   */
+  @Put('channel-config/{channelId}')
+  public async updateChannelConfig(
+    @Path() channelId: string,
+    @Body() body: UpdateChannelConfigRequest
+  ): Promise<ChannelConfigMap> {
+    const now = new Date()
+
+    // Process each field in the request
+    const updates: { key: ChannelConfigKey; value: string | null }[] = []
+
+    if (body.visibility !== undefined) {
+      updates.push({ key: 'visibility', value: body.visibility })
+    }
+    if (body.priceList !== undefined) {
+      updates.push({ key: 'priceList', value: body.priceList })
+    }
+    if (body.currency !== undefined) {
+      updates.push({ key: 'currency', value: body.currency })
+    }
+    if (body.visibilityEnforced !== undefined) {
+      updates.push({
+        key: 'visibilityEnforced',
+        value: body.visibilityEnforced === null ? null : String(body.visibilityEnforced),
+      })
+    }
+    if (body.priceListEnforced !== undefined) {
+      updates.push({
+        key: 'priceListEnforced',
+        value: body.priceListEnforced === null ? null : String(body.priceListEnforced),
+      })
+    }
+    if (body.currencyEnforced !== undefined) {
+      updates.push({
+        key: 'currencyEnforced',
+        value: body.currencyEnforced === null ? null : String(body.currencyEnforced),
+      })
+    }
+    if (body.announceInternal !== undefined) {
+      updates.push({ key: 'announceInternal', value: body.announceInternal })
+    }
+    if (body.announcePartner !== undefined) {
+      updates.push({ key: 'announcePartner', value: body.announcePartner })
+    }
+
+    // Process each update
+    for (const { key, value } of updates) {
+      if (value === null) {
+        // Delete the key
+        await db
+          .delete(channelConfig)
+          .where(and(eq(channelConfig.channelId, channelId), eq(channelConfig.key, key)))
+      } else {
+        // Upsert the key
+        await db
+          .insert(channelConfig)
+          .values({
+            channelId,
+            key,
+            value,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [channelConfig.channelId, channelConfig.key],
+            set: {
+              value,
+              updatedAt: now,
+            },
+          })
+      }
+    }
+
+    // Return the updated config
+    return this.getChannelConfig(channelId)
+  }
+
+  /**
+   * Delete all config for a specific channel
+   */
+  @Delete('channel-config/{channelId}')
+  public async deleteChannelConfig(@Path() channelId: string): Promise<void> {
+    const result = await db
+      .delete(channelConfig)
+      .where(eq(channelConfig.channelId, channelId))
+      .returning()
+
+    if (result.length === 0) {
+      throw NotFound(`No config found for channel "${channelId}"`)
+    }
+
+    this.setStatus(204)
   }
 }

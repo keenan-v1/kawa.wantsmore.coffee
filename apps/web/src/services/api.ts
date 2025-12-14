@@ -27,6 +27,8 @@ import type {
   GlobalDefaultsResponse,
   UpdateGlobalDefaultsRequest,
   SyncState,
+  ChannelConfigMap,
+  UpdateChannelConfigRequest,
 } from '@kawakawa/types'
 
 interface LoginRequest {
@@ -1856,6 +1858,33 @@ const realApi = {
     return response.json()
   },
 
+  getDiscordGuildChannels: async (): Promise<Array<{ id: string; name: string }>> => {
+    const response = await fetchWithLogging('/api/admin/discord/guild/channels', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 400) {
+        throw new Error('Discord guild not configured')
+      }
+      throw new Error(`Failed to get Discord guild channels: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
   getDiscordRoleMappings: async (): Promise<DiscordRoleMapping[]> => {
     const response = await fetchWithLogging('/api/admin/discord/role-mappings', {
       method: 'GET',
@@ -1991,6 +2020,117 @@ const realApi = {
     }
 
     return response.json()
+  },
+
+  // Channel Config methods
+  getChannelConfigs: async (): Promise<ChannelConfigMap[]> => {
+    const response = await fetchWithLogging('/api/admin/discord/channel-config', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get channel configs: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  getChannelConfig: async (channelId: string): Promise<ChannelConfigMap> => {
+    const response = await fetchWithLogging(
+      `/api/admin/discord/channel-config/${encodeURIComponent(channelId)}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to get channel config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  updateChannelConfig: async (
+    channelId: string,
+    data: UpdateChannelConfigRequest
+  ): Promise<ChannelConfigMap> => {
+    const response = await fetchWithLogging(
+      `/api/admin/discord/channel-config/${encodeURIComponent(channelId)}`,
+      {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      throw new Error(`Failed to update channel config: ${response.statusText}`)
+    }
+
+    return response.json()
+  },
+
+  deleteChannelConfig: async (channelId: string): Promise<void> => {
+    const response = await fetchWithLogging(
+      `/api/admin/discord/channel-config/${encodeURIComponent(channelId)}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    handleRefreshedToken(response)
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('jwt')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (response.status === 403) {
+        throw new Error('Administrator access required')
+      }
+      if (response.status === 404) {
+        throw new Error('Channel config not found')
+      }
+      throw new Error(`Failed to delete channel config: ${response.statusText}`)
+    }
   },
 
   // Admin Global Defaults methods
@@ -3708,6 +3848,7 @@ export const api = {
       realApi.updateDiscordSettings(settings),
     testConnection: () => realApi.testDiscordConnection(),
     getGuildRoles: () => realApi.getDiscordGuildRoles(),
+    getGuildChannels: () => realApi.getDiscordGuildChannels(),
     getRoleMappings: () => realApi.getDiscordRoleMappings(),
     createRoleMapping: (mapping: DiscordRoleMappingRequest) =>
       realApi.createDiscordRoleMapping(mapping),
@@ -3715,6 +3856,11 @@ export const api = {
       realApi.updateDiscordRoleMapping(id, mapping),
     deleteRoleMapping: (id: number) => realApi.deleteDiscordRoleMapping(id),
     getSettingsHistory: (key: string) => realApi.getSettingsHistory(key),
+    getChannelConfigs: () => realApi.getChannelConfigs(),
+    getChannelConfig: (channelId: string) => realApi.getChannelConfig(channelId),
+    updateChannelConfig: (channelId: string, data: UpdateChannelConfigRequest) =>
+      realApi.updateChannelConfig(channelId, data),
+    deleteChannelConfig: (channelId: string) => realApi.deleteChannelConfig(channelId),
   },
   discord: {
     getAuthUrl: () => realApi.getDiscordAuthUrl(),

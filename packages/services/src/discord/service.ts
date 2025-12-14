@@ -15,6 +15,7 @@ export const DISCORD_SETTINGS_KEYS = {
   GUILD_ICON: 'discord.guildIcon',
   AUTO_APPROVAL_ENABLED: 'discord.autoApprovalEnabled',
   REDIRECT_URI: 'discord.redirectUri',
+  WEB_URL: 'app.webUrl', // Web application URL for password reset links, etc.
 } as const
 
 // OAuth2 scopes required
@@ -73,18 +74,25 @@ export async function getDiscordSettings(): Promise<{
   guildIcon: string | null
   autoApprovalEnabled: boolean
   redirectUri: string | null
+  webUrl: string | null
 }> {
-  const settings = await settingsService.getAll('discord.')
+  // Get both discord.* and app.* settings
+  const discordSettings = await settingsService.getAll('discord.')
+  const appSettings = await settingsService.getAll('app.')
+
   return {
-    clientId: settings[DISCORD_SETTINGS_KEYS.CLIENT_ID] || null,
-    clientSecret: settings[DISCORD_SETTINGS_KEYS.CLIENT_SECRET] || null,
-    botToken: settings[DISCORD_SETTINGS_KEYS.BOT_TOKEN] || null,
-    guildId: settings[DISCORD_SETTINGS_KEYS.GUILD_ID] || null,
-    guildName: settings[DISCORD_SETTINGS_KEYS.GUILD_NAME] || null,
-    guildIcon: settings[DISCORD_SETTINGS_KEYS.GUILD_ICON] || null,
-    autoApprovalEnabled: settings[DISCORD_SETTINGS_KEYS.AUTO_APPROVAL_ENABLED] === 'true',
+    clientId: discordSettings[DISCORD_SETTINGS_KEYS.CLIENT_ID] || null,
+    clientSecret: discordSettings[DISCORD_SETTINGS_KEYS.CLIENT_SECRET] || null,
+    botToken: discordSettings[DISCORD_SETTINGS_KEYS.BOT_TOKEN] || null,
+    guildId: discordSettings[DISCORD_SETTINGS_KEYS.GUILD_ID] || null,
+    guildName: discordSettings[DISCORD_SETTINGS_KEYS.GUILD_NAME] || null,
+    guildIcon: discordSettings[DISCORD_SETTINGS_KEYS.GUILD_ICON] || null,
+    autoApprovalEnabled: discordSettings[DISCORD_SETTINGS_KEYS.AUTO_APPROVAL_ENABLED] === 'true',
     redirectUri:
-      settings[DISCORD_SETTINGS_KEYS.REDIRECT_URI] || process.env.DISCORD_REDIRECT_URI || null,
+      discordSettings[DISCORD_SETTINGS_KEYS.REDIRECT_URI] ||
+      process.env.DISCORD_REDIRECT_URI ||
+      null,
+    webUrl: appSettings[DISCORD_SETTINGS_KEYS.WEB_URL] || null,
   }
 }
 
@@ -362,6 +370,54 @@ export async function getGuildRoles(guildId: string): Promise<DiscordRole[]> {
   }))
 }
 
+// Discord channel types
+const CHANNEL_TYPE_TEXT = 0
+
+interface DiscordChannelResponse {
+  id: string
+  name: string
+  type: number
+  position: number
+  parent_id: string | null
+}
+
+/**
+ * Get all text channels in a guild using bot token
+ * @param guildId - Guild ID to fetch channels from
+ * @returns Array of text channels with id and name
+ */
+export async function getGuildChannels(
+  guildId: string
+): Promise<Array<{ id: string; name: string }>> {
+  const settings = await getDiscordSettings()
+
+  if (!settings.botToken) {
+    throw new Error('Discord bot token not configured')
+  }
+
+  const response = await fetch(`${DISCORD_API_BASE}/guilds/${guildId}/channels`, {
+    headers: {
+      Authorization: `Bot ${settings.botToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Discord channels fetch failed: ${error}`)
+  }
+
+  const data = (await response.json()) as DiscordChannelResponse[]
+
+  // Filter to only text channels and sort by position
+  return data
+    .filter(channel => channel.type === CHANNEL_TYPE_TEXT)
+    .sort((a, b) => a.position - b.position)
+    .map(channel => ({
+      id: channel.id,
+      name: channel.name,
+    }))
+}
+
 /**
  * Test Discord connection with current settings
  * @returns Test result with guild info if successful
@@ -454,6 +510,7 @@ export const discordService = {
   getUserGuildMember,
   getGuild,
   getGuildRoles,
+  getGuildChannels,
   testConnection,
   getGuildIconUrl,
   getUserAvatarUrl,

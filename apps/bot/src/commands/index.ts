@@ -6,6 +6,7 @@ import { whoami } from './auth/whoami.js'
 import { register } from './auth/register.js'
 import { link } from './auth/link.js'
 import { unlink } from './auth/unlink.js'
+import { password } from './auth/password.js'
 // Market commands
 import { orders } from './market/orders.js'
 import { query } from './market/query.js'
@@ -17,6 +18,7 @@ import { inventory } from './inventory/inventory.js'
 import { sync } from './inventory/sync.js'
 import { sell } from './inventory/sell.js'
 import { buy } from './inventory/buy.js'
+import { deleteCommand } from './inventory/delete.js'
 import { bulksell } from './inventory/bulksell.js'
 import { bulkbuy } from './inventory/bulkbuy.js'
 // Settings commands
@@ -33,6 +35,7 @@ export const commands: Command[] = [
   register,
   link,
   unlink,
+  password,
   // Market
   orders,
   query,
@@ -44,6 +47,7 @@ export const commands: Command[] = [
   sync,
   sell,
   buy,
+  deleteCommand,
   bulksell,
   bulkbuy,
   // Settings

@@ -112,6 +112,26 @@ export const discordRoleMappings = pgTable(
   })
 )
 
+// ==================== DISCORD CHANNEL CONFIG (Key-value settings per channel) ====================
+// Stores channel-specific settings using key-value pattern for flexibility
+// Keys: priceList, visibility, currency, priceListEnforced, visibilityEnforced,
+//       currencyEnforced, announceInternal, announcePartner
+export const channelConfig = pgTable(
+  'channel_config',
+  {
+    id: serial('id').primaryKey(),
+    channelId: varchar('channel_id', { length: 30 }).notNull(), // Discord channel snowflake ID
+    key: varchar('key', { length: 50 }).notNull(), // Setting key
+    value: text('value').notNull(), // Setting value (stored as text)
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    uniqueChannelKey: uniqueIndex('channel_config_channel_key_idx').on(table.channelId, table.key),
+    channelIdx: index('channel_config_channel_idx').on(table.channelId),
+  })
+)
+
 // ==================== USER DISCORD PROFILES ====================
 export const userDiscordProfiles = pgTable(
   'user_discord_profiles',

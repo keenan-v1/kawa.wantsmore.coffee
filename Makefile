@@ -24,7 +24,7 @@ build: ## Build all packages
 	pnpm build
 
 test: ## Run all tests
-	pnpm --filter @kawakawa/api test -- --run
+	pnpm test
 
 lint: ## Check for lint errors
 	pnpm lint

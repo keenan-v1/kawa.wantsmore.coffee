@@ -344,7 +344,7 @@ async function sendInteractiveInventory(
   flatInventory: InventoryItemData[],
   filterDesc: string,
   lastSyncDate: Date,
-  locationDisplayMode: string
+  _locationDisplayMode: string
 ): Promise<void> {
   const idPrefix = 'inv'
   const pageSize = 6

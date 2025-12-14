@@ -27,6 +27,7 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings, getFioUsernames } from '../../services/userSettings.js'
+import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
 import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
 import {
   formatGroupedOrdersMulti,
@@ -35,6 +36,7 @@ import {
 } from '../../services/orderFormatter.js'
 import { isValidCurrency, VALID_CURRENCIES, type ValidCurrency } from '../../utils/validation.js'
 import { replyError } from '../../utils/replies.js'
+import logger from '../../utils/logger.js'
 
 const ORDERS_PER_PAGE = 10
 const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
@@ -114,12 +116,28 @@ export const orders: Command = {
     const userInput = interaction.options.getString('user')
     const orderType =
       (interaction.options.getString('type') as 'all' | 'sell' | 'buy' | null) || 'all'
-    const visibility =
-      (interaction.options.getString('visibility') as 'all' | 'internal' | 'partner' | null) ||
-      'all'
+    const visibilityOption = interaction.options.getString('visibility') as
+      | 'all'
+      | 'internal'
+      | 'partner'
+      | null
 
     // Get user's display preferences
     const displaySettings = await getDisplaySettings(interaction.user.id)
+
+    // Get channel defaults (if configured)
+    const channelId = interaction.channelId
+    const channelSettings = await getChannelDefaults(channelId)
+
+    // Determine visibility using channel defaults
+    // For view commands, 'all' means no filter, so we use it as the system default
+    const visibility: 'all' | 'internal' | 'partner' = resolveEffectiveValue(
+      visibilityOption,
+      channelSettings?.visibility,
+      channelSettings?.visibilityEnforced ?? false,
+      'all' as const,
+      'all' as const
+    )
 
     // Check if user has a linked account (for default behavior and manage button)
     const discordProfile = await db.query.userDiscordProfiles.findFirst({
@@ -190,7 +208,8 @@ export const orders: Command = {
         : [],
       resolvedDisplayName ? [resolvedDisplayName] : [],
       orderType,
-      visibility
+      visibility,
+      { visibilityEnforced: channelSettings?.visibilityEnforced ?? false }
     )
 
     // Fetch sell orders
@@ -639,6 +658,8 @@ async function handleOrderAction(
       await db.delete(buyOrders).where(and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)))
     }
 
+    logger.info({ orderId, orderType, userId }, 'Order deleted')
+
     await btnInteraction.update({
       content: '✅ Order deleted.',
       components: [],
@@ -718,6 +739,8 @@ async function handleOrderAction(
           updatedAt: new Date(),
         })
         .where(and(eq(sellOrders.id, orderId), eq(sellOrders.userId, userId)))
+
+      logger.info({ orderId, orderType: 'sell', userId, newPrice, newCurrency }, 'Order updated')
 
       await modalSubmit.reply({
         content: `✅ Sell order updated: ${newPrice} ${newCurrency}`,
@@ -815,6 +838,11 @@ async function handleOrderAction(
           updatedAt: new Date(),
         })
         .where(and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)))
+
+      logger.info(
+        { orderId, orderType: 'buy', userId, newQuantity, newPrice, newCurrency },
+        'Order updated'
+      )
 
       await modalSubmit.reply({
         content: `✅ Buy order updated: ${newQuantity}x @ ${newPrice} ${newCurrency}`,

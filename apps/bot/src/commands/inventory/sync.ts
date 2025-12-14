@@ -16,6 +16,7 @@ import { db, userSettings, fioUserStorage } from '@kawakawa/db'
 import { eq, and, desc } from 'drizzle-orm'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { MODAL_TIMEOUT } from '../../utils/interactions.js'
+import logger from '../../utils/logger.js'
 
 export const sync: Command = {
   data: new SlashCommandBuilder()
@@ -203,6 +204,8 @@ export const sync: Command = {
           .delete(userSettings)
           .where(and(eq(userSettings.userId, userId), eq(userSettings.settingKey, 'fio.apiKey')))
 
+        logger.info({ userId }, 'FIO credentials cleared')
+
         await buttonInteraction.update({
           content: '✅ FIO credentials have been cleared.\n\nRun `/sync` again to reconfigure.',
           embeds: [],
@@ -275,6 +278,8 @@ async function handleCredentialSubmit(
         },
       })
 
+    logger.info({ userId, fioUsername }, 'FIO credentials saved')
+
     await interaction.reply({
       content:
         `✅ FIO credentials saved for **${fioUsername}**!\n\n` +
@@ -282,7 +287,7 @@ async function handleCredentialSubmit(
       flags: MessageFlags.Ephemeral,
     })
   } catch (error) {
-    console.error('Failed to save FIO credentials:', error)
+    logger.error({ error, userId }, 'Failed to save FIO credentials')
     await interaction.reply({
       content: '❌ Failed to save FIO credentials. Please try again.',
       flags: MessageFlags.Ephemeral,

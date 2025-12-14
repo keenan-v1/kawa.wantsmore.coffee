@@ -4,6 +4,7 @@ import type { Command } from '../../client.js'
 import { db, users, userDiscordProfiles, userRoles, discordRoleMappings } from '@kawakawa/db'
 import { eq, inArray } from 'drizzle-orm'
 import { settingsService } from '@kawakawa/services/settings'
+import logger from '../../utils/logger.js'
 
 export const register: Command = {
   data: new SlashCommandBuilder()
@@ -142,6 +143,17 @@ export const register: Command = {
             roleId,
           })
         }
+
+        logger.info(
+          {
+            userId: newUser.id,
+            username: newUser.username,
+            discordId,
+            roles: appRolesToAssign,
+            autoApproved: hasValidRole,
+          },
+          'User registered via Discord'
+        )
       })
 
       // Build success embed
@@ -178,7 +190,7 @@ export const register: Command = {
 
       await interaction.reply({ embeds: [embed], ephemeral: true })
     } catch (error) {
-      console.error('Failed to create user:', error)
+      logger.error({ error, discordId, username }, 'Failed to create user')
       await interaction.reply({
         content:
           'An error occurred while creating your account. Please try again or contact an admin.',

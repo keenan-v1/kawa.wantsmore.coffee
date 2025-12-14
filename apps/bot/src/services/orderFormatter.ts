@@ -109,25 +109,35 @@ export function determineGroupingMulti(filters: MultiResolvedFilters): GroupBy {
 }
 
 /**
+ * Options for building filter description
+ */
+export interface FilterDescriptionOptions {
+  visibilityEnforced?: boolean
+}
+
+/**
  * Build a formatted filter description with emojis.
  *
  * Examples:
  * - 🏷️ COF, DW, RAT | 📤 Sell | 👤 Internal
  * - 🏷️ ALO | 📥 Buy & 📤 Sell | 👤 Internal & 👥 Partner
  * - 🏷️ COF | 📍 Benten, Moria | 🧑 Alice, Bob | 📤 Sell | 👤 Internal
+ * - 🏷️ COF | 📤 Sell | 🔒 👤 Internal (when enforced)
  *
  * @param commodities - Array of commodity tickers (formatted)
  * @param locations - Array of location display strings
  * @param displayNames - Array of user display names
  * @param orderType - 'all' | 'sell' | 'buy'
  * @param visibility - 'all' | 'internal' | 'partner'
+ * @param options - Optional settings (e.g., visibilityEnforced)
  */
 export function buildFilterDescription(
   commodities: string[],
   locations: string[],
   displayNames: string[],
   orderType: 'all' | 'sell' | 'buy',
-  visibility: 'all' | 'internal' | 'partner'
+  visibility: 'all' | 'internal' | 'partner',
+  options?: FilterDescriptionOptions
 ): string {
   const parts: string[] = []
 
@@ -155,13 +165,14 @@ export function buildFilterDescription(
     parts.push('📤 Sell')
   }
 
-  // Visibility
+  // Visibility (with optional lock icon when enforced by channel)
+  const lockIcon = options?.visibilityEnforced ? '🔒 ' : ''
   if (visibility === 'all') {
-    parts.push('👤 Internal & 👥 Partner')
+    parts.push(`${lockIcon}👤 Internal & 👥 Partner`)
   } else if (visibility === 'partner') {
-    parts.push('👥 Partner')
+    parts.push(`${lockIcon}👥 Partner`)
   } else {
-    parts.push('👤 Internal')
+    parts.push(`${lockIcon}👤 Internal`)
   }
 
   if (parts.join(' | ').length > 72) {

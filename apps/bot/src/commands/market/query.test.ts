@@ -69,6 +69,20 @@ vi.mock('../../services/orderFormatter.js', () => ({
   buildFilterDescription: mockBuildFilterDescription,
 }))
 
+// Mock channel defaults service
+vi.mock('../../services/channelDefaults.js', () => ({
+  getChannelDefaults: vi.fn().mockResolvedValue(null),
+  resolveEffectiveValue: vi.fn(
+    (
+      commandOption: unknown,
+      _channelDefault: unknown,
+      _channelEnforced: boolean,
+      _userDefault: unknown,
+      systemDefault: unknown
+    ) => commandOption ?? systemDefault
+  ),
+}))
+
 // Mock the database module
 vi.mock('@kawakawa/db', () => ({
   db: {
@@ -87,6 +101,7 @@ vi.mock('@kawakawa/db', () => ({
     orderType: 'orderType',
   },
   users: { username: 'username' },
+  channelDefaults: {},
 }))
 
 // Mock drizzle-orm

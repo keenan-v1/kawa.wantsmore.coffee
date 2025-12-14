@@ -38,6 +38,7 @@ vi.mock('discord.js', () => getDiscordMock())
 vi.mock('@kawakawa/db', () => ({
   db: { query: mockDbQuery },
   userDiscordProfiles: {},
+  channelDefaults: {},
 }))
 
 // Mock services
@@ -54,6 +55,19 @@ vi.mock('../../services/display.js', () => ({
 
 vi.mock('../../services/userSettings.js', () => ({
   getDisplaySettings: mockGetDisplaySettings,
+}))
+
+vi.mock('../../services/channelDefaults.js', () => ({
+  getChannelDefaults: vi.fn().mockResolvedValue(null),
+  resolveEffectiveValue: vi.fn(
+    (
+      commandOption: unknown,
+      _channelDefault: unknown,
+      _channelEnforced: boolean,
+      _userDefault: unknown,
+      systemDefault: unknown
+    ) => commandOption ?? systemDefault
+  ),
 }))
 
 vi.mock('../../services/reservationService.js', () => ({
@@ -263,7 +277,7 @@ describe('/reserve command', () => {
 
       await reserve.execute(interaction as never)
 
-      expect(mockGetAvailableSellOrders).toHaveBeenCalledWith('COF', 'BEN', 1)
+      expect(mockGetAvailableSellOrders).toHaveBeenCalledWith('COF', 'BEN', 1, 'all')
     })
   })
 

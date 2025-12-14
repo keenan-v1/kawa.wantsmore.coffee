@@ -24,7 +24,7 @@ import { eq } from 'drizzle-orm'
 import { getUserSettings, setSetting, deleteSetting } from '../../services/userSettings.js'
 import { formatLocation, resolveLocation } from '../../services/locationService.js'
 import { formatCommodityWithMode, resolveCommodity } from '../../services/commodityService.js'
-import type { LocationDisplayMode, CommodityDisplayMode, Currency } from '@kawakawa/types'
+import type { LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { COMPONENT_TIMEOUT } from '../../utils/interactions.js'
 

@@ -4,6 +4,7 @@ import type { Command } from '../../client.js'
 import { db, users, userDiscordProfiles } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
 import * as bcrypt from 'bcrypt'
+import logger from '../../utils/logger.js'
 
 export const link: Command = {
   data: new SlashCommandBuilder()
@@ -85,6 +86,8 @@ export const link: Command = {
         discordAvatar,
       })
 
+      logger.info({ userId: user.id, username, discordId }, 'Discord account linked')
+
       await interaction.reply({
         content:
           `✅ Successfully linked your Discord to **${username}**!\n\n` +
@@ -92,7 +95,7 @@ export const link: Command = {
         flags: MessageFlags.Ephemeral,
       })
     } catch (error) {
-      console.error('Failed to link Discord:', error)
+      logger.error({ error, discordId, username }, 'Failed to link Discord')
       await interaction.reply({
         content: 'An error occurred while linking your account. Please try again.',
         flags: MessageFlags.Ephemeral,

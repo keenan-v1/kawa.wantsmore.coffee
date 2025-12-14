@@ -554,6 +554,26 @@
                   class="mb-4"
                 />
 
+                <v-text-field
+                  v-model="discordForm.webUrl"
+                  label="Web Application URL"
+                  placeholder="https://your-app.example.com"
+                  hint="Base URL for password reset links and other web redirects"
+                  persistent-hint
+                  class="mb-4"
+                >
+                  <template #append-inner>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="primary"
+                      @click="setWebUrlFromCurrentOrigin"
+                    >
+                      Use Current
+                    </v-btn>
+                  </template>
+                </v-text-field>
+
                 <v-btn
                   color="primary"
                   :loading="savingDiscordSettings"
@@ -656,8 +676,335 @@
                 </v-alert>
               </v-card-text>
             </v-card>
+
+            <!-- Channel Config -->
+            <v-card class="mt-4">
+              <v-card-title>
+                <v-row align="center" no-gutters>
+                  <v-col>
+                    <v-icon class="mr-2">mdi-pound</v-icon>
+                    Channel Config
+                  </v-col>
+                  <v-col cols="auto">
+                    <v-btn
+                      color="primary"
+                      size="small"
+                      prepend-icon="mdi-plus"
+                      :disabled="!discordSettings?.guildId"
+                      @click="openCreateChannelConfigDialog"
+                    >
+                      Add Channel
+                    </v-btn>
+                  </v-col>
+                </v-row>
+              </v-card-title>
+              <v-card-text>
+                <v-alert
+                  v-if="!discordSettings?.guildId"
+                  type="warning"
+                  variant="tonal"
+                  class="mb-4"
+                  density="compact"
+                >
+                  Configure and test your Discord server connection first to enable channel
+                  defaults.
+                </v-alert>
+
+                <v-alert type="info" variant="tonal" class="mb-4" density="compact">
+                  Set default visibility, price list, and currency for specific Discord channels.
+                  When "enforced" is enabled, users cannot override the default.
+                </v-alert>
+
+                <div v-if="loadingChannelConfigs" class="text-center py-4">
+                  <v-progress-circular indeterminate />
+                </div>
+
+                <v-table v-else-if="channelConfigs.length > 0" density="compact">
+                  <thead>
+                    <tr>
+                      <th>Channel</th>
+                      <th>Visibility</th>
+                      <th>Price List</th>
+                      <th>Currency</th>
+                      <th>Announce</th>
+                      <th class="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="config in channelConfigs" :key="config.channelId">
+                      <td>
+                        <div class="d-flex flex-column">
+                          <span class="font-weight-medium">{{
+                            getChannelName(config.channelId)
+                          }}</span>
+                          <span class="text-caption text-medium-emphasis">{{
+                            config.channelId
+                          }}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <v-chip
+                          v-if="config.visibility"
+                          size="small"
+                          :color="config.visibility === 'internal' ? 'blue' : 'orange'"
+                        >
+                          {{ config.visibility }}
+                          <v-icon v-if="config.visibilityEnforced" size="x-small" end
+                            >mdi-lock</v-icon
+                          >
+                        </v-chip>
+                        <span v-else class="text-caption text-medium-emphasis">—</span>
+                      </td>
+                      <td>
+                        <v-chip v-if="config.priceList" size="small" color="green">
+                          {{ config.priceList }}
+                          <v-icon v-if="config.priceListEnforced" size="x-small" end
+                            >mdi-lock</v-icon
+                          >
+                        </v-chip>
+                        <span v-else class="text-caption text-medium-emphasis">—</span>
+                      </td>
+                      <td>
+                        <v-chip v-if="config.currency" size="small" color="purple">
+                          {{ config.currency }}
+                          <v-icon v-if="config.currencyEnforced" size="x-small" end
+                            >mdi-lock</v-icon
+                          >
+                        </v-chip>
+                        <span v-else class="text-caption text-medium-emphasis">—</span>
+                      </td>
+                      <td>
+                        <div class="d-flex gap-1">
+                          <v-icon
+                            v-if="config.announceInternal"
+                            size="small"
+                            color="blue"
+                            title="Internal queries announced"
+                          >
+                            mdi-bullhorn
+                          </v-icon>
+                          <v-icon
+                            v-if="config.announcePartner"
+                            size="small"
+                            color="orange"
+                            title="Partner queries announced"
+                          >
+                            mdi-bullhorn-outline
+                          </v-icon>
+                          <span
+                            v-if="!config.announceInternal && !config.announcePartner"
+                            class="text-caption text-medium-emphasis"
+                            >—</span
+                          >
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="text"
+                          @click="openEditChannelConfigDialog(config)"
+                        >
+                          <v-icon>mdi-pencil</v-icon>
+                        </v-btn>
+                        <v-btn
+                          icon
+                          size="small"
+                          variant="text"
+                          color="error"
+                          @click="confirmDeleteChannelConfig(config)"
+                        >
+                          <v-icon>mdi-delete</v-icon>
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+
+                <v-alert v-else type="info" variant="tonal" density="compact">
+                  No channel configs. Add a channel to set defaults.
+                </v-alert>
+              </v-card-text>
+            </v-card>
           </v-col>
         </v-row>
+
+        <!-- Channel Config Dialog -->
+        <v-dialog v-model="channelConfigDialog.show" max-width="600">
+          <v-card>
+            <v-card-title>
+              {{ channelConfigDialog.isEdit ? 'Edit' : 'Add' }} Channel Config
+            </v-card-title>
+            <v-card-text>
+              <v-autocomplete
+                v-model="channelConfigForm.channelId"
+                :items="discordChannels"
+                item-title="name"
+                item-value="id"
+                label="Discord Channel"
+                placeholder="Select a channel"
+                :loading="loadingDiscordChannels"
+                :disabled="channelConfigDialog.isEdit"
+                prepend-icon="mdi-pound"
+                class="mb-4"
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props" :title="item.raw.name" :subtitle="item.raw.id" />
+                </template>
+              </v-autocomplete>
+
+              <v-divider class="mb-4" />
+
+              <v-row>
+                <v-col cols="8">
+                  <v-select
+                    v-model="channelConfigForm.visibility"
+                    :items="visibilityOptions"
+                    label="Default Visibility"
+                    clearable
+                    hint="Order visibility for this channel"
+                    persistent-hint
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-switch
+                    v-model="channelConfigForm.visibilityEnforced"
+                    label="Enforced"
+                    color="warning"
+                    hide-details
+                    density="compact"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row>
+                <v-col cols="8">
+                  <v-select
+                    v-model="channelConfigForm.priceList"
+                    :items="priceListOptions"
+                    label="Default Price List"
+                    clearable
+                    hint="Price list for auto-pricing"
+                    persistent-hint
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-switch
+                    v-model="channelConfigForm.priceListEnforced"
+                    label="Enforced"
+                    color="warning"
+                    hide-details
+                    density="compact"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row>
+                <v-col cols="8">
+                  <v-select
+                    v-model="channelConfigForm.currency"
+                    :items="currencyOptions"
+                    label="Default Currency"
+                    clearable
+                    hint="Currency for orders"
+                    persistent-hint
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-switch
+                    v-model="channelConfigForm.currencyEnforced"
+                    label="Enforced"
+                    color="warning"
+                    hide-details
+                    density="compact"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-divider class="my-4" />
+
+              <v-autocomplete
+                v-model="channelConfigForm.announceInternal"
+                :items="discordChannels"
+                item-title="name"
+                item-value="id"
+                label="Announce Internal Queries To"
+                placeholder="Select channel for announcements"
+                :loading="loadingDiscordChannels"
+                clearable
+                prepend-icon="mdi-bullhorn"
+                hint="Channel where internal visibility query announcements are posted"
+                persistent-hint
+                class="mb-4"
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props" :title="item.raw.name" :subtitle="item.raw.id" />
+                </template>
+              </v-autocomplete>
+
+              <v-autocomplete
+                v-model="channelConfigForm.announcePartner"
+                :items="discordChannels"
+                item-title="name"
+                item-value="id"
+                label="Announce Partner Queries To"
+                placeholder="Select channel for announcements"
+                :loading="loadingDiscordChannels"
+                clearable
+                prepend-icon="mdi-bullhorn-outline"
+                hint="Channel where partner visibility query announcements are posted"
+                persistent-hint
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props" :title="item.raw.name" :subtitle="item.raw.id" />
+                </template>
+              </v-autocomplete>
+
+              <v-alert type="info" variant="tonal" class="mt-4" density="compact">
+                <v-icon size="small">mdi-lock</v-icon>
+                <strong>Enforced</strong> means users cannot override the default with command
+                options.
+              </v-alert>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="channelConfigDialog.show = false">Cancel</v-btn>
+              <v-btn
+                color="primary"
+                variant="flat"
+                :loading="savingChannelConfig"
+                :disabled="!channelConfigForm.channelId"
+                @click="saveChannelConfig"
+              >
+                Save
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <!-- Delete Channel Config Confirmation -->
+        <v-dialog v-model="deleteChannelConfigDialog.show" max-width="400">
+          <v-card>
+            <v-card-title>Delete Channel Config</v-card-title>
+            <v-card-text>
+              Are you sure you want to delete config for channel "{{
+                deleteChannelConfigDialog.channelId
+              }}"?
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="deleteChannelConfigDialog.show = false">Cancel</v-btn>
+              <v-btn
+                color="error"
+                variant="flat"
+                :loading="deletingChannelConfig"
+                @click="deleteChannelConfig"
+              >
+                Delete
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
       </v-tabs-window-item>
 
       <!-- PRICE LISTS TAB -->
@@ -1782,6 +2129,8 @@ import type {
   DiscordRoleMapping,
   DiscordRole,
   GlobalDefaultSetting,
+  ChannelConfigMap,
+  Currency,
 } from '@kawakawa/types'
 import { api } from '../services/api'
 import type {
@@ -1945,6 +2294,7 @@ const discordForm = ref({
   redirectUri: '',
   guildId: '',
   autoApprovalEnabled: false,
+  webUrl: '',
 })
 const showClientSecret = ref(false)
 const showBotToken = ref(false)
@@ -1968,6 +2318,33 @@ const savingMapping = ref(false)
 const deleteMappingDialog = ref(false)
 const deletingMapping = ref<DiscordRoleMapping | null>(null)
 const deletingMappingLoading = ref(false)
+
+// Channel config state
+const channelConfigs = ref<ChannelConfigMap[]>([])
+const loadingChannelConfigs = ref(false)
+const discordChannels = ref<Array<{ id: string; name: string }>>([])
+const loadingDiscordChannels = ref(false)
+const channelConfigDialog = ref({ show: false, isEdit: false })
+const channelConfigForm = ref({
+  channelId: '',
+  visibility: null as 'internal' | 'partner' | null,
+  visibilityEnforced: false,
+  priceList: null as string | null,
+  priceListEnforced: false,
+  currency: null as Currency | null,
+  currencyEnforced: false,
+  announceInternal: null as string | null,
+  announcePartner: null as string | null,
+})
+const savingChannelConfig = ref(false)
+const deleteChannelConfigDialog = ref({ show: false, channelId: '' })
+const deletingChannelConfig = ref(false)
+
+// Options for channel default dropdowns
+const visibilityOptions = [
+  { title: 'Internal (members only)', value: 'internal' },
+  { title: 'Partner (trade partners)', value: 'partner' },
+]
 
 // Price settings state
 const priceSettings = ref<PriceSettingsResponse | null>(null)
@@ -2113,7 +2490,9 @@ const hasBotSettingsChanges = computed(() => {
   return (
     discordForm.value.botToken !== '' ||
     discordForm.value.guildId !== (discordSettings.value?.guildId || '') ||
-    discordForm.value.autoApprovalEnabled !== (discordSettings.value?.autoApprovalEnabled || false)
+    discordForm.value.autoApprovalEnabled !==
+      (discordSettings.value?.autoApprovalEnabled || false) ||
+    discordForm.value.webUrl !== (discordSettings.value?.webUrl || '')
   )
 })
 
@@ -2123,6 +2502,11 @@ const hasFioSettingsChanges = computed(() => {
     priceSettingsForm.value.fioBaseUrl !== (priceSettings.value?.fioBaseUrl || '') ||
     priceSettingsForm.value.fioPriceField !== (priceSettings.value?.fioPriceField || 'PriceAverage')
   )
+})
+
+// Computed for price list options in channel defaults
+const priceListOptions = computed(() => {
+  return priceLists.value.filter(pl => pl.isActive).map(pl => ({ title: pl.name, value: pl.code }))
 })
 
 const vuetifyColors = [
@@ -2587,6 +2971,7 @@ const loadDiscordSettings = async () => {
     discordForm.value.redirectUri = discordSettings.value.redirectUri || ''
     discordForm.value.guildId = discordSettings.value.guildId || ''
     discordForm.value.autoApprovalEnabled = discordSettings.value.autoApprovalEnabled || false
+    discordForm.value.webUrl = discordSettings.value.webUrl || ''
     // Don't populate secrets - they should only be entered when changing
     discordForm.value.clientSecret = ''
     discordForm.value.botToken = ''
@@ -2644,12 +3029,17 @@ const saveOAuthSettings = async () => {
   }
 }
 
+const setWebUrlFromCurrentOrigin = () => {
+  discordForm.value.webUrl = window.location.origin
+}
+
 const saveBotSettings = async () => {
   try {
     savingDiscordSettings.value = true
     const settings: Record<string, string | boolean | undefined> = {
       guildId: discordForm.value.guildId,
       autoApprovalEnabled: discordForm.value.autoApprovalEnabled,
+      webUrl: discordForm.value.webUrl,
     }
     if (discordForm.value.botToken) {
       settings.botToken = discordForm.value.botToken
@@ -2657,6 +3047,8 @@ const saveBotSettings = async () => {
     discordSettings.value = await api.adminDiscord.updateSettings(settings)
     // Clear password field after save
     discordForm.value.botToken = ''
+    // Update webUrl from response
+    discordForm.value.webUrl = discordSettings.value.webUrl || ''
     showSnackbar('Bot settings saved successfully')
   } catch (error) {
     console.error('Failed to save bot settings', error)
@@ -2792,6 +3184,138 @@ const deleteMapping = async () => {
   } finally {
     deletingMappingLoading.value = false
     deletingMapping.value = null
+  }
+}
+
+// Channel config functions
+const loadChannelConfigs = async () => {
+  try {
+    loadingChannelConfigs.value = true
+    channelConfigs.value = await api.adminDiscord.getChannelConfigs()
+  } catch (error) {
+    console.error('Failed to load channel configs', error)
+    showSnackbar('Failed to load channel configs', 'error')
+  } finally {
+    loadingChannelConfigs.value = false
+  }
+}
+
+const loadDiscordChannels = async () => {
+  if (!discordSettings.value?.guildId) return
+
+  try {
+    loadingDiscordChannels.value = true
+    discordChannels.value = await api.adminDiscord.getGuildChannels()
+  } catch (error) {
+    console.error('Failed to load Discord channels', error)
+    showSnackbar('Failed to load Discord channels', 'error')
+  } finally {
+    loadingDiscordChannels.value = false
+  }
+}
+
+const getChannelName = (channelId: string): string => {
+  const channel = discordChannels.value.find(c => c.id === channelId)
+  return channel?.name ? `#${channel.name}` : 'Unknown'
+}
+
+const openCreateChannelConfigDialog = async () => {
+  channelConfigDialog.value = { show: true, isEdit: false }
+  channelConfigForm.value = {
+    channelId: '',
+    visibility: null,
+    visibilityEnforced: false,
+    priceList: null,
+    priceListEnforced: false,
+    currency: null,
+    currencyEnforced: false,
+    announceInternal: null,
+    announcePartner: null,
+  }
+  // Load required data for dropdowns
+  if (discordChannels.value.length === 0) {
+    await loadDiscordChannels()
+  }
+  if (priceLists.value.length === 0) {
+    await loadPriceLists()
+  }
+}
+
+const openEditChannelConfigDialog = async (config: ChannelConfigMap) => {
+  channelConfigDialog.value = { show: true, isEdit: true }
+  channelConfigForm.value = {
+    channelId: config.channelId,
+    visibility: config.visibility ?? null,
+    visibilityEnforced: config.visibilityEnforced ?? false,
+    priceList: config.priceList ?? null,
+    priceListEnforced: config.priceListEnforced ?? false,
+    currency: config.currency ?? null,
+    currencyEnforced: config.currencyEnforced ?? false,
+    announceInternal: config.announceInternal ?? null,
+    announcePartner: config.announcePartner ?? null,
+  }
+  // Load required data for dropdowns
+  if (discordChannels.value.length === 0) {
+    await loadDiscordChannels()
+  }
+  if (priceLists.value.length === 0) {
+    await loadPriceLists()
+  }
+}
+
+const saveChannelConfig = async () => {
+  if (!channelConfigForm.value.channelId) return
+
+  try {
+    savingChannelConfig.value = true
+    await api.adminDiscord.updateChannelConfig(channelConfigForm.value.channelId, {
+      visibility: channelConfigForm.value.visibility,
+      visibilityEnforced: channelConfigForm.value.visibilityEnforced,
+      priceList: channelConfigForm.value.priceList,
+      priceListEnforced: channelConfigForm.value.priceListEnforced,
+      currency: channelConfigForm.value.currency,
+      currencyEnforced: channelConfigForm.value.currencyEnforced,
+      announceInternal: channelConfigForm.value.announceInternal,
+      announcePartner: channelConfigForm.value.announcePartner,
+    })
+    showSnackbar(
+      channelConfigDialog.value.isEdit
+        ? 'Channel config updated successfully'
+        : 'Channel config created successfully'
+    )
+    channelConfigDialog.value.show = false
+    await loadChannelConfigs()
+  } catch (error) {
+    console.error('Failed to save channel config', error)
+    const message = error instanceof Error ? error.message : 'Failed to save channel config'
+    showSnackbar(message, 'error')
+  } finally {
+    savingChannelConfig.value = false
+  }
+}
+
+const confirmDeleteChannelConfig = (config: ChannelConfigMap) => {
+  deleteChannelConfigDialog.value = {
+    show: true,
+    channelId: config.channelId,
+  }
+}
+
+const deleteChannelConfig = async () => {
+  if (!deleteChannelConfigDialog.value.channelId) return
+
+  try {
+    deletingChannelConfig.value = true
+    await api.adminDiscord.deleteChannelConfig(deleteChannelConfigDialog.value.channelId)
+    showSnackbar('Channel config deleted successfully')
+    deleteChannelConfigDialog.value.show = false
+    await loadChannelConfigs()
+  } catch (error) {
+    console.error('Failed to delete channel config', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete channel config'
+    showSnackbar(message, 'error')
+  } finally {
+    deletingChannelConfig.value = false
   }
 }
 
@@ -3238,6 +3762,13 @@ watch(activeTab, async newTab => {
     }
     if (discordRoleMappings.value.length === 0) {
       await loadRoleMappings()
+    }
+    if (channelConfigs.value.length === 0) {
+      await loadChannelConfigs()
+    }
+    // Load Discord channels for name lookups (requires guildId)
+    if (discordChannels.value.length === 0 && discordSettings.value?.guildId) {
+      await loadDiscordChannels()
     }
   } else if (newTab === 'priceLists') {
     // Load price settings, price lists, import configs, and adjustments

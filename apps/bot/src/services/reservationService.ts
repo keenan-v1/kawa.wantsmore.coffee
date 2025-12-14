@@ -46,14 +46,18 @@ export interface SelectableOrder {
 export async function getAvailableSellOrders(
   commodityTicker: string,
   locationId: string | null,
-  excludeUserId: number
+  excludeUserId: number,
+  visibilityFilter?: 'internal' | 'partner' | 'all' | null
 ): Promise<SelectableOrder[]> {
   // Query sell orders matching filters
   const ordersData = await db.query.sellOrders.findMany({
     where: and(
       eq(sellOrders.commodityTicker, commodityTicker),
       locationId ? eq(sellOrders.locationId, locationId) : undefined,
-      ne(sellOrders.userId, excludeUserId)
+      ne(sellOrders.userId, excludeUserId),
+      visibilityFilter && visibilityFilter !== 'all'
+        ? eq(sellOrders.orderType, visibilityFilter)
+        : undefined
     ),
     with: {
       user: true,
@@ -153,14 +157,18 @@ async function getBuyOrderReservationStats(
 export async function getAvailableBuyOrders(
   commodityTicker: string,
   locationId: string | null,
-  excludeUserId: number
+  excludeUserId: number,
+  visibilityFilter?: 'internal' | 'partner' | 'all' | null
 ): Promise<SelectableOrder[]> {
   // Query buy orders matching filters
   const ordersData = await db.query.buyOrders.findMany({
     where: and(
       eq(buyOrders.commodityTicker, commodityTicker),
       locationId ? eq(buyOrders.locationId, locationId) : undefined,
-      ne(buyOrders.userId, excludeUserId)
+      ne(buyOrders.userId, excludeUserId),
+      visibilityFilter && visibilityFilter !== 'all'
+        ? eq(buyOrders.orderType, visibilityFilter)
+        : undefined
     ),
     with: {
       user: true,
@@ -432,7 +440,7 @@ export async function updateReservationStatus(
   reservationId: number,
   userId: number,
   newStatus: ReservationStatus,
-  isOwner: boolean
+  _isOwner: boolean
 ): Promise<{ success: boolean; error?: string }> {
   // Get the reservation
   const reservation = await db.query.orderReservations.findFirst({

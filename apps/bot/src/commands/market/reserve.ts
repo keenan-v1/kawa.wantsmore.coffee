@@ -12,6 +12,7 @@ import type { Command } from '../../client.js'
 import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
 import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
+import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
 import {
   getAvailableSellOrders,
   formatOrderForSelect,
@@ -22,9 +23,9 @@ import { awaitModal, COMPONENT_TIMEOUT } from '../../utils/interactions.js'
 import { createSelectMenu } from '../../utils/components.js'
 import { createQuantityNotesModal } from '../../utils/modals.js'
 import { createSuccessEmbed } from '../../utils/embeds.js'
-import { replyError } from '../../utils/replies.js'
 import { formatOrderPrice, calculateTotal } from '../../utils/priceFormatter.js'
 import { getDisplayName } from '../../utils/userDisplay.js'
+import logger from '../../utils/logger.js'
 
 export const reserve: Command = {
   data: new SlashCommandBuilder()
@@ -86,6 +87,19 @@ export const reserve: Command = {
     // Get user's display settings
     const displaySettings = await getDisplaySettings(interaction.user.id)
 
+    // Get channel defaults (if configured)
+    const channelId = interaction.channelId
+    const channelSettings = await getChannelDefaults(channelId)
+
+    // Determine visibility filter using channel defaults
+    const visibilityFilter: 'all' | 'internal' | 'partner' = resolveEffectiveValue(
+      null, // No command-level visibility option for reserve
+      channelSettings?.visibility,
+      channelSettings?.visibilityEnforced ?? false,
+      'all' as const,
+      'all' as const
+    )
+
     // Validate commodity
     const resolvedCommodity = await resolveCommodity(commodityInput)
     if (!resolvedCommodity) {
@@ -117,7 +131,8 @@ export const reserve: Command = {
     const availableOrders = await getAvailableSellOrders(
       resolvedCommodity.ticker,
       resolvedLocation?.naturalId ?? null,
-      userId
+      userId,
+      visibilityFilter
     )
 
     if (availableOrders.length === 0) {
@@ -193,7 +208,7 @@ export const reserve: Command = {
       const modalSubmit = await awaitModal(selectInteraction, modalId)
       if (!modalSubmit) return
 
-      await handleReserveModalSubmit(modalSubmit, userId, selectedOrder)
+      await handleReserveModalSubmit(modalSubmit, interaction, userId, selectedOrder)
     } catch {
       // Selection timed out
       try {
@@ -210,9 +225,11 @@ export const reserve: Command = {
 
 /**
  * Handle reserve modal submission
+ * Updates the original message instead of creating a new ephemeral reply
  */
 async function handleReserveModalSubmit(
-  interaction: ModalSubmitInteraction,
+  modalInteraction: ModalSubmitInteraction,
+  originalInteraction: ChatInputCommandInteraction,
   userId: number,
   order: {
     id: number
@@ -227,18 +244,27 @@ async function handleReserveModalSubmit(
     ownerFioUsername: string | null
   }
 ): Promise<void> {
-  const quantityStr = interaction.fields.getTextInputValue('quantity').trim()
-  const notes = interaction.fields.getTextInputValue('notes').trim()
+  const quantityStr = modalInteraction.fields.getTextInputValue('quantity').trim()
+  const notes = modalInteraction.fields.getTextInputValue('notes').trim()
 
   // Validate quantity
   const quantity = parseInt(quantityStr, 10)
   if (isNaN(quantity) || quantity <= 0) {
-    await replyError(interaction, 'Invalid quantity. Please enter a positive number.')
+    await modalInteraction.deferUpdate()
+    await originalInteraction.editReply({
+      content:
+        '❌ Invalid quantity. Please enter a positive number.\n\nRun `/reserve` to try again.',
+      components: [],
+    })
     return
   }
 
   if (quantity > order.quantity) {
-    await replyError(interaction, `Quantity exceeds available amount. Maximum: ${order.quantity}`)
+    await modalInteraction.deferUpdate()
+    await originalInteraction.editReply({
+      content: `❌ Quantity exceeds available amount. Maximum: ${order.quantity}\n\nRun \`/reserve\` to try again.`,
+      components: [],
+    })
     return
   }
 
@@ -250,6 +276,18 @@ async function handleReserveModalSubmit(
       userId,
       quantity,
       notes || undefined
+    )
+
+    logger.info(
+      {
+        reservationId: reservation.id,
+        orderId: order.id,
+        userId,
+        quantity,
+        commodity: order.commodityTicker,
+        location: order.locationId,
+      },
+      'Reservation created'
     )
 
     const ownerName = getDisplayName({
@@ -275,12 +313,19 @@ async function handleReserveModalSubmit(
       notes: notes || undefined,
     })
 
-    await interaction.reply({
+    // Acknowledge modal and update original message (no new ephemeral message)
+    await modalInteraction.deferUpdate()
+    await originalInteraction.editReply({
+      content: null,
       embeds: [embed],
-      flags: MessageFlags.Ephemeral,
+      components: [],
     })
   } catch (error) {
-    console.error('Failed to create reservation:', error)
-    await replyError(interaction, 'Failed to create reservation. Please try again.')
+    logger.error({ error, orderId: order.id, userId, quantity }, 'Failed to create reservation')
+    await modalInteraction.deferUpdate()
+    await originalInteraction.editReply({
+      content: '❌ Failed to create reservation. Please try again.',
+      components: [],
+    })
   }
 }

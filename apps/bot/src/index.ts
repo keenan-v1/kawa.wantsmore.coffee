@@ -6,12 +6,18 @@ import {
   syncCommandsIfChanged,
 } from './client.js'
 import { commands } from './commands/index.js'
+import logger from './utils/logger.js'
 
 async function main(): Promise<void> {
-  console.log('Starting Kawakawa Discord Bot...')
+  logger.info({ commandCount: commands.length }, 'Starting Kawakawa Discord Bot')
 
   // Sync slash commands with Discord (only deploys if changed)
-  await syncCommandsIfChanged(commands)
+  const synced = await syncCommandsIfChanged(commands)
+  if (synced) {
+    logger.info('Commands synced with Discord')
+  } else {
+    logger.info('Commands already up to date')
+  }
 
   const client = createClient()
 
@@ -26,6 +32,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(error => {
-  console.error('Failed to start bot:', error)
+  logger.fatal({ error }, 'Failed to start bot')
   process.exit(1)
 })

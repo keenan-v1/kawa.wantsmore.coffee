@@ -7,6 +7,10 @@ export interface BotConfig {
 }
 
 let cachedConfig: BotConfig | null = null
+let cachedWebUrl: string | null = null
+
+// Default web URL for development
+const DEFAULT_WEB_URL = 'http://localhost:5173'
 
 /**
  * Get bot configuration from database settings.
@@ -36,9 +40,25 @@ export async function getConfig(): Promise<BotConfig> {
 }
 
 /**
+ * Get the web application URL for generating links.
+ * Reads from app.webUrl setting, falls back to default for development.
+ */
+export async function getWebUrl(): Promise<string> {
+  if (cachedWebUrl) {
+    return cachedWebUrl
+  }
+
+  const settings = await settingsService.getAll('app.')
+  cachedWebUrl = settings['app.webUrl'] || DEFAULT_WEB_URL
+
+  return cachedWebUrl
+}
+
+/**
  * Invalidate cached configuration.
  * Call this when settings are updated.
  */
 export function invalidateConfig(): void {
   cachedConfig = null
+  cachedWebUrl = null
 }

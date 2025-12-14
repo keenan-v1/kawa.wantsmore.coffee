@@ -9,6 +9,7 @@ import {
 } from 'discord.js'
 import type { ChatInputCommandInteraction, AutocompleteInteraction } from 'discord.js'
 import { getConfig } from './config.js'
+import logger from './utils/logger.js'
 
 export interface Command {
   data: {
@@ -55,7 +56,14 @@ export function registerCommands(client: BotClient, commands: Command[]): void {
  */
 export function setupEventHandlers(client: BotClient): void {
   client.once(Events.ClientReady, readyClient => {
-    console.log(`Ready! Logged in as ${readyClient.user.tag}`)
+    logger.info(
+      {
+        user: readyClient.user.tag,
+        userId: readyClient.user.id,
+        guildCount: readyClient.guilds.cache.size,
+      },
+      'Bot is ready'
+    )
   })
 
   client.on(Events.InteractionCreate, async interaction => {
@@ -63,14 +71,25 @@ export function setupEventHandlers(client: BotClient): void {
       const command = client.commands.get(interaction.commandName)
 
       if (!command) {
-        console.error(`No command matching ${interaction.commandName} was found.`)
+        logger.warn({ command: interaction.commandName }, 'Unknown command received')
         return
       }
 
+      const startTime = Date.now()
+      const logContext = {
+        command: interaction.commandName,
+        userId: interaction.user.id,
+        username: interaction.user.username,
+        guildId: interaction.guildId,
+      }
+
+      logger.info(logContext, 'Command invoked')
+
       try {
         await command.execute(interaction)
+        logger.info({ ...logContext, durationMs: Date.now() - startTime }, 'Command completed')
       } catch (error) {
-        console.error(`Error executing ${interaction.commandName}:`, error)
+        logger.error({ ...logContext, error, durationMs: Date.now() - startTime }, 'Command failed')
 
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
@@ -94,7 +113,7 @@ export function setupEventHandlers(client: BotClient): void {
       try {
         await command.autocomplete(interaction)
       } catch (error) {
-        console.error(`Error in autocomplete for ${interaction.commandName}:`, error)
+        logger.error({ command: interaction.commandName, error }, 'Autocomplete error')
       }
     }
   })
@@ -161,7 +180,7 @@ function commandsEqual(
   remote: Record<string, unknown>[]
 ): boolean {
   if (local.length !== remote.length) {
-    console.log(`Command count differs: local=${local.length}, remote=${remote.length}`)
+    logger.debug({ localCount: local.length, remoteCount: remote.length }, 'Command count differs')
     return false
   }
 
@@ -181,9 +200,10 @@ function commandsEqual(
       const localCmd = JSON.stringify(localNormalized[i])
       const remoteCmd = JSON.stringify(remoteNormalized[i])
       if (localCmd !== remoteCmd) {
-        console.log(`Command "${localNormalized[i].name}" differs:`)
-        console.log('  Local:', localCmd)
-        console.log('  Remote:', remoteCmd)
+        logger.debug(
+          { command: localNormalized[i].name, local: localCmd, remote: remoteCmd },
+          'Command definition differs'
+        )
       }
     }
     return false
@@ -215,20 +235,20 @@ export async function syncCommandsIfChanged(commands: Command[]): Promise<boolea
         unknown
       >[]
     }
-  } catch (_error) {
-    console.log('Could not fetch remote commands, deploying all commands...')
+  } catch (error) {
+    logger.warn({ error }, 'Could not fetch remote commands, deploying all')
     await deployCommands(commands)
     return true
   }
 
   // Compare local and remote commands
   if (commandsEqual(localCommandData, remoteCommands)) {
-    console.log(`Commands are up to date (${commands.length} commands registered)`)
+    logger.debug({ commandCount: commands.length }, 'Commands up to date')
     return false
   }
 
   // Commands differ, deploy the new ones
-  console.log('Commands have changed, syncing with Discord...')
+  logger.info('Commands changed, syncing with Discord')
   await deployCommands(commands)
   return true
 }
@@ -244,7 +264,7 @@ export async function deployCommands(commands: Command[]): Promise<void> {
 
   const commandData = commands.map(cmd => cmd.data.toJSON())
 
-  console.log(`Deploying ${commandData.length} application (/) commands...`)
+  logger.info({ commandCount: commandData.length }, 'Deploying commands')
 
   if (config.guildId) {
     // Guild commands - instant update
@@ -252,14 +272,14 @@ export async function deployCommands(commands: Command[]): Promise<void> {
       body: commandData,
     })) as unknown[]
 
-    console.log(`Successfully deployed ${data.length} guild commands.`)
+    logger.info({ deployedCount: data.length, guildId: config.guildId }, 'Guild commands deployed')
   } else {
     // Global commands - takes up to 1 hour to propagate
     const data = (await rest.put(Routes.applicationCommands(config.clientId), {
       body: commandData,
     })) as unknown[]
 
-    console.log(`Successfully deployed ${data.length} global commands.`)
+    logger.info({ deployedCount: data.length }, 'Global commands deployed')
   }
 }
 

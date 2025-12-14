@@ -3,6 +3,7 @@ import type { ChatInputCommandInteraction } from 'discord.js'
 import type { Command } from '../../client.js'
 import { db, userDiscordProfiles } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
+import logger from '../../utils/logger.js'
 
 export const unlink: Command = {
   data: new SlashCommandBuilder()
@@ -53,6 +54,11 @@ export const unlink: Command = {
     try {
       await db.delete(userDiscordProfiles).where(eq(userDiscordProfiles.discordId, discordId))
 
+      logger.info(
+        { userId: profile.user.id, username: profile.user.username, discordId },
+        'Discord account unlinked'
+      )
+
       await interaction.reply({
         content:
           `✅ Successfully unlinked your Discord from **${profile.user.username}**.\n\n` +
@@ -61,7 +67,7 @@ export const unlink: Command = {
         flags: MessageFlags.Ephemeral,
       })
     } catch (error) {
-      console.error('Failed to unlink Discord:', error)
+      logger.error({ error, discordId }, 'Failed to unlink Discord')
       await interaction.reply({
         content: 'An error occurred while unlinking your account. Please try again.',
         flags: MessageFlags.Ephemeral,

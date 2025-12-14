@@ -79,6 +79,20 @@ vi.mock('../../services/orderFormatter.js', () => ({
   buildFilterDescription: mockBuildFilterDescription,
 }))
 
+// Mock channel defaults service
+vi.mock('../../services/channelDefaults.js', () => ({
+  getChannelDefaults: vi.fn().mockResolvedValue(null),
+  resolveEffectiveValue: vi.fn(
+    (
+      commandOption: unknown,
+      _channelDefault: unknown,
+      _channelEnforced: boolean,
+      _userDefault: unknown,
+      systemDefault: unknown
+    ) => commandOption ?? systemDefault
+  ),
+}))
+
 // Mock the database module
 vi.mock('@kawakawa/db', () => ({
   db: {
@@ -101,6 +115,7 @@ vi.mock('@kawakawa/db', () => ({
   },
   users: { username: 'username' },
   userDiscordProfiles: { discordId: 'discordId', userId: 'userId' },
+  channelDefaults: {},
 }))
 
 // Mock drizzle-orm
@@ -403,7 +418,14 @@ describe('orders command (strict)', () => {
           embeds: expect.any(Array),
         })
       )
-      expect(mockBuildFilterDescription).toHaveBeenCalledWith([], [], ['LinkedUser'], 'all', 'all')
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith(
+        [],
+        [],
+        ['LinkedUser'],
+        'all',
+        'all',
+        { visibilityEnforced: false }
+      )
     })
 
     it('queries only sell orders when type is sell', async () => {
@@ -488,7 +510,9 @@ describe('orders command (strict)', () => {
 
       await orders.execute(interaction as never)
 
-      expect(mockBuildFilterDescription).toHaveBeenCalledWith([], [], [], 'all', 'partner')
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith([], [], [], 'all', 'partner', {
+        visibilityEnforced: false,
+      })
       expect(replyFn).toHaveBeenCalledWith(
         expect.objectContaining({
           embeds: expect.any(Array),
@@ -581,7 +605,8 @@ describe('orders command (strict)', () => {
         ['Benten (BEN)'],
         ['Test User'],
         'sell',
-        'internal'
+        'internal',
+        { visibilityEnforced: false }
       )
       expect(replyFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -619,7 +644,9 @@ describe('orders command (strict)', () => {
       await orders.execute(interaction as never)
 
       // Should NOT default to user's orders because a filter was specified
-      expect(mockBuildFilterDescription).toHaveBeenCalledWith(['COF'], [], [], 'all', 'all')
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith(['COF'], [], [], 'all', 'all', {
+        visibilityEnforced: false,
+      })
       expect(replyFn).toHaveBeenCalledWith(
         expect.objectContaining({
           embeds: expect.any(Array),
