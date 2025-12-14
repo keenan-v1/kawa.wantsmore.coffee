@@ -7,7 +7,7 @@ RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app
 
 # Copy workspace configuration
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.base.json ./
 
 # Copy all package.json files for dependency resolution
 COPY apps/bot/package.json ./apps/bot/
