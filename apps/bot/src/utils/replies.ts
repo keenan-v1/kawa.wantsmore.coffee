@@ -26,7 +26,10 @@ type RepliableInteraction =
  * return
  * ```
  */
-export async function replyError(interaction: RepliableInteraction, message: string): Promise<void> {
+export async function replyError(
+  interaction: RepliableInteraction,
+  message: string
+): Promise<void> {
   await interaction.reply({
     content: `❌ ${message}`,
     flags: MessageFlags.Ephemeral,

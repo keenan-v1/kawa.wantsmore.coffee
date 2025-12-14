@@ -244,7 +244,13 @@ async function handleReserveModalSubmit(
 
   try {
     // Create the reservation
-    const reservation = await createReservation('sell', order.id, userId, quantity, notes || undefined)
+    const reservation = await createReservation(
+      'sell',
+      order.id,
+      userId,
+      quantity,
+      notes || undefined
+    )
 
     const ownerName = getDisplayName({
       username: order.ownerUsername,

@@ -71,12 +71,18 @@ describe('/reservations command', () => {
     mockGetOrderDisplayPrice.mockResolvedValue(null)
     mockGetStatusEmoji.mockImplementation((status: string) => {
       switch (status) {
-        case 'pending': return '⏳'
-        case 'confirmed': return '✅'
-        case 'rejected': return '❌'
-        case 'fulfilled': return '🎉'
-        case 'cancelled': return '🚫'
-        default: return '❓'
+        case 'pending':
+          return '⏳'
+        case 'confirmed':
+          return '✅'
+        case 'rejected':
+          return '❌'
+        case 'fulfilled':
+          return '🎉'
+        case 'cancelled':
+          return '🚫'
+        default:
+          return '❓'
       }
     })
   })
@@ -290,7 +296,7 @@ describe('/reservations command', () => {
           counterpartyFioUsername: null,
         },
       ])
-      mockGetOrderDisplayPrice.mockResolvedValue({ price: 150.00, currency: 'CIS' })
+      mockGetOrderDisplayPrice.mockResolvedValue({ price: 150.0, currency: 'CIS' })
 
       const { interaction, replyFn } = createMockInteraction()
 
@@ -306,5 +312,4 @@ describe('/reservations command', () => {
       expect(replyFn).toHaveBeenCalled()
     })
   })
-
 })

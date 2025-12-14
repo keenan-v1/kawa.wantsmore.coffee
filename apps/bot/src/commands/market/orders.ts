@@ -703,7 +703,10 @@ async function handleOrderAction(
       }
 
       if (!isValidCurrency(newCurrency)) {
-        await replyError(modalSubmit, `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`)
+        await replyError(
+          modalSubmit,
+          `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`
+        )
         return
       }
 
@@ -796,7 +799,10 @@ async function handleOrderAction(
       }
 
       if (!isValidCurrency(newCurrency)) {
-        await replyError(modalSubmit, `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`)
+        await replyError(
+          modalSubmit,
+          `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`
+        )
         return
       }
 

@@ -14,4 +14,3 @@ export type ValidCurrency = (typeof VALID_CURRENCIES)[number]
 export function isValidCurrency(currency: string): currency is ValidCurrency {
   return VALID_CURRENCIES.includes(currency as ValidCurrency)
 }
-

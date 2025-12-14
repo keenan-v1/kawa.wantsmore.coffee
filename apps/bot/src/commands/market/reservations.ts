@@ -231,8 +231,10 @@ async function sendReservationsWithPagination(
               const typeLabel = res.type === 'sell' ? 'Buy from' : 'Sell to'
               const isOwner = res.ownerId === userId
               const otherParty = isOwner
-                ? res.counterpartyFioUsername ?? res.counterpartyDisplayName ?? res.counterpartyUsername
-                : res.ownerFioUsername ?? res.ownerDisplayName ?? res.ownerUsername
+                ? (res.counterpartyFioUsername ??
+                  res.counterpartyDisplayName ??
+                  res.counterpartyUsername)
+                : (res.ownerFioUsername ?? res.ownerDisplayName ?? res.ownerUsername)
 
               options.push({
                 label: `#${res.id} ${statusEmoji} ${res.commodityTicker} (${res.quantity})`,
@@ -249,8 +251,9 @@ async function sendReservationsWithPagination(
               .setMaxValues(1)
               .addOptions(options)
 
-            const selectRow =
-              new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)
+            const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+              selectMenu
+            )
 
             const manageReply = await btnInteraction.reply({
               content: '**Select a reservation to manage:**',
@@ -261,11 +264,10 @@ async function sendReservationsWithPagination(
 
             // Wait for selection
             try {
-              const selectInteraction =
-                await manageReply.resource?.message?.awaitMessageComponent({
-                  filter: i => i.customId === selectMenuId && i.user.id === interaction.user.id,
-                  time: 60000,
-                })
+              const selectInteraction = await manageReply.resource?.message?.awaitMessageComponent({
+                filter: i => i.customId === selectMenuId && i.user.id === interaction.user.id,
+                time: 60000,
+              })
 
               if (selectInteraction?.isStringSelectMenu()) {
                 const selectedId = parseInt(selectInteraction.values[0], 10)
@@ -324,7 +326,10 @@ async function showReservationActions(
   originalInteraction: ChatInputCommandInteraction
 ): Promise<void> {
   const isOwner = reservation.ownerId === userId
-  const location = await formatLocation(reservation.locationId, locationDisplayMode as LocationDisplayMode)
+  const location = await formatLocation(
+    reservation.locationId,
+    locationDisplayMode as LocationDisplayMode
+  )
   const statusEmoji = getStatusEmoji(reservation.status)
 
   const ownerName =
@@ -423,10 +428,7 @@ async function showReservationActions(
 /**
  * Get available action buttons based on reservation state and user role
  */
-function getActionButtons(
-  reservation: ReservationWithDetails,
-  isOwner: boolean
-): ButtonBuilder[] {
+function getActionButtons(reservation: ReservationWithDetails, isOwner: boolean): ButtonBuilder[] {
   const buttons: ButtonBuilder[] = []
   const status = reservation.status
 
@@ -534,7 +536,10 @@ async function formatReservationField(
   viewerId: number,
   locationDisplayMode: string
 ): Promise<{ name: string; value: string; inline: boolean }> {
-  const location = await formatLocation(reservation.locationId, locationDisplayMode as LocationDisplayMode)
+  const location = await formatLocation(
+    reservation.locationId,
+    locationDisplayMode as LocationDisplayMode
+  )
   const statusEmoji = getStatusEmoji(reservation.status)
   const isOwner = reservation.ownerId === viewerId
 

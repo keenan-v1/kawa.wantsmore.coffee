@@ -55,15 +55,28 @@ vi.mock('@kawakawa/db', () => {
       query: {
         sellOrders: { findMany: mockSellOrdersFindMany, findFirst: mockSellOrdersFindFirst },
         buyOrders: { findMany: mockBuyOrdersFindMany, findFirst: mockBuyOrdersFindFirst },
-        orderReservations: { findMany: mockReservationsFindMany, findFirst: mockReservationsFindFirst },
+        orderReservations: {
+          findMany: mockReservationsFindMany,
+          findFirst: mockReservationsFindFirst,
+        },
         users: { findMany: mockUsersFindMany },
       },
       insert: mockDbInsert,
       update: mockDbUpdate,
       select: mockDbSelect,
     },
-    sellOrders: { id: 'id', userId: 'userId', commodityTicker: 'commodityTicker', locationId: 'locationId' },
-    buyOrders: { id: 'id', userId: 'userId', commodityTicker: 'commodityTicker', locationId: 'locationId' },
+    sellOrders: {
+      id: 'id',
+      userId: 'userId',
+      commodityTicker: 'commodityTicker',
+      locationId: 'locationId',
+    },
+    buyOrders: {
+      id: 'id',
+      userId: 'userId',
+      commodityTicker: 'commodityTicker',
+      locationId: 'locationId',
+    },
     orderReservations: {
       id: 'id',
       sellOrderId: 'sellOrderId',
@@ -371,7 +384,7 @@ describe('reservationService', () => {
 
     it('uses resolved price from price list', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
-      mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.00, currency: 'CIS' })
+      mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.0, currency: 'CIS' })
 
       const orderWithPriceList = { ...baseSellOrder, priceListCode: 'kawa', price: '0.00' }
       const result = await formatOrderForSelect(orderWithPriceList, 'names-only')
@@ -793,7 +806,7 @@ describe('reservationService', () => {
 
     it('uses resolved price from price list', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
-      mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.00, currency: 'CIS' })
+      mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.0, currency: 'CIS' })
 
       const withPriceList = { ...baseReservation, priceListCode: 'kawa', price: '0.00' }
       const result = await formatReservationForEmbed(withPriceList, 1, 'names-only')

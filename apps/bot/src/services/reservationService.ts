@@ -187,10 +187,7 @@ export async function getAvailableBuyOrders(
 
   for (const order of ordersData) {
     const stats = reservationStats.get(order.id) ?? { count: 0, quantity: 0, fulfilledQuantity: 0 }
-    const remainingQuantity = Math.max(
-      0,
-      order.quantity - stats.quantity - stats.fulfilledQuantity
-    )
+    const remainingQuantity = Math.max(0, order.quantity - stats.quantity - stats.fulfilledQuantity)
     if (remainingQuantity <= 0) continue
 
     result.push({
@@ -212,7 +209,6 @@ export async function getAvailableBuyOrders(
 
   return result
 }
-
 
 /**
  * Format an order for Discord select menu option
@@ -483,7 +479,10 @@ export async function updateReservationStatus(
 
   // Validate state transitions
   const currentStatus = reservation.status as ReservationStatus
-  const validTransitions: Record<ReservationStatus, { owner: ReservationStatus[]; counterparty: ReservationStatus[] }> = {
+  const validTransitions: Record<
+    ReservationStatus,
+    { owner: ReservationStatus[]; counterparty: ReservationStatus[] }
+  > = {
     pending: {
       owner: ['confirmed', 'rejected', 'fulfilled'],
       counterparty: ['cancelled', 'fulfilled'],

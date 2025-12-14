@@ -1,12 +1,7 @@
 /**
  * Discord component builder utilities
  */
-import {
-  StringSelectMenuBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js'
+import { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js'
 
 /**
  * Option for a select menu
@@ -133,9 +128,7 @@ export function createButton(options: CreateButtonOptions): ButtonBuilder {
  * @param buttons - Array of button configurations
  * @returns ActionRowBuilder containing the buttons
  */
-export function createButtonRow(
-  buttons: CreateButtonOptions[]
-): ActionRowBuilder<ButtonBuilder> {
+export function createButtonRow(buttons: CreateButtonOptions[]): ActionRowBuilder<ButtonBuilder> {
   const row = new ActionRowBuilder<ButtonBuilder>()
   for (const options of buttons) {
     row.addComponents(createButton(options))

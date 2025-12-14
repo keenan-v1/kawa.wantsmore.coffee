@@ -1,12 +1,7 @@
 /**
  * Modal builder utilities for Discord bot commands
  */
-import {
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ActionRowBuilder,
-} from 'discord.js'
+import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js'
 
 /**
  * Options for creating a quantity + notes modal
