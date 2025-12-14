@@ -13,19 +13,23 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
+COPY packages/db/package.json ./packages/db/
+COPY packages/services/package.json ./packages/services/
 COPY packages/client/package.json ./packages/client/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source files (API needed for swagger generation)
+# Copy source files (API needed for swagger generation -> client generation)
 COPY apps/api/ ./apps/api/
 COPY apps/web/ ./apps/web/
 COPY packages/types/ ./packages/types/
+COPY packages/db/ ./packages/db/
+COPY packages/services/ ./packages/services/
 COPY packages/client/ ./packages/client/
 
-# Build (Turborepo handles dependency order: types -> api (swagger) -> client -> web)
-RUN pnpm --filter @kawakawa/web build
+# Build web and its dependencies (Turborepo handles dependency order)
+RUN pnpm turbo run build --filter=@kawakawa/web...
 
 # Production stage - nginx for static serving
 FROM nginx:alpine AS production

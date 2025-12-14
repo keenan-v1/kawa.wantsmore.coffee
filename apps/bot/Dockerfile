@@ -24,8 +24,8 @@ COPY packages/types/ ./packages/types/
 COPY packages/db/ ./packages/db/
 COPY packages/services/ ./packages/services/
 
-# Build (Turborepo handles dependency order)
-RUN pnpm --filter @kawakawa/bot build
+# Build bot and its dependencies (Turborepo handles dependency order)
+RUN pnpm turbo run build --filter=@kawakawa/bot...
 
 # Production stage
 FROM node:20-slim AS production
