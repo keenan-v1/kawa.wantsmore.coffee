@@ -1,11 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Create hoisted mock functions
-const { mockDbWhere, mockFindFirst, mockSettingsGetAll } = vi.hoisted(() => ({
-  mockDbWhere: vi.fn().mockResolvedValue([]),
-  mockFindFirst: vi.fn(),
-  mockSettingsGetAll: vi.fn().mockResolvedValue({}),
-}))
+const { mockDbWhere, mockFindFirst, mockSettingsGetAll, mockInsert, mockDelete } = vi.hoisted(
+  () => ({
+    mockDbWhere: vi.fn().mockResolvedValue([]),
+    mockFindFirst: vi.fn(),
+    mockSettingsGetAll: vi.fn().mockResolvedValue({}),
+    mockInsert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+      }),
+    }),
+    mockDelete: vi.fn().mockReturnValue({
+      where: vi.fn().mockResolvedValue(undefined),
+    }),
+  })
+)
 
 // Mock the database module
 vi.mock('@kawakawa/db', () => ({
@@ -20,6 +30,8 @@ vi.mock('@kawakawa/db', () => ({
         findFirst: mockFindFirst,
       },
     },
+    insert: mockInsert,
+    delete: mockDelete,
   },
   userSettings: {
     settingKey: 'settingKey',
@@ -38,6 +50,13 @@ vi.mock('@kawakawa/services/settings', () => ({
   },
 }))
 
+// Mock drizzle-orm
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn().mockImplementation((a, b) => ({ field: a, value: b })),
+  and: vi.fn().mockImplementation((...args) => ({ and: args })),
+  inArray: vi.fn().mockImplementation((field, values) => ({ inArray: { field, values } })),
+}))
+
 // Import after mocks are set up
 import {
   getUserSettings,
@@ -46,6 +65,8 @@ import {
   getFioUsernames,
   invalidateCache,
   clearCache,
+  setSetting,
+  deleteSetting,
 } from './userSettings.js'
 
 describe('userSettings', () => {
@@ -62,7 +83,8 @@ describe('userSettings', () => {
       const result = await getUserSettings(1)
 
       expect(result).toEqual({
-        'display.locationDisplayMode': 'both',
+        'discord.locationDisplayMode': 'natural-ids-only',
+        'discord.commodityDisplayMode': 'ticker-only',
         'market.preferredCurrency': 'CIS',
         'market.defaultPriceList': null,
         'market.automaticPricing': false,
@@ -73,25 +95,25 @@ describe('userSettings', () => {
 
     it('applies user overrides', async () => {
       mockDbWhere.mockResolvedValueOnce([
-        { key: 'display.locationDisplayMode', value: '"names-only"' },
+        { key: 'discord.locationDisplayMode', value: '"names-only"' },
         { key: 'market.preferredCurrency', value: '"NC1"' },
       ])
 
       const result = await getUserSettings(1)
 
-      expect(result['display.locationDisplayMode']).toBe('names-only')
+      expect(result['discord.locationDisplayMode']).toBe('names-only')
       expect(result['market.preferredCurrency']).toBe('NC1')
     })
 
     it('ignores invalid JSON in user overrides', async () => {
       mockDbWhere.mockResolvedValueOnce([
-        { key: 'display.locationDisplayMode', value: 'invalid-json' },
+        { key: 'discord.locationDisplayMode', value: 'invalid-json' },
       ])
 
       const result = await getUserSettings(1)
 
       // Should keep default since JSON parse failed
-      expect(result['display.locationDisplayMode']).toBe('both')
+      expect(result['discord.locationDisplayMode']).toBe('natural-ids-only')
     })
 
     it('ignores unknown setting keys', async () => {
@@ -143,7 +165,7 @@ describe('userSettings', () => {
       const result = await getSettingsByDiscordId('123456789')
 
       expect(result).not.toBeNull()
-      expect(result).toHaveProperty('display.locationDisplayMode')
+      expect(result).toHaveProperty('discord.locationDisplayMode')
     })
   })
 
@@ -154,7 +176,8 @@ describe('userSettings', () => {
       const result = await getDisplaySettings('123456789')
 
       expect(result).toEqual({
-        locationDisplayMode: 'both',
+        locationDisplayMode: 'natural-ids-only',
+        commodityDisplayMode: 'ticker-only',
         preferredCurrency: 'CIS',
         favoritedLocations: [],
         favoritedCommodities: [],
@@ -166,7 +189,7 @@ describe('userSettings', () => {
         userId: 1,
       })
       mockDbWhere.mockResolvedValueOnce([
-        { key: 'display.locationDisplayMode', value: '"natural-ids-only"' },
+        { key: 'discord.locationDisplayMode', value: '"names-only"' },
         { key: 'market.preferredCurrency', value: '"NC1"' },
         { key: 'market.favoritedLocations', value: '["BEN"]' },
       ])
@@ -174,7 +197,8 @@ describe('userSettings', () => {
       const result = await getDisplaySettings('123456789')
 
       expect(result).toEqual({
-        locationDisplayMode: 'natural-ids-only',
+        locationDisplayMode: 'names-only',
+        commodityDisplayMode: 'ticker-only',
         preferredCurrency: 'NC1',
         favoritedLocations: ['BEN'],
         favoritedCommodities: [],
@@ -291,6 +315,52 @@ describe('userSettings', () => {
       const result = await getFioUsernames([1, 1, 1])
 
       expect(result.get(1)).toBe('GamePlayer')
+    })
+  })
+
+  describe('setSetting', () => {
+    it('inserts a new setting value', async () => {
+      await setSetting(1, 'market.preferredCurrency', 'NCC')
+
+      expect(mockInsert).toHaveBeenCalled()
+    })
+
+    it('throws error for unknown setting key', async () => {
+      await expect(setSetting(1, 'unknownKey', 'value')).rejects.toThrow('Unknown setting key')
+    })
+
+    it('invalidates cache after setting', async () => {
+      // First cache the settings
+      mockDbWhere.mockResolvedValueOnce([])
+      await getUserSettings(1)
+      expect(mockDbWhere).toHaveBeenCalledTimes(1)
+
+      // Set a setting
+      await setSetting(1, 'market.preferredCurrency', 'NCC')
+
+      // Cache should be invalidated, so next call requires DB fetch
+      mockDbWhere.mockResolvedValueOnce([])
+      await getUserSettings(1)
+      expect(mockDbWhere).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('deleteSetting', () => {
+    it('deletes a setting and invalidates cache', async () => {
+      // First cache the settings
+      mockDbWhere.mockResolvedValueOnce([])
+      await getUserSettings(1)
+      expect(mockDbWhere).toHaveBeenCalledTimes(1)
+
+      // Delete a setting
+      await deleteSetting(1, 'market.preferredCurrency')
+
+      expect(mockDelete).toHaveBeenCalled()
+
+      // Cache should be invalidated, so next call requires DB fetch
+      mockDbWhere.mockResolvedValueOnce([])
+      await getUserSettings(1)
+      expect(mockDbWhere).toHaveBeenCalledTimes(2)
     })
   })
 })

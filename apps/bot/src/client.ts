@@ -210,9 +210,10 @@ export async function syncCommandsIfChanged(commands: Command[]): Promise<boolea
         Routes.applicationGuildCommands(config.clientId, config.guildId)
       )) as Record<string, unknown>[]
     } else {
-      remoteCommands = (await rest.get(
-        Routes.applicationCommands(config.clientId)
-      )) as Record<string, unknown>[]
+      remoteCommands = (await rest.get(Routes.applicationCommands(config.clientId))) as Record<
+        string,
+        unknown
+      >[]
     }
   } catch (_error) {
     console.log('Could not fetch remote commands, deploying all commands...')

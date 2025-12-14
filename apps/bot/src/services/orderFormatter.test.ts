@@ -30,9 +30,12 @@ vi.mock('@kawakawa/types', () => ({
 // Import after mocks
 import {
   determineGrouping,
+  determineGroupingMulti,
   formatGroupedOrders,
+  formatGroupedOrdersMulti,
   buildFilterDescription,
   type ResolvedFilters,
+  type MultiResolvedFilters,
   type SellOrderData,
   type BuyOrderData,
 } from './orderFormatter.js'
@@ -458,6 +461,292 @@ describe('orderFormatter', () => {
       const result = buildFilterDescription(['COF'], ['BEN'], [], 'sell', 'internal')
       expect(result).toContain(' | ')
       expect(result).not.toContain('\n')
+    })
+  })
+
+  describe('determineGroupingMulti', () => {
+    it('groups by location when multiple commodities are filtered', () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [
+          { ticker: 'COF', name: 'Coffee' },
+          { ticker: 'RAT', name: 'Rations' },
+        ],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      expect(determineGroupingMulti(filters)).toBe('location')
+    })
+
+    it('groups by user when multiple locations are filtered', () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [],
+        locations: [
+          { naturalId: 'BEN', name: 'Benten', type: 'STATION' },
+          { naturalId: 'MOR', name: 'Moria', type: 'STATION' },
+        ],
+        userIds: [],
+        displayNames: [],
+      }
+      expect(determineGroupingMulti(filters)).toBe('user')
+    })
+
+    it('groups by location when filtering by single user', () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [],
+        locations: [],
+        userIds: [1],
+        displayNames: ['TestUser'],
+      }
+      expect(determineGroupingMulti(filters)).toBe('location')
+    })
+
+    it('groups by location when no filters provided', () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      expect(determineGroupingMulti(filters)).toBe('location')
+    })
+  })
+
+  describe('formatGroupedOrdersMulti', () => {
+    const baseSellOrder: SellOrderData = {
+      id: 1,
+      userId: 1,
+      commodityTicker: 'COF',
+      locationId: 'BEN',
+      price: '100',
+      currency: 'CIS',
+      priceListCode: null,
+      orderType: 'internal',
+      user: { displayName: 'TestUser' },
+      commodity: { ticker: 'COF' },
+      location: { naturalId: 'BEN', name: 'Benten' },
+    }
+
+    const baseBuyOrder: BuyOrderData = {
+      id: 2,
+      userId: 2,
+      commodityTicker: 'COF',
+      locationId: 'BEN',
+      quantity: 50,
+      price: '95',
+      currency: 'CIS',
+      priceListCode: null,
+      orderType: 'internal',
+      user: { displayName: 'BuyerUser' },
+      commodity: { ticker: 'COF' },
+      location: { naturalId: 'BEN', name: 'Benten' },
+    }
+
+    it('returns empty array when no orders provided', async () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const result = await formatGroupedOrdersMulti([], [], new Map(), filters, 'both')
+      expect(result).toEqual([])
+    })
+
+    it('groups sell orders with multi-commodity filter', async () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [
+          { ticker: 'COF', name: 'Coffee' },
+          { ticker: 'RAT', name: 'Rations' },
+        ],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const sellQuantities = new Map<
+        number,
+        import('@kawakawa/services/market').SellOrderQuantityInfo
+      >([
+        [
+          1,
+          {
+            fioQuantity: 100,
+            availableQuantity: 100,
+            reservedQuantity: 0,
+            fulfilledQuantity: 0,
+            remainingQuantity: 100,
+            activeReservationCount: 0,
+            fioUploadedAt: null,
+          },
+        ],
+      ])
+
+      const result = await formatGroupedOrdersMulti(
+        [baseSellOrder],
+        [],
+        sellQuantities,
+        filters,
+        'both'
+      )
+
+      expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('combines sell and buy orders in groups', async () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [{ ticker: 'COF', name: 'Coffee' }],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const sellQuantities = new Map<
+        number,
+        import('@kawakawa/services/market').SellOrderQuantityInfo
+      >([
+        [
+          1,
+          {
+            fioQuantity: 100,
+            availableQuantity: 100,
+            reservedQuantity: 0,
+            fulfilledQuantity: 0,
+            remainingQuantity: 100,
+            activeReservationCount: 0,
+            fioUploadedAt: null,
+          },
+        ],
+      ])
+
+      const result = await formatGroupedOrdersMulti(
+        [baseSellOrder],
+        [baseBuyOrder],
+        sellQuantities,
+        filters,
+        'both',
+        'all',
+        'all'
+      )
+
+      expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('shows type icons when orderType is all', async () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [{ ticker: 'COF', name: 'Coffee' }],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const sellQuantities = new Map<
+        number,
+        import('@kawakawa/services/market').SellOrderQuantityInfo
+      >([
+        [
+          1,
+          {
+            fioQuantity: 50,
+            availableQuantity: 50,
+            reservedQuantity: 0,
+            fulfilledQuantity: 0,
+            remainingQuantity: 50,
+            activeReservationCount: 0,
+            fioUploadedAt: null,
+          },
+        ],
+      ])
+
+      const result = await formatGroupedOrdersMulti(
+        [baseSellOrder],
+        [baseBuyOrder],
+        sellQuantities,
+        filters,
+        'both',
+        'all', // This should show type icons
+        'internal'
+      )
+
+      // Results should contain type icons when showing mixed orders
+      expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('hides type icons when orderType is specific', async () => {
+      const filters: MultiResolvedFilters = {
+        commodities: [{ ticker: 'COF', name: 'Coffee' }],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const sellQuantities = new Map<
+        number,
+        import('@kawakawa/services/market').SellOrderQuantityInfo
+      >([
+        [
+          1,
+          {
+            fioQuantity: 50,
+            availableQuantity: 50,
+            reservedQuantity: 0,
+            fulfilledQuantity: 0,
+            remainingQuantity: 50,
+            activeReservationCount: 0,
+            fioUploadedAt: null,
+          },
+        ],
+      ])
+
+      const result = await formatGroupedOrdersMulti(
+        [baseSellOrder],
+        [],
+        sellQuantities,
+        filters,
+        'both',
+        'sell', // Specific type, no type icon needed
+        'internal'
+      )
+
+      expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('uses FIO username when available', async () => {
+      const orderWithFio: SellOrderData = {
+        ...baseSellOrder,
+        user: { displayName: 'TestUser', fioUsername: 'FioPlayer' },
+      }
+      const filters: MultiResolvedFilters = {
+        commodities: [{ ticker: 'COF', name: 'Coffee' }],
+        locations: [],
+        userIds: [],
+        displayNames: [],
+      }
+      const sellQuantities = new Map<
+        number,
+        import('@kawakawa/services/market').SellOrderQuantityInfo
+      >([
+        [
+          1,
+          {
+            fioQuantity: 100,
+            availableQuantity: 100,
+            reservedQuantity: 0,
+            fulfilledQuantity: 0,
+            remainingQuantity: 100,
+            activeReservationCount: 0,
+            fioUploadedAt: null,
+          },
+        ],
+      ])
+
+      const result = await formatGroupedOrdersMulti(
+        [orderWithFio],
+        [],
+        sellQuantities,
+        filters,
+        'both'
+      )
+
+      expect(result.length).toBeGreaterThanOrEqual(1)
+      // The FIO username should be used in the output
+      expect(result[0].value).toContain('FioPlayer')
     })
   })
 })

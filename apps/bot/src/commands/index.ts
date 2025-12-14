@@ -1,4 +1,6 @@
 import type { Command } from '../client.js'
+// General commands
+import { help } from './general/help.js'
 // Auth commands
 import { whoami } from './auth/whoami.js'
 import { register } from './auth/register.js'
@@ -21,6 +23,8 @@ import { settings } from './settings/settings.js'
  * All registered slash commands.
  */
 export const commands: Command[] = [
+  // General
+  help,
   // Auth
   whoami,
   register,

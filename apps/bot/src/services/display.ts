@@ -6,6 +6,7 @@
 // Re-export commodity functions
 export {
   formatCommodity,
+  formatCommodityWithMode,
   resolveCommodity,
   getCommodity,
   clearCommodityCache,

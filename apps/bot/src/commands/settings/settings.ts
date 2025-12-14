@@ -16,12 +16,15 @@ import type {
   StringSelectMenuInteraction,
   ButtonInteraction,
   ModalSubmitInteraction,
+  MessageComponentInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
 import { db, userDiscordProfiles, priceLists } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
 import { getUserSettings, setSetting, deleteSetting } from '../../services/userSettings.js'
-import type { LocationDisplayMode, Currency } from '@kawakawa/types'
+import { formatLocation, resolveLocation } from '../../services/locationService.js'
+import { formatCommodityWithMode, resolveCommodity } from '../../services/commodityService.js'
+import type { LocationDisplayMode, CommodityDisplayMode, Currency } from '@kawakawa/types'
 
 const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
@@ -30,23 +33,36 @@ interface SettingDef {
   key: string
   label: string
   description: string
-  type: 'enum' | 'boolean' | 'string' | 'string[]'
+  type: 'enum' | 'boolean' | 'string' | 'favorites'
   options?: { label: string; value: string }[]
   allowNull?: boolean
 }
 
 const SETTING_DEFINITIONS: SettingDef[] = [
+  // Discord-specific display settings
   {
-    key: 'display.locationDisplayMode',
+    key: 'discord.locationDisplayMode',
     label: 'Location Display',
-    description: 'How locations are shown in outputs',
+    description: 'How locations are shown in Discord',
     type: 'enum',
     options: [
-      { label: 'Names only (e.g., Benten)', value: 'names-only' },
-      { label: 'IDs only (e.g., BEN)', value: 'natural-ids-only' },
-      { label: 'Both (e.g., Benten [BEN])', value: 'both' },
+      { label: 'Names only (Katoa)', value: 'names-only' },
+      { label: 'IDs only (UV-351a)', value: 'natural-ids-only' },
+      { label: 'Both (Katoa [UV-351a])', value: 'both' },
     ],
   },
+  {
+    key: 'discord.commodityDisplayMode',
+    label: 'Commodity Display',
+    description: 'How commodities are shown in Discord',
+    type: 'enum',
+    options: [
+      { label: 'Tickers only (COF)', value: 'ticker-only' },
+      { label: 'Names only (Coffee)', value: 'name-only' },
+      { label: 'Both (COF - Coffee)', value: 'both' },
+    ],
+  },
+  // Market settings
   {
     key: 'market.preferredCurrency',
     label: 'Preferred Currency',
@@ -62,19 +78,32 @@ const SETTING_DEFINITIONS: SettingDef[] = [
   {
     key: 'market.defaultPriceList',
     label: 'Default Price List',
-    description: 'Price list for auto-pricing (empty = disabled)',
+    description: 'Price list for auto-pricing',
     type: 'string',
     allowNull: true,
   },
   {
     key: 'market.automaticPricing',
     label: 'Auto-Pricing',
-    description: 'Automatically price orders from price list',
+    description: 'Auto-price orders from price list',
     type: 'boolean',
     options: [
       { label: 'Enabled', value: 'true' },
       { label: 'Disabled', value: 'false' },
     ],
+  },
+  // Favorites
+  {
+    key: 'market.favoritedLocations',
+    label: 'Favorite Locations',
+    description: 'Locations shown first in searches',
+    type: 'favorites',
+  },
+  {
+    key: 'market.favoritedCommodities',
+    label: 'Favorite Commodities',
+    description: 'Commodities shown first in searches',
+    type: 'favorites',
   },
 ]
 
@@ -99,11 +128,46 @@ function formatSettingValue(key: string, value: unknown): string {
     return opt?.label ?? String(value)
   }
 
-  if (def.type === 'string[]' && Array.isArray(value)) {
-    return value.length > 0 ? value.join(', ') : '*None*'
+  // Favorites are handled separately by formatFavoritesValue
+  if (def.type === 'favorites' && Array.isArray(value)) {
+    if (value.length === 0) return '*None*'
+    if (value.length <= 5) return value.join(', ')
+    return `${value.slice(0, 5).join(', ')} +${value.length - 5} more`
   }
 
   return String(value)
+}
+
+async function formatFavoritesValue(
+  key: string,
+  value: unknown,
+  settings: Record<string, unknown>
+): Promise<string> {
+  if (!Array.isArray(value) || value.length === 0) {
+    return '*None*'
+  }
+
+  const locationMode = (settings['discord.locationDisplayMode'] ??
+    'natural-ids-only') as LocationDisplayMode
+  const commodityMode = (settings['discord.commodityDisplayMode'] ??
+    'ticker-only') as CommodityDisplayMode
+  const isCommodities = key === 'market.favoritedCommodities'
+
+  const formatOne = async (item: string): Promise<string> => {
+    if (isCommodities) {
+      return formatCommodityWithMode(item, commodityMode)
+    } else {
+      return formatLocation(item, locationMode)
+    }
+  }
+
+  const itemsToShow = value.slice(0, 5)
+  const formatted = await Promise.all(itemsToShow.map(formatOne))
+
+  if (value.length <= 5) {
+    return formatted.join(', ')
+  }
+  return `${formatted.join(', ')} +${value.length - 5} more`
 }
 
 export const settings: Command = {
@@ -142,23 +206,52 @@ export const settings: Command = {
     })
 
     // Get current settings
-    const currentSettings = await getUserSettings(userId)
+    let currentSettings = await getUserSettings(userId)
 
     // Build settings embed
-    const buildEmbed = (settings: Record<string, unknown>): EmbedBuilder => {
+    const buildEmbed = async (settings: Record<string, unknown>): Promise<EmbedBuilder> => {
       const embed = new EmbedBuilder()
         .setTitle('⚙️ Your Settings')
         .setColor(0x5865f2)
         .setDescription('Select a setting below to change it.')
 
-      for (const def of SETTING_DEFINITIONS) {
-        const value = settings[def.key]
-        embed.addFields({
-          name: def.label,
-          value: `${formatSettingValue(def.key, value)}\n*${def.description}*`,
-          inline: true,
+      // Group settings by category
+      const displaySettings = SETTING_DEFINITIONS.filter(d => d.key.startsWith('discord.'))
+      const marketSettings = SETTING_DEFINITIONS.filter(
+        d => d.key.startsWith('market.') && d.type !== 'favorites'
+      )
+      const favoriteSettings = SETTING_DEFINITIONS.filter(d => d.type === 'favorites')
+
+      // Display settings
+      embed.addFields({
+        name: '📺 Display (Discord)',
+        value: displaySettings
+          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key])}`)
+          .join('\n'),
+        inline: false,
+      })
+
+      // Market settings
+      embed.addFields({
+        name: '💰 Market',
+        value: marketSettings
+          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key])}`)
+          .join('\n'),
+        inline: false,
+      })
+
+      // Favorites (async formatting with display preferences)
+      const favoritesLines = await Promise.all(
+        favoriteSettings.map(async def => {
+          const formatted = await formatFavoritesValue(def.key, settings[def.key], settings)
+          return `**${def.label}:** ${formatted}`
         })
-      }
+      )
+      embed.addFields({
+        name: '⭐ Favorites',
+        value: favoritesLines.join('\n'),
+        inline: false,
+      })
 
       return embed
     }
@@ -173,6 +266,7 @@ export const settings: Command = {
             label: def.label,
             description: def.description.slice(0, 100),
             value: def.key,
+            emoji: def.type === 'favorites' ? '⭐' : undefined,
           }))
         )
 
@@ -180,10 +274,19 @@ export const settings: Command = {
     }
 
     const response = await interaction.reply({
-      embeds: [buildEmbed(currentSettings)],
+      embeds: [await buildEmbed(currentSettings)],
       components: [buildSelectMenu()],
       flags: MessageFlags.Ephemeral,
     })
+
+    // Refresh settings and update embed
+    const refreshEmbed = async (): Promise<void> => {
+      currentSettings = await getUserSettings(userId)
+      await interaction.editReply({
+        embeds: [await buildEmbed(currentSettings)],
+        components: [buildSelectMenu()],
+      })
+    }
 
     // Handle setting selection
     const collector = response.createMessageComponentCollector({
@@ -191,176 +294,197 @@ export const settings: Command = {
       filter: i => i.user.id === interaction.user.id,
     })
 
-    collector.on('collect', async (selectInteraction: StringSelectMenuInteraction | ButtonInteraction) => {
-      if (selectInteraction.isStringSelectMenu() && selectInteraction.customId === 'settings:select') {
-        const settingKey = selectInteraction.values[0]
-        const def = getSettingDef(settingKey)
+    collector.on(
+      'collect',
+      async (componentInteraction: StringSelectMenuInteraction | ButtonInteraction) => {
+        if (
+          componentInteraction.isStringSelectMenu() &&
+          componentInteraction.customId === 'settings:select'
+        ) {
+          const settingKey = componentInteraction.values[0]
+          const def = getSettingDef(settingKey)
 
-        if (!def) {
-          await selectInteraction.reply({
-            content: '❌ Unknown setting.',
-            flags: MessageFlags.Ephemeral,
-          })
-          return
-        }
-
-        // Show appropriate input based on setting type
-        if (def.type === 'enum' || def.type === 'boolean') {
-          // Show select menu for enum/boolean
-          const options = def.options ?? []
-
-          const valueSelect = new StringSelectMenuBuilder()
-            .setCustomId(`settings:set:${settingKey}`)
-            .setPlaceholder(`Select ${def.label.toLowerCase()}`)
-            .addOptions(options.map(opt => ({ label: opt.label, value: opt.value })))
-
-          const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(valueSelect)
-
-          await selectInteraction.reply({
-            content: `**${def.label}**\n${def.description}`,
-            components: [row],
-            flags: MessageFlags.Ephemeral,
-          })
-        } else if (settingKey === 'market.defaultPriceList') {
-          // Special handling for price list - show available price lists
-          const options = [
-            { label: 'None (disable auto-pricing)', value: '__null__' },
-            ...priceListOptions.map(pl => ({
-              label: `${pl.code} - ${pl.name} (${pl.currency})`,
-              value: pl.code,
-            })),
-          ]
-
-          if (options.length > 25) {
-            options.length = 25 // Discord limit
+          if (!def) {
+            await componentInteraction.reply({
+              content: '❌ Unknown setting.',
+              flags: MessageFlags.Ephemeral,
+            })
+            return
           }
 
-          const valueSelect = new StringSelectMenuBuilder()
-            .setCustomId(`settings:set:${settingKey}`)
-            .setPlaceholder('Select a price list')
-            .addOptions(options)
-
-          const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(valueSelect)
-
-          await selectInteraction.reply({
-            content: `**${def.label}**\n${def.description}`,
-            components: [row],
-            flags: MessageFlags.Ephemeral,
-          })
-        } else {
-          // Show modal for text input
-          const modalId = `settings:modal:${settingKey}:${Date.now()}`
-          const modal = new ModalBuilder()
-            .setCustomId(modalId)
-            .setTitle(`Edit ${def.label}`)
-
-          const currentValue = currentSettings[settingKey]
-          const input = new TextInputBuilder()
-            .setCustomId('value')
-            .setLabel(def.label)
-            .setPlaceholder(def.description)
-            .setStyle(TextInputStyle.Short)
-            .setRequired(!def.allowNull)
-
-          if (currentValue !== null && currentValue !== undefined) {
-            input.setValue(String(currentValue))
+          // Handle favorites specially
+          if (def.type === 'favorites') {
+            await handleFavoritesMenu(
+              componentInteraction,
+              userId,
+              settingKey,
+              currentSettings,
+              refreshEmbed
+            )
+            return
           }
 
-          modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input))
+          // Show appropriate input based on setting type
+          if (def.type === 'enum' || def.type === 'boolean') {
+            const options = def.options ?? []
 
-          await selectInteraction.showModal(modal)
+            const valueSelect = new StringSelectMenuBuilder()
+              .setCustomId(`settings:set:${settingKey}`)
+              .setPlaceholder(`Select ${def.label.toLowerCase()}`)
+              .addOptions(options.map(opt => ({ label: opt.label, value: opt.value })))
 
-          try {
-            const modalSubmit = await selectInteraction
-              .awaitModalSubmit({
-                time: COMPONENT_TIMEOUT,
-                filter: (i: ModalSubmitInteraction) =>
-                  i.customId === modalId && i.user.id === selectInteraction.user.id,
-              })
-              .catch(() => null)
+            const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(valueSelect)
 
-            if (modalSubmit) {
-              const newValue = modalSubmit.fields.getTextInputValue('value').trim()
+            const valueResponse = await componentInteraction.reply({
+              content: `**${def.label}**\n${def.description}`,
+              components: [row],
+              flags: MessageFlags.Ephemeral,
+              withResponse: true,
+            })
 
-              if (!newValue && def.allowNull) {
-                await deleteSetting(userId, settingKey)
-                await modalSubmit.reply({
-                  content: `✅ **${def.label}** has been reset to default.`,
-                  flags: MessageFlags.Ephemeral,
+            // Await selection from the value dropdown
+            try {
+              const valueInteraction = await valueResponse.resource?.message?.awaitMessageComponent(
+                {
+                  componentType: ComponentType.StringSelect,
+                  time: COMPONENT_TIMEOUT,
+                  filter: i => i.user.id === componentInteraction.user.id,
+                }
+              )
+
+              if (valueInteraction) {
+                let newValue: unknown = valueInteraction.values[0]
+                if (def.type === 'boolean') {
+                  newValue = newValue === 'true'
+                }
+
+                await setSetting(userId, settingKey, newValue)
+                await valueInteraction.update({
+                  content: `✅ **${def.label}** updated to: ${formatSettingValue(settingKey, newValue)}`,
+                  components: [],
                 })
-              } else {
-                await setSetting(userId, settingKey, newValue || null)
-                await modalSubmit.reply({
-                  content: `✅ **${def.label}** updated to: ${newValue || '*Not set*'}`,
-                  flags: MessageFlags.Ephemeral,
-                })
+                await refreshEmbed()
               }
-
-              // Refresh the settings view
-              const updatedSettings = await getUserSettings(userId)
-              await interaction.editReply({
-                embeds: [buildEmbed(updatedSettings)],
-                components: [buildSelectMenu()],
-              })
+            } catch {
+              // Timeout or error - ignore
             }
-          } catch (error) {
-            console.error('Modal error:', error)
-          }
-        }
-      } else if (
-        selectInteraction.isStringSelectMenu() &&
-        selectInteraction.customId.startsWith('settings:set:')
-      ) {
-        // Handle value selection for enum/boolean/price list
-        const settingKey = selectInteraction.customId.replace('settings:set:', '')
-        const def = getSettingDef(settingKey)
-        let newValue: unknown = selectInteraction.values[0]
+          } else if (settingKey === 'market.defaultPriceList') {
+            const options = [
+              { label: 'None (disable auto-pricing)', value: '__null__' },
+              ...priceListOptions.map(pl => ({
+                label: `${pl.code} - ${pl.name} (${pl.currency})`,
+                value: pl.code,
+              })),
+            ]
 
-        if (!def) {
-          await selectInteraction.reply({
-            content: '❌ Unknown setting.',
-            flags: MessageFlags.Ephemeral,
-          })
-          return
-        }
+            if (options.length > 25) {
+              options.length = 25
+            }
 
-        // Convert value based on type
-        if (def.type === 'boolean') {
-          newValue = newValue === 'true'
-        } else if (newValue === '__null__') {
-          newValue = null
-        }
+            const valueSelect = new StringSelectMenuBuilder()
+              .setCustomId(`settings:set:${settingKey}`)
+              .setPlaceholder('Select a price list')
+              .addOptions(options)
 
-        try {
-          if (newValue === null) {
-            await deleteSetting(userId, settingKey)
-            await selectInteraction.reply({
-              content: `✅ **${def.label}** has been reset to default.`,
+            const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(valueSelect)
+
+            const valueResponse = await componentInteraction.reply({
+              content: `**${def.label}**\n${def.description}`,
+              components: [row],
               flags: MessageFlags.Ephemeral,
+              withResponse: true,
             })
+
+            // Await selection from the value dropdown
+            try {
+              const valueInteraction = await valueResponse.resource?.message?.awaitMessageComponent(
+                {
+                  componentType: ComponentType.StringSelect,
+                  time: COMPONENT_TIMEOUT,
+                  filter: i => i.user.id === componentInteraction.user.id,
+                }
+              )
+
+              if (valueInteraction) {
+                let newValue: unknown = valueInteraction.values[0]
+                if (newValue === '__null__') {
+                  newValue = null
+                }
+
+                if (newValue === null) {
+                  await deleteSetting(userId, settingKey)
+                  await valueInteraction.update({
+                    content: `✅ **${def.label}** has been reset to default.`,
+                    components: [],
+                  })
+                } else {
+                  await setSetting(userId, settingKey, newValue)
+                  await valueInteraction.update({
+                    content: `✅ **${def.label}** updated to: ${formatSettingValue(settingKey, newValue)}`,
+                    components: [],
+                  })
+                }
+                await refreshEmbed()
+              }
+            } catch {
+              // Timeout or error - ignore
+            }
           } else {
-            await setSetting(userId, settingKey, newValue)
-            await selectInteraction.reply({
-              content: `✅ **${def.label}** updated to: ${formatSettingValue(settingKey, newValue)}`,
-              flags: MessageFlags.Ephemeral,
-            })
-          }
+            // Modal for text input
+            const modalId = `settings:modal:${settingKey}:${Date.now()}`
+            const modal = new ModalBuilder().setCustomId(modalId).setTitle(`Edit ${def.label}`)
 
-          // Refresh the settings view
-          const updatedSettings = await getUserSettings(userId)
-          await interaction.editReply({
-            embeds: [buildEmbed(updatedSettings)],
-            components: [buildSelectMenu()],
-          })
-        } catch (error) {
-          console.error('Error saving setting:', error)
-          await selectInteraction.reply({
-            content: '❌ Failed to save setting. Please try again.',
-            flags: MessageFlags.Ephemeral,
-          })
+            const currentValue = currentSettings[settingKey]
+            const input = new TextInputBuilder()
+              .setCustomId('value')
+              .setLabel(def.label)
+              .setPlaceholder(def.description)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(!def.allowNull)
+
+            if (currentValue !== null && currentValue !== undefined) {
+              input.setValue(String(currentValue))
+            }
+
+            modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input))
+
+            await componentInteraction.showModal(modal)
+
+            try {
+              const modalSubmit = await componentInteraction
+                .awaitModalSubmit({
+                  time: COMPONENT_TIMEOUT,
+                  filter: (i: ModalSubmitInteraction) =>
+                    i.customId === modalId && i.user.id === componentInteraction.user.id,
+                })
+                .catch(() => null)
+
+              if (modalSubmit) {
+                const newValue = modalSubmit.fields.getTextInputValue('value').trim()
+
+                if (!newValue && def.allowNull) {
+                  await deleteSetting(userId, settingKey)
+                  await modalSubmit.reply({
+                    content: `✅ **${def.label}** has been reset to default.`,
+                    flags: MessageFlags.Ephemeral,
+                  })
+                } else {
+                  await setSetting(userId, settingKey, newValue || null)
+                  await modalSubmit.reply({
+                    content: `✅ **${def.label}** updated to: ${newValue || '*Not set*'}`,
+                    flags: MessageFlags.Ephemeral,
+                  })
+                }
+
+                await refreshEmbed()
+              }
+            } catch (error) {
+              console.error('Modal error:', error)
+            }
+          }
         }
       }
-    })
+    )
 
     collector.on('end', async () => {
       try {
@@ -377,4 +501,285 @@ export const settings: Command = {
       }
     })
   },
+}
+
+/**
+ * Handle favorites menu (add/remove/view favorites)
+ */
+async function handleFavoritesMenu(
+  interaction: StringSelectMenuInteraction,
+  userId: number,
+  settingKey: string,
+  currentSettings: Record<string, unknown>,
+  refreshEmbed: () => Promise<void>
+): Promise<void> {
+  const isCommodities = settingKey === 'market.favoritedCommodities'
+  const label = isCommodities ? 'Commodities' : 'Locations'
+  const currentFavorites = (currentSettings[settingKey] as string[]) ?? []
+
+  // Get display settings
+  const locationMode = (currentSettings['discord.locationDisplayMode'] ??
+    'natural-ids-only') as LocationDisplayMode
+  const commodityMode = (currentSettings['discord.commodityDisplayMode'] ??
+    'ticker-only') as CommodityDisplayMode
+
+  // Format a favorite for display
+  const formatFavorite = async (fav: string): Promise<string> => {
+    if (isCommodities) {
+      return formatCommodityWithMode(fav, commodityMode)
+    } else {
+      return formatLocation(fav, locationMode)
+    }
+  }
+
+  // Build favorites management menu
+  const buildFavoritesMenu = async (): Promise<{
+    embeds: EmbedBuilder[]
+    components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[]
+  }> => {
+    let description: string
+    if (currentFavorites.length > 0) {
+      const formatted = await Promise.all(currentFavorites.map(formatFavorite))
+      description = `Your favorites appear first in autocomplete suggestions.\n\n**Current favorites:**\n${formatted.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
+    } else {
+      description = `You have no favorite ${label.toLowerCase()} yet.\n\nFavorites appear first in autocomplete suggestions.`
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`⭐ Favorite ${label}`)
+      .setColor(0xffd700)
+      .setDescription(description)
+
+    const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`fav:add:${settingKey}`)
+        .setLabel(`Add ${isCommodities ? 'Commodity' : 'Location'}`)
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('➕'),
+      new ButtonBuilder()
+        .setCustomId(`fav:remove:${settingKey}`)
+        .setLabel('Remove')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('➖')
+        .setDisabled(currentFavorites.length === 0),
+      new ButtonBuilder()
+        .setCustomId(`fav:clear:${settingKey}`)
+        .setLabel('Clear All')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentFavorites.length === 0)
+    )
+
+    return { embeds: [embed], components: [buttons] }
+  }
+
+  await interaction.reply({
+    ...(await buildFavoritesMenu()),
+    flags: MessageFlags.Ephemeral,
+  })
+
+  // Get the message for the collector
+  const favMessage = await interaction.fetchReply()
+
+  // Collector for favorites management
+  const favCollector = favMessage.createMessageComponentCollector({
+    time: COMPONENT_TIMEOUT,
+    filter: i => i.user.id === interaction.user.id,
+  })
+
+  favCollector.on('collect', async (favInteraction: MessageComponentInteraction) => {
+    try {
+      if (favInteraction.isButton()) {
+        const [, action] = favInteraction.customId.split(':')
+
+        if (action === 'add') {
+          // Show modal to add a favorite
+          const modalId = `fav:add-modal:${settingKey}:${Date.now()}`
+          const modal = new ModalBuilder()
+            .setCustomId(modalId)
+            .setTitle(`Add Favorite ${isCommodities ? 'Commodity' : 'Location'}`)
+
+          const input = new TextInputBuilder()
+            .setCustomId('value')
+            .setLabel(
+              isCommodities
+                ? 'Commodity tickers (comma-separated)'
+                : 'Location names or IDs (comma-separated)'
+            )
+            .setPlaceholder(isCommodities ? 'COF, RAT, DW' : 'Katoa, Benten Station')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(200)
+
+          modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input))
+
+          await favInteraction.showModal(modal)
+
+          try {
+            const modalSubmit = await favInteraction
+              .awaitModalSubmit({
+                time: COMPONENT_TIMEOUT,
+                filter: (i: ModalSubmitInteraction) =>
+                  i.customId === modalId && i.user.id === favInteraction.user.id,
+              })
+              .catch(() => null)
+
+            if (modalSubmit) {
+              const rawValue = modalSubmit.fields.getTextInputValue('value').trim()
+
+              // Parse comma-separated values (supports names with spaces)
+              const inputs = rawValue
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s.length > 0)
+
+              if (inputs.length === 0) {
+                await modalSubmit.reply({
+                  content: '❌ No valid input provided.',
+                  flags: MessageFlags.Ephemeral,
+                })
+                return
+              }
+
+              const added: string[] = []
+              const alreadyFavorited: string[] = []
+              const notFound: string[] = []
+
+              for (const input of inputs) {
+                if (isCommodities) {
+                  const commodity = await resolveCommodity(input)
+                  if (!commodity) {
+                    notFound.push(input)
+                    continue
+                  }
+                  if (currentFavorites.includes(commodity.ticker)) {
+                    alreadyFavorited.push(
+                      await formatCommodityWithMode(commodity.ticker, commodityMode)
+                    )
+                    continue
+                  }
+                  currentFavorites.push(commodity.ticker)
+                  added.push(await formatCommodityWithMode(commodity.ticker, commodityMode))
+                } else {
+                  const location = await resolveLocation(input)
+                  if (!location) {
+                    notFound.push(input)
+                    continue
+                  }
+                  if (currentFavorites.includes(location.naturalId)) {
+                    alreadyFavorited.push(await formatLocation(location.naturalId, locationMode))
+                    continue
+                  }
+                  currentFavorites.push(location.naturalId)
+                  added.push(await formatLocation(location.naturalId, locationMode))
+                }
+              }
+
+              // Save if any were added
+              if (added.length > 0) {
+                await setSetting(userId, settingKey, currentFavorites)
+              }
+
+              // Build response message
+              const parts: string[] = []
+              if (added.length > 0) {
+                parts.push(`✅ Added: ${added.join(', ')}`)
+              }
+              if (alreadyFavorited.length > 0) {
+                parts.push(`ℹ️ Already favorited: ${alreadyFavorited.join(', ')}`)
+              }
+              if (notFound.length > 0) {
+                parts.push(`❌ Not found: ${notFound.map(s => `\`${s}\``).join(', ')}`)
+              }
+
+              await modalSubmit.reply({
+                content: parts.join('\n'),
+                flags: MessageFlags.Ephemeral,
+              })
+
+              // Update the favorites menu
+              await interaction.editReply(await buildFavoritesMenu())
+              await refreshEmbed()
+            }
+          } catch (error) {
+            console.error('Modal error:', error)
+          }
+        } else if (action === 'remove') {
+          // Show select menu to remove a favorite
+          if (currentFavorites.length === 0) {
+            await favInteraction.reply({
+              content: '❌ No favorites to remove.',
+              flags: MessageFlags.Ephemeral,
+            })
+            return
+          }
+
+          // Format favorites for display in the select menu
+          const formattedFavorites = await Promise.all(
+            currentFavorites.slice(0, 25).map(async fav => ({
+              label: await formatFavorite(fav),
+              value: fav,
+            }))
+          )
+
+          const removeSelect = new StringSelectMenuBuilder()
+            .setCustomId(`fav:remove-select:${settingKey}`)
+            .setPlaceholder('Select favorite to remove')
+            .addOptions(formattedFavorites)
+
+          const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(removeSelect)
+
+          await favInteraction.reply({
+            content: 'Select a favorite to remove:',
+            components: [row],
+            flags: MessageFlags.Ephemeral,
+          })
+        } else if (action === 'clear') {
+          // Clear all favorites
+          await setSetting(userId, settingKey, [])
+          currentFavorites.length = 0
+
+          await favInteraction.reply({
+            content: `✅ Cleared all favorite ${label.toLowerCase()}.`,
+            flags: MessageFlags.Ephemeral,
+          })
+
+          await interaction.editReply(await buildFavoritesMenu())
+          await refreshEmbed()
+        }
+      } else if (
+        favInteraction.isStringSelectMenu() &&
+        favInteraction.customId.startsWith('fav:remove-select:')
+      ) {
+        const favToRemove = favInteraction.values[0]
+        const displayName = await formatFavorite(favToRemove)
+        const updatedFavorites = currentFavorites.filter(f => f !== favToRemove)
+
+        await setSetting(userId, settingKey, updatedFavorites)
+
+        // Update local array
+        const idx = currentFavorites.indexOf(favToRemove)
+        if (idx > -1) currentFavorites.splice(idx, 1)
+
+        await favInteraction.reply({
+          content: `✅ Removed ${displayName} from your favorites.`,
+          flags: MessageFlags.Ephemeral,
+        })
+
+        await interaction.editReply(await buildFavoritesMenu())
+        await refreshEmbed()
+      }
+    } catch (error) {
+      console.error('Error handling favorites interaction:', error)
+      try {
+        if (!favInteraction.replied && !favInteraction.deferred) {
+          await favInteraction.reply({
+            content: '❌ An error occurred. Please try again.',
+            flags: MessageFlags.Ephemeral,
+          })
+        }
+      } catch {
+        // Already replied or deferred
+      }
+    }
+  })
 }

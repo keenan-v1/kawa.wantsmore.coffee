@@ -6,11 +6,15 @@
 import { db, userSettings, userDiscordProfiles } from '@kawakawa/db'
 import { eq, and, inArray } from 'drizzle-orm'
 import { settingsService } from '@kawakawa/services/settings'
-import type { LocationDisplayMode } from '@kawakawa/types'
+import type { LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
 
-// Default values (must match packages/types/src/settings.ts)
+// Default values for Discord bot settings
+// Discord-specific display settings are separate from web to allow different preferences
 const DEFAULTS = {
-  'display.locationDisplayMode': 'both' as LocationDisplayMode,
+  // Discord-specific display settings (separate from web)
+  'discord.locationDisplayMode': 'natural-ids-only' as LocationDisplayMode, // IDs only for compact Discord display
+  'discord.commodityDisplayMode': 'ticker-only' as CommodityDisplayMode, // Tickers only for compact Discord display
+  // Shared market settings
   'market.preferredCurrency': 'CIS',
   'market.defaultPriceList': null as string | null,
   'market.automaticPricing': false,
@@ -122,9 +126,11 @@ export async function getSettingsByDiscordId(
 
 /**
  * Get display settings for a Discord user with fallbacks.
+ * Uses Discord-specific display settings (separate from web preferences).
  */
 export async function getDisplaySettings(discordId: string): Promise<{
   locationDisplayMode: LocationDisplayMode
+  commodityDisplayMode: CommodityDisplayMode
   preferredCurrency: string
   favoritedLocations: string[]
   favoritedCommodities: string[]
@@ -132,8 +138,10 @@ export async function getDisplaySettings(discordId: string): Promise<{
   const settings = await getSettingsByDiscordId(discordId)
 
   return {
-    locationDisplayMode: (settings?.['display.locationDisplayMode'] ??
-      DEFAULTS['display.locationDisplayMode']) as LocationDisplayMode,
+    locationDisplayMode: (settings?.['discord.locationDisplayMode'] ??
+      DEFAULTS['discord.locationDisplayMode']) as LocationDisplayMode,
+    commodityDisplayMode: (settings?.['discord.commodityDisplayMode'] ??
+      DEFAULTS['discord.commodityDisplayMode']) as CommodityDisplayMode,
     preferredCurrency: (settings?.['market.preferredCurrency'] ??
       DEFAULTS['market.preferredCurrency']) as string,
     favoritedLocations: (settings?.['market.favoritedLocations'] ??

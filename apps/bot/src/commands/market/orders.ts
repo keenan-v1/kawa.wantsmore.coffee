@@ -1,7 +1,23 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js'
-import type { ChatInputCommandInteraction, AutocompleteInteraction } from 'discord.js'
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from 'discord.js'
+import type {
+  ChatInputCommandInteraction,
+  AutocompleteInteraction,
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+} from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, sellOrders, buyOrders, users } from '@kawakawa/db'
+import { db, sellOrders, buyOrders, users, userDiscordProfiles } from '@kawakawa/db'
 import { eq, and, desc } from 'drizzle-orm'
 import { searchCommodities, searchLocations, searchUsers } from '../../autocomplete/index.js'
 import {
@@ -11,7 +27,6 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings, getFioUsernames } from '../../services/userSettings.js'
-import { sendPaginatedResponse } from '../../components/pagination.js'
 import { enrichSellOrdersWithQuantities } from '@kawakawa/services/market'
 import {
   formatGroupedOrdersMulti,
@@ -20,6 +35,7 @@ import {
 } from '../../services/orderFormatter.js'
 
 const ORDERS_PER_PAGE = 10
+const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
 export const orders: Command = {
   data: new SlashCommandBuilder()
@@ -95,19 +111,26 @@ export const orders: Command = {
     const locationInput = interaction.options.getString('location')
     const userInput = interaction.options.getString('user')
     const orderType =
-      (interaction.options.getString('type') as 'all' | 'sell' | 'buy' | null) || 'sell'
+      (interaction.options.getString('type') as 'all' | 'sell' | 'buy' | null) || 'all'
     const visibility =
       (interaction.options.getString('visibility') as 'all' | 'internal' | 'partner' | null) ||
-      'internal'
+      'all'
 
     // Get user's display preferences
     const displaySettings = await getDisplaySettings(interaction.user.id)
+
+    // Check if user has a linked account (for default behavior and manage button)
+    const discordProfile = await db.query.userDiscordProfiles.findFirst({
+      where: eq(userDiscordProfiles.discordId, interaction.user.id),
+    })
+    const currentUserId = discordProfile?.userId ?? null
 
     // Resolve inputs
     let resolvedCommodity: { ticker: string; name: string } | null = null
     let resolvedLocation: { naturalId: string; name: string; type: string } | null = null
     let resolvedUserId: number | null = null
     let resolvedDisplayName: string | null = null
+    let isDefaultingToSelf = false
 
     if (commodityInput) {
       resolvedCommodity = await resolveCommodity(commodityInput)
@@ -147,6 +170,14 @@ export const orders: Command = {
         resolvedUserId = foundUser.id
         resolvedDisplayName = userResults[0].displayName
       }
+    } else if (!commodityInput && !locationInput && currentUserId) {
+      // Default to showing current user's orders when no filters are provided
+      resolvedUserId = currentUserId
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, currentUserId),
+      })
+      resolvedDisplayName = currentUser?.displayName ?? 'You'
+      isDefaultingToSelf = true
     }
 
     // Build filter description for embed
@@ -264,18 +295,510 @@ export const orders: Command = {
       visibility
     )
 
-    // Build base embed
-    const embed = new EmbedBuilder()
-      .setTitle('📦 Market Orders')
+    // Build base embed with dynamic title
+    const embedTitle = isDefaultingToSelf ? '📦 Your Orders' : '📦 Market Orders'
+    const baseEmbed = new EmbedBuilder()
+      .setTitle(embedTitle)
       .setColor(0x5865f2)
       .setDescription(filterDesc)
       .setTimestamp()
 
-    // Send paginated response
-    await sendPaginatedResponse(interaction, embed, allItems, {
-      pageSize: ORDERS_PER_PAGE,
-      allowShare: true,
-      footerText: 'Use 📢 Share to post publicly',
-    })
+    // Custom pagination with Manage button
+    await sendOrdersWithManage(interaction, baseEmbed, allItems, currentUserId)
   },
+}
+
+/**
+ * Send orders with pagination and manage functionality.
+ */
+async function sendOrdersWithManage(
+  interaction: ChatInputCommandInteraction,
+  baseEmbed: EmbedBuilder,
+  allItems: { name: string; value: string; inline?: boolean }[],
+  currentUserId: number | null
+): Promise<void> {
+  const idPrefix = `orders:${Date.now()}`
+
+  // Calculate pages
+  const pages = calculateOrderPages(allItems, ORDERS_PER_PAGE)
+  const totalPages = pages.length
+  let currentPage = 0
+
+  const buildEmbed = (page: number): EmbedBuilder => {
+    const embed = EmbedBuilder.from(baseEmbed)
+    const pageItems = pages[page] || []
+    embed.setFields(...pageItems.map(item => ({ ...item, inline: item.inline ?? true })))
+
+    const footerLines = ['📢 Share to post publicly']
+    if (currentUserId) {
+      footerLines.push('🗑️ Manage to edit or delete your orders')
+    }
+    footerLines.push(`Page ${page + 1}/${totalPages}`)
+    embed.setFooter({ text: footerLines.join('\n') })
+
+    return embed
+  }
+
+  const buildButtons = (page: number): ActionRowBuilder<ButtonBuilder> => {
+    const row = new ActionRowBuilder<ButtonBuilder>()
+
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${idPrefix}:prev`)
+        .setLabel('◀')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === 0),
+      new ButtonBuilder()
+        .setCustomId(`${idPrefix}:info`)
+        .setLabel(`${page + 1}/${totalPages}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true),
+      new ButtonBuilder()
+        .setCustomId(`${idPrefix}:next`)
+        .setLabel('▶')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= totalPages - 1),
+      new ButtonBuilder()
+        .setCustomId(`${idPrefix}:share`)
+        .setLabel('📢 Share')
+        .setStyle(ButtonStyle.Primary)
+    )
+
+    // Add manage button if user is linked
+    if (currentUserId) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${idPrefix}:manage`)
+          .setLabel('🗑️ Manage')
+          .setStyle(ButtonStyle.Danger)
+      )
+    }
+
+    return row
+  }
+
+  const response = await interaction.reply({
+    embeds: [buildEmbed(0)],
+    components: [buildButtons(0)],
+    flags: MessageFlags.Ephemeral,
+  })
+
+  const collector = response.createMessageComponentCollector({
+    time: COMPONENT_TIMEOUT,
+    filter: i => i.customId.startsWith(idPrefix) && i.user.id === interaction.user.id,
+  })
+
+  collector.on(
+    'collect',
+    async (btnInteraction: ButtonInteraction | StringSelectMenuInteraction) => {
+      if (btnInteraction.isButton()) {
+        const action = btnInteraction.customId.split(':')[2]
+
+        switch (action) {
+          case 'prev':
+            if (currentPage > 0) currentPage--
+            await btnInteraction.update({
+              embeds: [buildEmbed(currentPage)],
+              components: [buildButtons(currentPage)],
+            })
+            break
+
+          case 'next':
+            if (currentPage < totalPages - 1) currentPage++
+            await btnInteraction.update({
+              embeds: [buildEmbed(currentPage)],
+              components: [buildButtons(currentPage)],
+            })
+            break
+
+          case 'share': {
+            const member = interaction.member
+            const sharedByName =
+              member && 'displayName' in member ? member.displayName : interaction.user.displayName
+            const shareEmbed = buildEmbed(currentPage)
+            shareEmbed.setFooter({ text: `Shared by ${sharedByName}` })
+            await btnInteraction.reply({ embeds: [shareEmbed] })
+            break
+          }
+
+          case 'manage': {
+            if (!currentUserId) {
+              await btnInteraction.reply({
+                content: '❌ You need a linked account to manage orders.',
+                flags: MessageFlags.Ephemeral,
+              })
+              return
+            }
+
+            // Fetch user's own orders
+            const userSellOrders = await db.query.sellOrders.findMany({
+              where: eq(sellOrders.userId, currentUserId),
+              with: { commodity: true, location: true },
+              orderBy: [desc(sellOrders.updatedAt)],
+            })
+            const userBuyOrders = await db.query.buyOrders.findMany({
+              where: eq(buyOrders.userId, currentUserId),
+              with: { commodity: true, location: true },
+              orderBy: [desc(buyOrders.updatedAt)],
+            })
+
+            if (userSellOrders.length === 0 && userBuyOrders.length === 0) {
+              await btnInteraction.reply({
+                content: '📭 You have no orders to manage.',
+                flags: MessageFlags.Ephemeral,
+              })
+              return
+            }
+
+            // Build select menu options (single select for edit/delete)
+            const options: { label: string; value: string; description?: string }[] = []
+
+            for (const order of userSellOrders.slice(0, 12)) {
+              options.push({
+                label: `📤 SELL ${order.commodityTicker} @ ${order.locationId}`,
+                value: `sell:${order.id}`,
+                description: `${order.price} ${order.currency} (${order.orderType})`,
+              })
+            }
+
+            for (const order of userBuyOrders.slice(0, 12)) {
+              options.push({
+                label: `📥 BUY ${order.commodityTicker} @ ${order.locationId}`,
+                value: `buy:${order.id}`,
+                description: `${order.quantity}x @ ${order.price} ${order.currency}`,
+              })
+            }
+
+            if (options.length === 0) {
+              await btnInteraction.reply({
+                content: '📭 You have no orders to manage.',
+                flags: MessageFlags.Ephemeral,
+              })
+              return
+            }
+
+            const selectMenuId = `${idPrefix}:order-select`
+            const selectMenu = new StringSelectMenuBuilder()
+              .setCustomId(selectMenuId)
+              .setPlaceholder('Select an order to edit or delete')
+              .setMinValues(1)
+              .setMaxValues(1)
+              .addOptions(options.slice(0, 25))
+
+            const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+              selectMenu
+            )
+
+            const manageReply = await btnInteraction.reply({
+              content: '**Select an order to manage:**',
+              components: [selectRow],
+              flags: MessageFlags.Ephemeral,
+              withResponse: true,
+            })
+
+            // Wait for order selection on this reply message
+            try {
+              const selectInteraction = await manageReply.resource?.message?.awaitMessageComponent({
+                filter: i => i.customId === selectMenuId && i.user.id === interaction.user.id,
+                time: 60000,
+              })
+
+              if (selectInteraction?.isStringSelectMenu()) {
+                const selected = selectInteraction.values[0]
+                const [selectedOrderType, selectedOrderId] = selected.split(':')
+
+                // Show edit/delete buttons for the selected order
+                const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`action:edit:${selectedOrderType}:${selectedOrderId}`)
+                    .setLabel('✏️ Edit')
+                    .setStyle(ButtonStyle.Primary),
+                  new ButtonBuilder()
+                    .setCustomId(`action:delete:${selectedOrderType}:${selectedOrderId}`)
+                    .setLabel('🗑️ Delete')
+                    .setStyle(ButtonStyle.Danger)
+                )
+
+                const actionReply = await selectInteraction.update({
+                  content: `**Selected:** ${selectedOrderType === 'sell' ? '📤 Sell' : '📥 Buy'} order #${selectedOrderId}\n\nWhat would you like to do?`,
+                  components: [buttonRow],
+                })
+
+                // Wait for edit/delete action
+                const actionInteraction = await actionReply.awaitMessageComponent({
+                  filter: i =>
+                    i.customId.startsWith('action:') && i.user.id === interaction.user.id,
+                  time: 60000,
+                })
+
+                if (actionInteraction?.isButton()) {
+                  const actionParts = actionInteraction.customId.split(':')
+                  const actionType = actionParts[1]
+                  const orderType = actionParts[2]
+                  const orderId = parseInt(actionParts[3], 10)
+
+                  await handleOrderAction(
+                    actionInteraction,
+                    interaction,
+                    actionType,
+                    orderType,
+                    orderId,
+                    currentUserId
+                  )
+                }
+              }
+            } catch {
+              // Selection timed out
+            }
+            break
+          }
+        }
+      }
+    }
+  )
+
+  collector.on('end', async () => {
+    try {
+      const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${idPrefix}:expired`)
+          .setLabel('Session expired - run /orders again')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true)
+      )
+      await interaction.editReply({ components: [disabledRow] })
+    } catch {
+      // Interaction may have been deleted
+    }
+  })
+}
+
+/**
+ * Calculate pages for orders display.
+ */
+function calculateOrderPages(
+  items: { name: string; value: string; inline?: boolean }[],
+  pageSize: number
+): { name: string; value: string; inline?: boolean }[][] {
+  const pages: { name: string; value: string; inline?: boolean }[][] = []
+
+  for (let i = 0; i < items.length; i += pageSize) {
+    pages.push(items.slice(i, i + pageSize))
+  }
+
+  if (pages.length === 0) {
+    pages.push([])
+  }
+
+  return pages
+}
+
+/**
+ * Handle order edit or delete action.
+ */
+async function handleOrderAction(
+  btnInteraction: ButtonInteraction,
+  originalInteraction: ChatInputCommandInteraction,
+  actionType: string,
+  orderType: string,
+  orderId: number,
+  userId: number
+): Promise<void> {
+  if (actionType === 'delete') {
+    // Delete the order
+    if (orderType === 'sell') {
+      await db
+        .delete(sellOrders)
+        .where(and(eq(sellOrders.id, orderId), eq(sellOrders.userId, userId)))
+    } else {
+      await db.delete(buyOrders).where(and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)))
+    }
+
+    await btnInteraction.update({
+      content: '✅ Order deleted.',
+      components: [],
+    })
+    return
+  }
+
+  // Edit action - show modal
+  if (orderType === 'sell') {
+    const order = await db.query.sellOrders.findFirst({
+      where: and(eq(sellOrders.id, orderId), eq(sellOrders.userId, userId)),
+    })
+    if (!order) {
+      await btnInteraction.reply({
+        content: '❌ Order not found or you do not own it.',
+        flags: MessageFlags.Ephemeral,
+      })
+      return
+    }
+
+    const modalId = `edit-modal:sell:${orderId}:${Date.now()}`
+    const modal = new ModalBuilder()
+      .setCustomId(modalId)
+      .setTitle(`Edit Sell Order: ${order.commodityTicker}`)
+
+    const priceInput = new TextInputBuilder()
+      .setCustomId('price')
+      .setLabel('Price')
+      .setStyle(TextInputStyle.Short)
+      .setValue(order.price.toString())
+      .setRequired(true)
+
+    const currencyInput = new TextInputBuilder()
+      .setCustomId('currency')
+      .setLabel('Currency (CIS, AIC, ICA, NCC)')
+      .setStyle(TextInputStyle.Short)
+      .setValue(order.currency)
+      .setRequired(true)
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(priceInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(currencyInput)
+    )
+
+    await btnInteraction.showModal(modal)
+
+    try {
+      const modalSubmit = await btnInteraction.awaitModalSubmit({
+        filter: i => i.customId === modalId && i.user.id === originalInteraction.user.id,
+        time: 60000,
+      })
+
+      const newPrice = parseFloat(modalSubmit.fields.getTextInputValue('price'))
+      const newCurrency = modalSubmit.fields.getTextInputValue('currency').toUpperCase()
+
+      if (isNaN(newPrice) || newPrice <= 0) {
+        await modalSubmit.reply({
+          content: '❌ Invalid price. Please enter a positive number.',
+          flags: MessageFlags.Ephemeral,
+        })
+        return
+      }
+
+      const validCurrencies = ['CIS', 'AIC', 'ICA', 'NCC'] as const
+      if (!validCurrencies.includes(newCurrency as (typeof validCurrencies)[number])) {
+        await modalSubmit.reply({
+          content: `❌ Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
+          flags: MessageFlags.Ephemeral,
+        })
+        return
+      }
+
+      await db
+        .update(sellOrders)
+        .set({
+          price: newPrice.toString(),
+          currency: newCurrency as (typeof validCurrencies)[number],
+          updatedAt: new Date(),
+        })
+        .where(and(eq(sellOrders.id, orderId), eq(sellOrders.userId, userId)))
+
+      await modalSubmit.reply({
+        content: `✅ Sell order updated: ${newPrice} ${newCurrency}`,
+        flags: MessageFlags.Ephemeral,
+      })
+    } catch {
+      // Modal timed out or was dismissed
+    }
+  } else {
+    const order = await db.query.buyOrders.findFirst({
+      where: and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)),
+    })
+    if (!order) {
+      await btnInteraction.reply({
+        content: '❌ Order not found or you do not own it.',
+        flags: MessageFlags.Ephemeral,
+      })
+      return
+    }
+
+    const modalId = `edit-modal:buy:${orderId}:${Date.now()}`
+    const modal = new ModalBuilder()
+      .setCustomId(modalId)
+      .setTitle(`Edit Buy Order: ${order.commodityTicker}`)
+
+    const quantityInput = new TextInputBuilder()
+      .setCustomId('quantity')
+      .setLabel('Quantity')
+      .setStyle(TextInputStyle.Short)
+      .setValue(order.quantity.toString())
+      .setRequired(true)
+
+    const priceInput = new TextInputBuilder()
+      .setCustomId('price')
+      .setLabel('Price')
+      .setStyle(TextInputStyle.Short)
+      .setValue(order.price.toString())
+      .setRequired(true)
+
+    const currencyInput = new TextInputBuilder()
+      .setCustomId('currency')
+      .setLabel('Currency (CIS, AIC, ICA, NCC)')
+      .setStyle(TextInputStyle.Short)
+      .setValue(order.currency)
+      .setRequired(true)
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(quantityInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(priceInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(currencyInput)
+    )
+
+    await btnInteraction.showModal(modal)
+
+    try {
+      const modalSubmit = await btnInteraction.awaitModalSubmit({
+        filter: i => i.customId === modalId && i.user.id === originalInteraction.user.id,
+        time: 60000,
+      })
+
+      const newQuantity = parseInt(modalSubmit.fields.getTextInputValue('quantity'), 10)
+      const newPrice = parseFloat(modalSubmit.fields.getTextInputValue('price'))
+      const newCurrency = modalSubmit.fields.getTextInputValue('currency').toUpperCase()
+
+      if (isNaN(newQuantity) || newQuantity <= 0) {
+        await modalSubmit.reply({
+          content: '❌ Invalid quantity. Please enter a positive integer.',
+          flags: MessageFlags.Ephemeral,
+        })
+        return
+      }
+
+      if (isNaN(newPrice) || newPrice <= 0) {
+        await modalSubmit.reply({
+          content: '❌ Invalid price. Please enter a positive number.',
+          flags: MessageFlags.Ephemeral,
+        })
+        return
+      }
+
+      const validCurrencies = ['CIS', 'AIC', 'ICA', 'NCC'] as const
+      if (!validCurrencies.includes(newCurrency as (typeof validCurrencies)[number])) {
+        await modalSubmit.reply({
+          content: `❌ Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
+          flags: MessageFlags.Ephemeral,
+        })
+        return
+      }
+
+      await db
+        .update(buyOrders)
+        .set({
+          quantity: newQuantity,
+          price: newPrice.toString(),
+          currency: newCurrency as (typeof validCurrencies)[number],
+          updatedAt: new Date(),
+        })
+        .where(and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)))
+
+      await modalSubmit.reply({
+        content: `✅ Buy order updated: ${newQuantity}x @ ${newPrice} ${newCurrency}`,
+        flags: MessageFlags.Ephemeral,
+      })
+    } catch {
+      // Modal timed out or was dismissed
+    }
+  }
 }

@@ -13,7 +13,7 @@ const {
   mockSearchLocations,
   mockSearchUsers,
   mockDbQuery,
-  mockSendPaginatedResponse,
+  mockDbDelete,
   mockEnrichSellOrdersWithQuantities,
   mockFormatGroupedOrdersMulti,
   mockBuildFilterDescription,
@@ -31,8 +31,9 @@ const {
     sellOrders: { findMany: vi.fn() },
     buyOrders: { findMany: vi.fn() },
     users: { findFirst: vi.fn() },
+    userDiscordProfiles: { findFirst: vi.fn() },
   },
-  mockSendPaginatedResponse: vi.fn(),
+  mockDbDelete: vi.fn().mockReturnValue({ where: vi.fn() }),
   mockEnrichSellOrdersWithQuantities: vi.fn(),
   mockFormatGroupedOrdersMulti: vi.fn(),
   mockBuildFilterDescription: vi.fn(),
@@ -62,9 +63,9 @@ vi.mock('../../autocomplete/index.js', () => ({
   searchUsers: mockSearchUsers,
 }))
 
-// Mock pagination component
+// Mock pagination component (still needed for other imports)
 vi.mock('../../components/pagination.js', () => ({
-  sendPaginatedResponse: mockSendPaginatedResponse,
+  sendPaginatedResponse: vi.fn(),
 }))
 
 // Mock market service
@@ -82,20 +83,24 @@ vi.mock('../../services/orderFormatter.js', () => ({
 vi.mock('@kawakawa/db', () => ({
   db: {
     query: mockDbQuery,
+    delete: mockDbDelete,
   },
   sellOrders: {
+    id: 'id',
     commodityTicker: 'commodityTicker',
     locationId: 'locationId',
     userId: 'userId',
     orderType: 'orderType',
   },
   buyOrders: {
+    id: 'id',
     commodityTicker: 'commodityTicker',
     locationId: 'locationId',
     userId: 'userId',
     orderType: 'orderType',
   },
   users: { username: 'username' },
+  userDiscordProfiles: { discordId: 'discordId', userId: 'userId' },
 }))
 
 // Mock drizzle-orm
@@ -103,6 +108,7 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn().mockImplementation((a, b) => ({ field: a, value: b })),
   and: vi.fn().mockImplementation((...args) => ({ and: args })),
   desc: vi.fn().mockImplementation(field => ({ desc: field })),
+  inArray: vi.fn().mockImplementation((field, values) => ({ inArray: { field, values } })),
 }))
 
 // Import after mocks
@@ -127,6 +133,8 @@ describe('orders command (strict)', () => {
     mockFormatGroupedOrdersMulti.mockResolvedValue([])
     // Default mock for buildFilterDescription - returns a simple description
     mockBuildFilterDescription.mockReturnValue('📤Sell | 👤 Internal')
+    // Default mock for userDiscordProfiles - not linked
+    mockDbQuery.userDiscordProfiles.findFirst.mockResolvedValue(null)
   })
 
   it('has correct command metadata', () => {
@@ -136,6 +144,7 @@ describe('orders command (strict)', () => {
   describe('execute', () => {
     it('returns no orders message when no filters provided and no orders exist', async () => {
       mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
 
       const { interaction, replyFn } = createMockInteraction({
         stringOptions: {},
@@ -163,15 +172,20 @@ describe('orders command (strict)', () => {
           location: { naturalId: 'BEN', name: 'Benten' },
         },
       ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
 
-      const { interaction } = createMockInteraction({
+      const { interaction, replyFn } = createMockInteraction({
         stringOptions: { commodity: 'COF' },
       })
 
       await orders.execute(interaction as never)
 
       expect(mockResolveCommodity).toHaveBeenCalledWith('COF')
-      expect(mockSendPaginatedResponse).toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
     })
 
     it('returns error for invalid commodity', async () => {
@@ -207,15 +221,20 @@ describe('orders command (strict)', () => {
           location: { naturalId: 'BEN', name: 'Benten' },
         },
       ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
 
-      const { interaction } = createMockInteraction({
+      const { interaction, replyFn } = createMockInteraction({
         stringOptions: { location: 'BEN' },
       })
 
       await orders.execute(interaction as never)
 
       expect(mockResolveLocation).toHaveBeenCalledWith('BEN')
-      expect(mockSendPaginatedResponse).toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
     })
 
     it('returns error for invalid location', async () => {
@@ -248,15 +267,20 @@ describe('orders command (strict)', () => {
           location: { naturalId: 'BEN', name: 'Benten' },
         },
       ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
 
-      const { interaction } = createMockInteraction({
+      const { interaction, replyFn } = createMockInteraction({
         stringOptions: { user: 'testuser' },
       })
 
       await orders.execute(interaction as never)
 
       expect(mockSearchUsers).toHaveBeenCalledWith('testuser', 1)
-      expect(mockSendPaginatedResponse).toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
     })
 
     it('returns error for invalid user', async () => {
@@ -293,8 +317,9 @@ describe('orders command (strict)', () => {
           location: { naturalId: 'BEN', name: 'Benten' },
         },
       ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
 
-      const { interaction } = createMockInteraction({
+      const { interaction, replyFn } = createMockInteraction({
         stringOptions: { commodity: 'COF', location: 'BEN' },
       })
 
@@ -302,10 +327,14 @@ describe('orders command (strict)', () => {
 
       expect(mockResolveCommodity).toHaveBeenCalledWith('COF')
       expect(mockResolveLocation).toHaveBeenCalledWith('BEN')
-      expect(mockSendPaginatedResponse).toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
     })
 
-    it('shows sell orders by default (type defaults to sell)', async () => {
+    it('shows all orders by default (type defaults to all)', async () => {
       mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
         {
           id: 1,
@@ -318,6 +347,189 @@ describe('orders command (strict)', () => {
           location: { naturalId: 'BEN', name: 'Benten' },
         },
       ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: {},
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+      // Both sell and buy orders should be queried (default is 'all')
+      expect(mockDbQuery.sellOrders.findMany).toHaveBeenCalled()
+      expect(mockDbQuery.buyOrders.findMany).toHaveBeenCalled()
+    })
+
+    it('defaults to current user orders when linked and no filters provided', async () => {
+      // User is linked
+      mockDbQuery.userDiscordProfiles.findFirst.mockResolvedValueOnce({
+        discordId: '123456789',
+        userId: 42,
+      })
+      // Fetch current user info
+      mockDbQuery.users.findFirst.mockResolvedValueOnce({
+        id: 42,
+        displayName: 'LinkedUser',
+      })
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 42,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'LinkedUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: {},
+      })
+
+      await orders.execute(interaction as never)
+
+      // Should show "Your Orders" and filter by current user
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith([], [], ['LinkedUser'], 'all', 'all')
+    })
+
+    it('queries only sell orders when type is sell', async () => {
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'TestUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      // Buy orders should not be queried when type is 'sell'
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: { type: 'sell' },
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(mockDbQuery.sellOrders.findMany).toHaveBeenCalled()
+      expect(mockDbQuery.buyOrders.findMany).not.toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+    })
+
+    it('queries only buy orders when type is buy', async () => {
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          commodityTicker: 'COF',
+          quantity: 100,
+          price: 150,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'TestUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      // Sell orders should not be queried when type is 'buy'
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: { type: 'buy' },
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(mockDbQuery.buyOrders.findMany).toHaveBeenCalled()
+      expect(mockDbQuery.sellOrders.findMany).not.toHaveBeenCalled()
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+    })
+
+    it('filters by visibility when specified', async () => {
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'partner',
+          user: { displayName: 'TestUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: { visibility: 'partner' },
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith([], [], [], 'all', 'partner')
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+    })
+
+    it('enriches orders with FIO usernames', async () => {
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 10,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'TestUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 2,
+          userId: 20,
+          commodityTicker: 'RAT',
+          quantity: 500,
+          price: 125,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'OtherUser' },
+          commodity: { ticker: 'RAT', name: 'Rations' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockGetFioUsernames.mockResolvedValueOnce(
+        new Map([
+          [10, 'FioPlayer1'],
+          [20, 'FioPlayer2'],
+        ])
+      )
 
       const { interaction } = createMockInteraction({
         stringOptions: {},
@@ -325,9 +537,127 @@ describe('orders command (strict)', () => {
 
       await orders.execute(interaction as never)
 
-      expect(mockSendPaginatedResponse).toHaveBeenCalled()
-      // buyOrders should not have been queried
-      expect(mockDbQuery.buyOrders.findMany).not.toHaveBeenCalled()
+      // Should call getFioUsernames with all user IDs
+      expect(mockGetFioUsernames).toHaveBeenCalledWith([10, 20])
+    })
+
+    it('combines multiple filters correctly', async () => {
+      mockResolveCommodity.mockResolvedValueOnce({ ticker: 'COF', name: 'Caffeinated Beans' })
+      mockResolveLocation.mockResolvedValueOnce({
+        naturalId: 'BEN',
+        name: 'Benten',
+        type: 'STATION',
+      })
+      mockSearchUsers.mockResolvedValueOnce([{ username: 'testuser', displayName: 'Test User' }])
+      mockDbQuery.users.findFirst.mockResolvedValueOnce({ id: 1, username: 'testuser' })
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'Test User' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      // Buy not queried when type is 'sell'
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: {
+          commodity: 'COF',
+          location: 'BEN',
+          user: 'testuser',
+          type: 'sell',
+          visibility: 'internal',
+        },
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith(
+        ['COF'],
+        ['Benten (BEN)'],
+        ['Test User'],
+        'sell',
+        'internal'
+      )
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+    })
+
+    it('shows market orders title when user specifies filters while linked', async () => {
+      // User is linked
+      mockDbQuery.userDiscordProfiles.findFirst.mockResolvedValueOnce({
+        discordId: '123456789',
+        userId: 42,
+      })
+      // But specifies a commodity filter, so should show "Market Orders" not "Your Orders"
+      mockResolveCommodity.mockResolvedValueOnce({ ticker: 'COF', name: 'Caffeinated Beans' })
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          user: { displayName: 'AnyUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
+
+      const { interaction, replyFn } = createMockInteraction({
+        stringOptions: { commodity: 'COF' },
+      })
+
+      await orders.execute(interaction as never)
+
+      // Should NOT default to user's orders because a filter was specified
+      expect(mockBuildFilterDescription).toHaveBeenCalledWith(['COF'], [], [], 'all', 'all')
+      expect(replyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          embeds: expect.any(Array),
+        })
+      )
+    })
+
+    it('calls formatGroupedOrdersMulti with correct parameters', async () => {
+      mockDbQuery.sellOrders.findMany.mockResolvedValueOnce([
+        {
+          id: 1,
+          userId: 10,
+          commodityTicker: 'COF',
+          price: 100,
+          currency: 'CIS',
+          orderType: 'internal',
+          limitMode: 'max',
+          limitQuantity: 500,
+          locationId: 'BEN',
+          user: { displayName: 'TestUser' },
+          commodity: { ticker: 'COF', name: 'Caffeinated Beans' },
+          location: { naturalId: 'BEN', name: 'Benten' },
+        },
+      ])
+      mockDbQuery.buyOrders.findMany.mockResolvedValueOnce([])
+      mockEnrichSellOrdersWithQuantities.mockResolvedValueOnce(
+        new Map([[1, { available: 100, reserved: 50 }]])
+      )
+      mockFormatGroupedOrdersMulti.mockResolvedValueOnce([{ name: 'Test', value: 'test value' }])
+
+      const { interaction } = createMockInteraction({
+        stringOptions: {},
+      })
+
+      await orders.execute(interaction as never)
+
+      expect(mockEnrichSellOrdersWithQuantities).toHaveBeenCalled()
+      expect(mockFormatGroupedOrdersMulti).toHaveBeenCalled()
     })
   })
 

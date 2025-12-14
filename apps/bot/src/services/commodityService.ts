@@ -4,6 +4,7 @@
  */
 
 import { db, fioCommodities } from '@kawakawa/db'
+import type { CommodityDisplayMode } from '@kawakawa/types'
 
 export interface CommodityInfo {
   ticker: string
@@ -42,10 +43,36 @@ async function ensureCacheLoaded(): Promise<void> {
 
 /**
  * Format a commodity ticker for display.
- * Always returns just the ticker (universal across all languages).
+ * Returns just the ticker (universal across all languages).
  */
 export function formatCommodity(ticker: string): string {
   return ticker.toUpperCase()
+}
+
+/**
+ * Format a commodity ticker according to user preferences.
+ * Async because it needs to lookup the commodity name from cache/db.
+ */
+export async function formatCommodityWithMode(
+  ticker: string,
+  mode: CommodityDisplayMode = 'both'
+): Promise<string> {
+  await ensureCacheLoaded()
+
+  const commodity = cache?.get(ticker.toUpperCase())
+  if (!commodity) {
+    return ticker.toUpperCase() // Return as-is if not found
+  }
+
+  switch (mode) {
+    case 'ticker-only':
+      return commodity.ticker
+    case 'name-only':
+      return commodity.name
+    case 'both':
+    default:
+      return `${commodity.ticker} - ${commodity.name}`
+  }
 }
 
 /**
