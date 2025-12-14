@@ -8,14 +8,14 @@ import {
 } from 'discord.js'
 import type { ChatInputCommandInteraction, ModalSubmitInteraction } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles, sellOrders } from '@kawakawa/db'
-import { eq } from 'drizzle-orm'
+import { db, sellOrders } from '@kawakawa/db'
 import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
 import { getMarketSettings } from '../../services/userSettings.js'
+import { requireLinkedUser } from '../../utils/auth.js'
+import { awaitModal } from '../../utils/interactions.js'
+import { isValidCurrency, type ValidCurrency } from '../../utils/validation.js'
 
-const MODAL_TIMEOUT = 5 * 60 * 1000 // 5 minutes
-
-type Currency = 'CIS' | 'ICA' | 'AIC' | 'NCC'
+type Currency = ValidCurrency
 type Visibility = 'internal' | 'partner'
 type LimitMode = 'none' | 'max_sell' | 'reserve'
 
@@ -35,8 +35,6 @@ interface ParseError {
   error: string
 }
 
-const VALID_CURRENCIES = ['CIS', 'ICA', 'AIC', 'NCC']
-
 export const bulksell: Command = {
   data: new SlashCommandBuilder()
     .setName('bulksell')
@@ -53,28 +51,12 @@ export const bulksell: Command = {
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
     const visibilityOption = interaction.options.getString('visibility') as Visibility | null
 
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Get user's market settings for defaults
     const marketSettings = await getMarketSettings(userId)
@@ -100,23 +82,10 @@ export const bulksell: Command = {
 
     await interaction.showModal(modal)
 
-    try {
-      const modalSubmit = await interaction
-        .awaitModalSubmit({
-          time: MODAL_TIMEOUT,
-          filter: (i: ModalSubmitInteraction) =>
-            i.customId === modalId && i.user.id === interaction.user.id,
-        })
-        .catch(() => null)
+    const modalSubmit = await awaitModal(interaction, modalId)
+    if (!modalSubmit) return
 
-      if (!modalSubmit) {
-        return // Modal cancelled or timed out
-      }
-
-      await handleBulkSellSubmit(modalSubmit, userId, visibility, defaultCurrency, defaultPriceList)
-    } catch (error) {
-      console.error('Bulk sell modal error:', error)
-    }
+    await handleBulkSellSubmit(modalSubmit, userId, visibility, defaultCurrency, defaultPriceList)
   },
 }
 
@@ -202,7 +171,7 @@ function parseBulkSellOrders(
         idx++
       }
       // Check for currency
-      else if (VALID_CURRENCIES.includes(rest[idx].toUpperCase())) {
+      else if (isValidCurrency(rest[idx].toUpperCase())) {
         currency = rest[idx].toUpperCase() as Currency
         idx++
       } else {

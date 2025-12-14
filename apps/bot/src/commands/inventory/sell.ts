@@ -12,12 +12,12 @@ import type {
   ModalSubmitInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles, sellOrders } from '@kawakawa/db'
-import { eq } from 'drizzle-orm'
+import { db, sellOrders } from '@kawakawa/db'
 import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
-import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
-
-const MODAL_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+import { requireCommodity, requireLocation, formatCommodity } from '../../services/display.js'
+import { requireLinkedUser } from '../../utils/auth.js'
+import { awaitModal } from '../../utils/interactions.js'
+import { isValidCurrency, type ValidCurrency } from '../../utils/validation.js'
 
 export const sell: Command = {
   data: new SlashCommandBuilder()
@@ -68,53 +68,21 @@ export const sell: Command = {
   },
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
     const commodityInput = interaction.options.getString('commodity', true)
     const locationInput = interaction.options.getString('location', true)
 
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Validate commodity
-    const resolvedCommodity = await resolveCommodity(commodityInput)
-    if (!resolvedCommodity) {
-      await interaction.reply({
-        content:
-          `❌ Commodity ticker "${commodityInput.toUpperCase()}" not found.\n\n` +
-          'Use the autocomplete suggestions to find valid tickers.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
+    const resolvedCommodity = await requireCommodity(interaction, commodityInput)
+    if (!resolvedCommodity) return
 
     // Validate location
-    const resolvedLocation = await resolveLocation(locationInput)
-    if (!resolvedLocation) {
-      await interaction.reply({
-        content:
-          `❌ Location "${locationInput}" not found.\n\n` +
-          'Use the autocomplete suggestions to find valid locations.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
+    const resolvedLocation = await requireLocation(interaction, locationInput)
+    if (!resolvedLocation) return
 
     // Show modal for price input
     const modalId = `sell-modal:${Date.now()}`
@@ -156,28 +124,15 @@ export const sell: Command = {
 
     await interaction.showModal(modal)
 
-    try {
-      const modalSubmit = await interaction
-        .awaitModalSubmit({
-          time: MODAL_TIMEOUT,
-          filter: (i: ModalSubmitInteraction) =>
-            i.customId === modalId && i.user.id === interaction.user.id,
-        })
-        .catch(() => null)
+    const modalSubmit = await awaitModal(interaction, modalId)
+    if (!modalSubmit) return
 
-      if (!modalSubmit) {
-        return // Modal cancelled or timed out
-      }
-
-      await handleSellModalSubmit(
-        modalSubmit,
-        userId,
-        resolvedCommodity.ticker,
-        resolvedLocation.naturalId
-      )
-    } catch (error) {
-      console.error('Sell modal error:', error)
-    }
+    await handleSellModalSubmit(
+      modalSubmit,
+      userId,
+      resolvedCommodity.ticker,
+      resolvedLocation.naturalId
+    )
   },
 }
 
@@ -205,10 +160,9 @@ async function handleSellModalSubmit(
   }
 
   // Validate currency
-  const validCurrencies = ['CIS', 'ICA', 'AIC', 'NCC']
-  if (!validCurrencies.includes(currency)) {
+  if (!isValidCurrency(currency)) {
     await interaction.reply({
-      content: `❌ Invalid currency. Valid options: ${validCurrencies.join(', ')}`,
+      content: '❌ Invalid currency. Valid options: CIS, ICA, AIC, NCC',
       flags: MessageFlags.Ephemeral,
     })
     return
@@ -232,7 +186,7 @@ async function handleSellModalSubmit(
         commodityTicker,
         locationId,
         price: price.toFixed(2),
-        currency: currency as 'CIS' | 'ICA' | 'AIC' | 'NCC',
+        currency: currency as ValidCurrency,
         orderType: orderType as 'internal' | 'partner',
         updatedAt: new Date(),
       })

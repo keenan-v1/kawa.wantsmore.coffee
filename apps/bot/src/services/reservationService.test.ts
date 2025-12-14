@@ -348,7 +348,7 @@ describe('reservationService', () => {
     it('formats sell order correctly', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatOrderForSelect(baseSellOrder, 'name')
+      const result = await formatOrderForSelect(baseSellOrder, 'names-only')
 
       expect(result).toEqual({
         label: 'COF @ Benten (50 avail)',
@@ -360,7 +360,7 @@ describe('reservationService', () => {
     it('formats buy order correctly', async () => {
       mockFormatLocation.mockResolvedValue('Moria')
 
-      const result = await formatOrderForSelect(baseBuyOrder, 'name')
+      const result = await formatOrderForSelect(baseBuyOrder, 'names-only')
 
       expect(result).toEqual({
         label: 'RAT @ Moria (200 wanted)',
@@ -374,7 +374,7 @@ describe('reservationService', () => {
       mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.00, currency: 'CIS' })
 
       const orderWithPriceList = { ...baseSellOrder, priceListCode: 'kawa', price: '0.00' }
-      const result = await formatOrderForSelect(orderWithPriceList, 'name')
+      const result = await formatOrderForSelect(orderWithPriceList, 'names-only')
 
       expect(result.description).toBe('125.00 CIS from FioSeller')
     })
@@ -382,7 +382,7 @@ describe('reservationService', () => {
     it('prefers FIO username over display name', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatOrderForSelect(baseSellOrder, 'name')
+      const result = await formatOrderForSelect(baseSellOrder, 'names-only')
 
       expect(result.description).toContain('FioSeller')
     })
@@ -391,7 +391,7 @@ describe('reservationService', () => {
       mockFormatLocation.mockResolvedValue('Benten')
       const orderNoFio = { ...baseSellOrder, ownerFioUsername: null }
 
-      const result = await formatOrderForSelect(orderNoFio, 'name')
+      const result = await formatOrderForSelect(orderNoFio, 'names-only')
 
       expect(result.description).toContain('Seller Display')
     })
@@ -399,7 +399,7 @@ describe('reservationService', () => {
     it('falls back to username when no display name', async () => {
       mockFormatLocation.mockResolvedValue('Moria')
 
-      const result = await formatOrderForSelect(baseBuyOrder, 'name')
+      const result = await formatOrderForSelect(baseBuyOrder, 'names-only')
 
       expect(result.description).toContain('buyer')
     })
@@ -747,7 +747,7 @@ describe('reservationService', () => {
     it('formats sell reservation correctly', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatReservationForEmbed(baseReservation, 1, 'name')
+      const result = await formatReservationForEmbed(baseReservation, 1, 'names-only')
 
       expect(result.name).toBe('#1')
       expect(result.value).toContain('📤 SELL')
@@ -761,7 +761,7 @@ describe('reservationService', () => {
       const buyReservation = { ...baseReservation, type: 'buy' as const }
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatReservationForEmbed(buyReservation, 1, 'name')
+      const result = await formatReservationForEmbed(buyReservation, 1, 'names-only')
 
       expect(result.value).toContain('📥 BUY')
     })
@@ -769,7 +769,7 @@ describe('reservationService', () => {
     it('shows owner name when viewer is counterparty', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatReservationForEmbed(baseReservation, 2, 'name')
+      const result = await formatReservationForEmbed(baseReservation, 2, 'names-only')
 
       expect(result.value).toContain('FioSeller')
     })
@@ -777,7 +777,7 @@ describe('reservationService', () => {
     it('shows counterparty name when viewer is owner', async () => {
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatReservationForEmbed(baseReservation, 1, 'name')
+      const result = await formatReservationForEmbed(baseReservation, 1, 'names-only')
 
       expect(result.value).toContain('FioBuyer')
     })
@@ -786,7 +786,7 @@ describe('reservationService', () => {
       const withNotes = { ...baseReservation, notes: 'Please deliver ASAP' }
       mockFormatLocation.mockResolvedValue('Benten')
 
-      const result = await formatReservationForEmbed(withNotes, 1, 'name')
+      const result = await formatReservationForEmbed(withNotes, 1, 'names-only')
 
       expect(result.value).toContain('Please deliver ASAP')
     })
@@ -796,7 +796,7 @@ describe('reservationService', () => {
       mockGetOrderDisplayPrice.mockResolvedValue({ price: 125.00, currency: 'CIS' })
 
       const withPriceList = { ...baseReservation, priceListCode: 'kawa', price: '0.00' }
-      const result = await formatReservationForEmbed(withPriceList, 1, 'name')
+      const result = await formatReservationForEmbed(withPriceList, 1, 'names-only')
 
       expect(result.value).toContain('125.00')
     })

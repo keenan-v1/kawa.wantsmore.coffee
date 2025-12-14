@@ -33,6 +33,8 @@ import {
   buildFilterDescription,
   type MultiResolvedFilters,
 } from '../../services/orderFormatter.js'
+import { isValidCurrency, VALID_CURRENCIES, type ValidCurrency } from '../../utils/validation.js'
+import { replyError } from '../../utils/replies.js'
 
 const ORDERS_PER_PAGE = 10
 const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
@@ -700,12 +702,8 @@ async function handleOrderAction(
         return
       }
 
-      const validCurrencies = ['CIS', 'AIC', 'ICA', 'NCC'] as const
-      if (!validCurrencies.includes(newCurrency as (typeof validCurrencies)[number])) {
-        await modalSubmit.reply({
-          content: `❌ Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
-          flags: MessageFlags.Ephemeral,
-        })
+      if (!isValidCurrency(newCurrency)) {
+        await replyError(modalSubmit, `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`)
         return
       }
 
@@ -713,7 +711,7 @@ async function handleOrderAction(
         .update(sellOrders)
         .set({
           price: newPrice.toString(),
-          currency: newCurrency as (typeof validCurrencies)[number],
+          currency: newCurrency as ValidCurrency,
           updatedAt: new Date(),
         })
         .where(and(eq(sellOrders.id, orderId), eq(sellOrders.userId, userId)))
@@ -797,12 +795,8 @@ async function handleOrderAction(
         return
       }
 
-      const validCurrencies = ['CIS', 'AIC', 'ICA', 'NCC'] as const
-      if (!validCurrencies.includes(newCurrency as (typeof validCurrencies)[number])) {
-        await modalSubmit.reply({
-          content: `❌ Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
-          flags: MessageFlags.Ephemeral,
-        })
+      if (!isValidCurrency(newCurrency)) {
+        await replyError(modalSubmit, `Invalid currency. Must be one of: ${VALID_CURRENCIES.join(', ')}`)
         return
       }
 
@@ -811,7 +805,7 @@ async function handleOrderAction(
         .set({
           quantity: newQuantity,
           price: newPrice.toString(),
-          currency: newCurrency as (typeof validCurrencies)[number],
+          currency: newCurrency as ValidCurrency,
           updatedAt: new Date(),
         })
         .where(and(eq(buyOrders.id, orderId), eq(buyOrders.userId, userId)))

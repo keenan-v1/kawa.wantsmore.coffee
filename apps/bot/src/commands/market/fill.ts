@@ -2,24 +2,13 @@
  * /fill command - Offer to fill someone's buy order
  * User selects a buy order and specifies quantity they can provide
  */
-import {
-  SlashCommandBuilder,
-  MessageFlags,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  EmbedBuilder,
-} from 'discord.js'
+import { SlashCommandBuilder, MessageFlags } from 'discord.js'
 import type {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   ModalSubmitInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles } from '@kawakawa/db'
-import { eq } from 'drizzle-orm'
 import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
 import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
@@ -28,11 +17,14 @@ import {
   formatOrderForSelect,
   createReservation,
 } from '../../services/reservationService.js'
-import { getOrderDisplayPrice } from '@kawakawa/services/market'
-import type { Currency } from '@kawakawa/types'
-
-const COMPONENT_TIMEOUT = 60000 // 1 minute
-const MODAL_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+import { requireLinkedUser } from '../../utils/auth.js'
+import { awaitModal, COMPONENT_TIMEOUT } from '../../utils/interactions.js'
+import { createSelectMenu } from '../../utils/components.js'
+import { createQuantityNotesModal } from '../../utils/modals.js'
+import { createSuccessEmbed } from '../../utils/embeds.js'
+import { replyError } from '../../utils/replies.js'
+import { formatOrderPrice, calculateTotal } from '../../utils/priceFormatter.js'
+import { getDisplayName } from '../../utils/userDisplay.js'
 
 export const fill: Command = {
   data: new SlashCommandBuilder()
@@ -83,32 +75,16 @@ export const fill: Command = {
   },
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
     const commodityInput = interaction.options.getString('commodity', true)
     const locationInput = interaction.options.getString('location')
 
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Get user's display settings
-    const displaySettings = await getDisplaySettings(discordId)
+    const displaySettings = await getDisplaySettings(interaction.user.id)
 
     // Validate commodity
     const resolvedCommodity = await resolveCommodity(commodityInput)
@@ -165,14 +141,11 @@ export const fill: Command = {
     }
 
     const selectMenuId = `fill-select:${Date.now()}`
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(selectMenuId)
-      .setPlaceholder('Select an order to fill')
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(options)
-
-    const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)
+    const selectRow = createSelectMenu({
+      customId: selectMenuId,
+      placeholder: 'Select an order to fill',
+      options,
+    })
 
     const selectReply = await interaction.reply({
       content: `**Select a buy order for ${formatCommodity(resolvedCommodity.ticker)}:**`,
@@ -206,45 +179,19 @@ export const fill: Command = {
 
       // Show modal for quantity and notes
       const modalId = `fill-modal:${Date.now()}`
-      const modal = new ModalBuilder()
-        .setCustomId(modalId)
-        .setTitle(`Fill ${selectedOrder.commodityTicker}`)
-
-      const quantityInput = new TextInputBuilder()
-        .setCustomId('quantity')
-        .setLabel(`Quantity (max ${selectedOrder.quantity} wanted)`)
-        .setPlaceholder(selectedOrder.quantity.toString())
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(10)
-
-      const notesInput = new TextInputBuilder()
-        .setCustomId('notes')
-        .setLabel('Notes (optional)')
-        .setPlaceholder('Any message for the buyer')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(500)
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(quantityInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(notesInput)
-      )
+      const modal = createQuantityNotesModal({
+        modalId,
+        title: `Fill ${selectedOrder.commodityTicker}`,
+        maxQuantity: selectedOrder.quantity,
+        quantityLabel: `Quantity (max ${selectedOrder.quantity} wanted)`,
+        notesPlaceholder: 'Any message for the buyer',
+      })
 
       await selectInteraction.showModal(modal)
 
       // Wait for modal submit
-      const modalSubmit = await selectInteraction
-        .awaitModalSubmit({
-          time: MODAL_TIMEOUT,
-          filter: (i: ModalSubmitInteraction) =>
-            i.customId === modalId && i.user.id === interaction.user.id,
-        })
-        .catch(() => null)
-
-      if (!modalSubmit) {
-        return // Modal cancelled or timed out
-      }
+      const modalSubmit = await awaitModal(selectInteraction, modalId)
+      if (!modalSubmit) return
 
       await handleFillModalSubmit(modalSubmit, userId, selectedOrder)
     } catch {
@@ -286,18 +233,12 @@ async function handleFillModalSubmit(
   // Validate quantity
   const quantity = parseInt(quantityStr, 10)
   if (isNaN(quantity) || quantity <= 0) {
-    await interaction.reply({
-      content: '❌ Invalid quantity. Please enter a positive number.',
-      flags: MessageFlags.Ephemeral,
-    })
+    await replyError(interaction, 'Invalid quantity. Please enter a positive number.')
     return
   }
 
   if (quantity > order.quantity) {
-    await interaction.reply({
-      content: `❌ Quantity exceeds requested amount. Maximum: ${order.quantity}`,
-      flags: MessageFlags.Ephemeral,
-    })
+    await replyError(interaction, `Quantity exceeds requested amount. Maximum: ${order.quantity}`)
     return
   }
 
@@ -305,40 +246,28 @@ async function handleFillModalSubmit(
     // Create the reservation
     const reservation = await createReservation('buy', order.id, userId, quantity, notes || undefined)
 
-    const ownerName = order.ownerFioUsername ?? order.ownerDisplayName ?? order.ownerUsername
-
-    // Resolve price from price list if needed
-    const priceInfo = await getOrderDisplayPrice({
-      price: order.price,
-      currency: order.currency as Currency,
-      priceListCode: order.priceListCode,
-      commodityTicker: order.commodityTicker,
-      locationId: order.locationId,
+    const ownerName = getDisplayName({
+      username: order.ownerUsername,
+      displayName: order.ownerDisplayName,
+      fioUsername: order.ownerFioUsername,
     })
 
-    const displayPrice = priceInfo ? priceInfo.price.toFixed(2) : order.price
-    const displayCurrency = priceInfo ? priceInfo.currency : order.currency
-    const totalValue = priceInfo
-      ? (priceInfo.price * quantity).toFixed(2)
-      : (parseFloat(order.price) * quantity).toFixed(2)
+    // Resolve price from price list if needed
+    const price = await formatOrderPrice(order)
+    const totalValue = calculateTotal(price, quantity)
 
-    const embed = new EmbedBuilder()
-      .setTitle('📝 Fill Offer Created')
-      .setColor(0x57f287)
-      .setDescription(
+    const embed = createSuccessEmbed({
+      title: '📝 Fill Offer Created',
+      description:
         `You have offered to fill **${quantity}x ${formatCommodity(order.commodityTicker)}** ` +
-          `for **${ownerName}** at **${order.locationId}**.\n\n` +
-          `**Price:** ${displayPrice} ${displayCurrency}/unit\n` +
-          `**Total:** ${totalValue} ${displayCurrency}\n\n` +
-          `The buyer will be notified and can confirm or reject your offer.\n` +
-          `Use \`/reservations\` to track your reservations.`
-      )
-      .setFooter({ text: `Reservation #${reservation.id}` })
-      .setTimestamp()
-
-    if (notes) {
-      embed.addFields({ name: 'Your Notes', value: notes, inline: false })
-    }
+        `for **${ownerName}** at **${order.locationId}**.\n\n` +
+        `**Price:** ${price.displayPrice} ${price.displayCurrency}/unit\n` +
+        `**Total:** ${totalValue} ${price.displayCurrency}\n\n` +
+        `The buyer will be notified and can confirm or reject your offer.\n` +
+        `Use \`/reservations\` to track your reservations.`,
+      footer: `Reservation #${reservation.id}`,
+      notes: notes || undefined,
+    })
 
     await interaction.reply({
       embeds: [embed],
@@ -346,9 +275,6 @@ async function handleFillModalSubmit(
     })
   } catch (error) {
     console.error('Failed to create reservation:', error)
-    await interaction.reply({
-      content: '❌ Failed to create reservation. Please try again.',
-      flags: MessageFlags.Ephemeral,
-    })
+    await replyError(interaction, 'Failed to create reservation. Please try again.')
   }
 }

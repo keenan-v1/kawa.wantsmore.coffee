@@ -17,8 +17,6 @@ import type {
   StringSelectMenuInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles } from '@kawakawa/db'
-import { eq } from 'drizzle-orm'
 import { getDisplaySettings } from '../../services/userSettings.js'
 import { formatLocation } from '../../services/display.js'
 import type { LocationDisplayMode, Currency } from '@kawakawa/types'
@@ -30,8 +28,9 @@ import {
   type ReservationStatus,
 } from '../../services/reservationService.js'
 import { getOrderDisplayPrice } from '@kawakawa/services/market'
+import { requireLinkedUser } from '../../utils/auth.js'
+import { COMPONENT_TIMEOUT } from '../../utils/interactions.js'
 
-const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 const RESERVATIONS_PER_PAGE = 5
 
 export const reservations: Command = {
@@ -54,32 +53,16 @@ export const reservations: Command = {
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
     const statusFilter =
       (interaction.options.getString('status') as ReservationStatus | 'all' | null) || 'all'
 
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Get user's display settings
-    const displaySettings = await getDisplaySettings(discordId)
+    const displaySettings = await getDisplaySettings(interaction.user.id)
 
     // Get reservations
     const allReservations = await getReservationsForUser(userId, statusFilter)

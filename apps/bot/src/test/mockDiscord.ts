@@ -108,7 +108,7 @@ export class MockButtonBuilder {
 }
 
 // Mock SlashCommandBuilder class
-export class MockSlashCommandBuilder {
+class MockSlashCommandBuilder {
   private data: { name?: string; description?: string } = {}
 
   setName(name: string) {
@@ -169,7 +169,7 @@ class MockBooleanOption {
  * Get the standard discord.js mock object for vi.mock()
  */
 // Mock StringSelectMenuBuilder class
-export class MockStringSelectMenuBuilder {
+class MockStringSelectMenuBuilder {
   private data: {
     customId?: string
     placeholder?: string
@@ -201,7 +201,7 @@ export class MockStringSelectMenuBuilder {
 }
 
 // Mock ModalBuilder class
-export class MockModalBuilder {
+class MockModalBuilder {
   private data: { customId?: string; title?: string } = {}
   private components: MockActionRowBuilder[] = []
 
@@ -220,7 +220,7 @@ export class MockModalBuilder {
 }
 
 // Mock TextInputBuilder class
-export class MockTextInputBuilder {
+class MockTextInputBuilder {
   private data: {
     customId?: string
     label?: string

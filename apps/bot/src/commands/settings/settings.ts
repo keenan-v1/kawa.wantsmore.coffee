@@ -19,14 +19,14 @@ import type {
   MessageComponentInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles, priceLists } from '@kawakawa/db'
+import { db, priceLists } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
 import { getUserSettings, setSetting, deleteSetting } from '../../services/userSettings.js'
 import { formatLocation, resolveLocation } from '../../services/locationService.js'
 import { formatCommodityWithMode, resolveCommodity } from '../../services/commodityService.js'
 import type { LocationDisplayMode, CommodityDisplayMode, Currency } from '@kawakawa/types'
-
-const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+import { requireLinkedUser } from '../../utils/auth.js'
+import { COMPONENT_TIMEOUT } from '../../utils/interactions.js'
 
 // Setting definitions for display and validation
 interface SettingDef {
@@ -176,27 +176,10 @@ export const settings: Command = {
     .setDescription('View and manage your settings') as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
-
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Fetch price lists for the dropdown
     const priceListOptions = await db.query.priceLists.findMany({

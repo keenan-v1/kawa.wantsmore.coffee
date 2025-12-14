@@ -12,10 +12,10 @@ import {
 } from 'discord.js'
 import type { ChatInputCommandInteraction, ModalSubmitInteraction } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles, userSettings, fioUserStorage } from '@kawakawa/db'
+import { db, userSettings, fioUserStorage } from '@kawakawa/db'
 import { eq, and, desc } from 'drizzle-orm'
-
-const MODAL_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+import { requireLinkedUser } from '../../utils/auth.js'
+import { MODAL_TIMEOUT } from '../../utils/interactions.js'
 
 export const sync: Command = {
   data: new SlashCommandBuilder()
@@ -23,27 +23,10 @@ export const sync: Command = {
     .setDescription('Check your FIO sync status and configure credentials'),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
-
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId } = result
 
     // Check FIO credentials
     const fioUsernameRow = await db.query.userSettings.findFirst({

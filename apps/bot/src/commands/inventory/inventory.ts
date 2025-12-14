@@ -13,7 +13,7 @@ import type {
   ButtonInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
-import { db, userDiscordProfiles, fioUserStorage } from '@kawakawa/db'
+import { db, fioUserStorage } from '@kawakawa/db'
 import { eq, desc } from 'drizzle-orm'
 import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
 import {
@@ -24,8 +24,8 @@ import {
 } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
 import { type PaginatedItem } from '../../components/pagination.js'
-
-const COMPONENT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+import { requireLinkedUser } from '../../utils/auth.js'
+import { COMPONENT_TIMEOUT } from '../../utils/interactions.js'
 
 interface InventoryItemData {
   commodityTicker: string
@@ -192,32 +192,16 @@ export const inventory: Command = {
   },
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const discordId = interaction.user.id
     const commodityInput = interaction.options.getString('commodity')
     const locationInput = interaction.options.getString('location')
 
-    // Find user by Discord ID
-    const profile = await db.query.userDiscordProfiles.findFirst({
-      where: eq(userDiscordProfiles.discordId, discordId),
-      with: {
-        user: true,
-      },
-    })
-
-    if (!profile) {
-      await interaction.reply({
-        content:
-          'You do not have a linked Kawakawa account.\n\n' +
-          'Use `/register` to create a new account, or `/link` to connect an existing one.',
-        flags: MessageFlags.Ephemeral,
-      })
-      return
-    }
-
-    const userId = profile.user.id
+    // Require linked account
+    const result = await requireLinkedUser(interaction)
+    if (!result) return
+    const { userId, profile } = result
 
     // Get user's display preferences
-    const displaySettings = await getDisplaySettings(discordId)
+    const displaySettings = await getDisplaySettings(interaction.user.id)
 
     // Validate commodity filter (exact ticker match only)
     let resolvedCommodity: { ticker: string; name: string } | null = null
@@ -338,7 +322,7 @@ export const inventory: Command = {
     // Send interactive inventory response with action buttons
     await sendInteractiveInventory(
       interaction,
-      profile.user.displayName,
+      profile.user.displayName ?? profile.user.username,
       userId,
       allItems,
       flatInventory,
