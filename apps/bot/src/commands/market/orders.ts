@@ -27,7 +27,7 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings, getFioUsernames } from '../../services/userSettings.js'
-import { enrichSellOrdersWithQuantities } from '@kawakawa/services/market'
+import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
 import {
   formatGroupedOrdersMulti,
   buildFilterDescription,
@@ -451,23 +451,46 @@ async function sendOrdersWithManage(
             }
 
             // Build select menu options (single select for edit/delete)
-            const options: { label: string; value: string; description?: string }[] = []
-
-            for (const order of userSellOrders.slice(0, 12)) {
-              options.push({
-                label: `📤 SELL ${order.commodityTicker} @ ${order.locationId}`,
-                value: `sell:${order.id}`,
-                description: `${order.price} ${order.currency} (${order.orderType})`,
+            // Resolve prices from price lists
+            const sellOrderOptions = await Promise.all(
+              userSellOrders.slice(0, 12).map(async order => {
+                const priceInfo = await getOrderDisplayPrice({
+                  price: order.price,
+                  currency: order.currency,
+                  priceListCode: order.priceListCode,
+                  commodityTicker: order.commodityTicker,
+                  locationId: order.locationId,
+                })
+                const displayPrice = priceInfo ? priceInfo.price.toFixed(2) : order.price
+                const displayCurrency = priceInfo ? priceInfo.currency : order.currency
+                return {
+                  label: `📤 SELL ${order.commodityTicker} @ ${order.locationId}`,
+                  value: `sell:${order.id}`,
+                  description: `${displayPrice} ${displayCurrency} (${order.orderType})`,
+                }
               })
-            }
+            )
 
-            for (const order of userBuyOrders.slice(0, 12)) {
-              options.push({
-                label: `📥 BUY ${order.commodityTicker} @ ${order.locationId}`,
-                value: `buy:${order.id}`,
-                description: `${order.quantity}x @ ${order.price} ${order.currency}`,
+            const buyOrderOptions = await Promise.all(
+              userBuyOrders.slice(0, 12).map(async order => {
+                const priceInfo = await getOrderDisplayPrice({
+                  price: order.price,
+                  currency: order.currency,
+                  priceListCode: order.priceListCode,
+                  commodityTicker: order.commodityTicker,
+                  locationId: order.locationId,
+                })
+                const displayPrice = priceInfo ? priceInfo.price.toFixed(2) : order.price
+                const displayCurrency = priceInfo ? priceInfo.currency : order.currency
+                return {
+                  label: `📥 BUY ${order.commodityTicker} @ ${order.locationId}`,
+                  value: `buy:${order.id}`,
+                  description: `${order.quantity}x @ ${displayPrice} ${displayCurrency}`,
+                }
               })
-            }
+            )
+
+            const options = [...sellOrderOptions, ...buyOrderOptions]
 
             if (options.length === 0) {
               await btnInteraction.reply({

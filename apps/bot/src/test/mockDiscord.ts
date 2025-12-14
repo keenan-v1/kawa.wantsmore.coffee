@@ -170,7 +170,13 @@ class MockBooleanOption {
  */
 // Mock StringSelectMenuBuilder class
 export class MockStringSelectMenuBuilder {
-  private data: { customId?: string; placeholder?: string; options: unknown[] } = { options: [] }
+  private data: {
+    customId?: string
+    placeholder?: string
+    options: unknown[]
+    minValues?: number
+    maxValues?: number
+  } = { options: [] }
 
   setCustomId(id: string) {
     this.data.customId = id
@@ -178,6 +184,14 @@ export class MockStringSelectMenuBuilder {
   }
   setPlaceholder(placeholder: string) {
     this.data.placeholder = placeholder
+    return this
+  }
+  setMinValues(min: number) {
+    this.data.minValues = min
+    return this
+  }
+  setMaxValues(max: number) {
+    this.data.maxValues = max
     return this
   }
   addOptions(options: unknown[]) {

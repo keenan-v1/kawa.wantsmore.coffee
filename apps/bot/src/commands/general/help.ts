@@ -103,6 +103,33 @@ const COMMANDS: Record<string, HelpSection> = {
       },
     ],
   },
+  reservations: {
+    title: 'Reservations',
+    emoji: '📝',
+    commands: [
+      {
+        name: '/reserve',
+        description: 'Reserve items from a sell order',
+        details:
+          'Browse available sell orders for a commodity, then reserve a quantity.\n' +
+          'The seller will be notified and can confirm or reject.',
+      },
+      {
+        name: '/fill',
+        description: 'Offer to fill a buy order',
+        details:
+          'Browse open buy orders for a commodity, then offer to supply.\n' +
+          'The buyer will be notified and can confirm or reject.',
+      },
+      {
+        name: '/reservations',
+        description: 'View and manage your reservations',
+        details:
+          'See reservations where you are the order owner or counterparty.\n' +
+          'Confirm, reject, fulfill, or cancel reservations.',
+      },
+    ],
+  },
   settings: {
     title: 'Settings',
     emoji: '⚙️',
@@ -134,6 +161,7 @@ export const help: Command = {
           { name: 'Inventory', value: 'inventory' },
           { name: 'Creating Orders', value: 'orders' },
           { name: 'Market', value: 'market' },
+          { name: 'Reservations', value: 'reservations' },
           { name: 'Settings', value: 'settings' }
         )
     ) as SlashCommandBuilder,
