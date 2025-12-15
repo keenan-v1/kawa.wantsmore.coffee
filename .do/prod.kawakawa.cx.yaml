@@ -1,155 +1,155 @@
 alerts:
-- rule: DEPLOYMENT_FAILED
-- rule: DOMAIN_FAILED
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
 databases:
-- cluster_name: prod-db-kawakawa-cx
-  db_name: kawa-db
-  db_user: kawa-db
-  engine: PG
-  name: kawa-db
-  production: true
-  version: "17"
+  - cluster_name: prod-db-kawakawa-cx
+    db_name: kawa-db
+    db_user: kawa-db
+    engine: PG
+    name: kawa-db
+    production: true
+    version: '17'
 domains:
-- domain: kawakawa.cx
-  type: PRIMARY
-  zone: kawakawa.cx
+  - domain: kawakawa.cx
+    type: PRIMARY
+    zone: kawakawa.cx
 ingress:
   rules:
-  - component:
-      name: kawa-api
-    match:
-      path:
-        prefix: /api
-  - component:
-      name: kawa-web
-    match:
-      path:
-        prefix: /
+    - component:
+        name: kawa-api
+      match:
+        path:
+          prefix: /api
+    - component:
+        name: kawa-web
+      match:
+        path:
+          prefix: /
 jobs:
-- envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${kawa-db.DATABASE_URL}
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-api
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  kind: PRE_DEPLOY
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: db-migrate
-  run_command: node apps/api/dist/scripts/db-migrate.js
-- envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${kawa-db.DATABASE_URL}
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-api
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  kind: POST_DEPLOY
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: db-init
-  run_command: node apps/api/dist/scripts/db-init-idempotent.js
-- envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${kawa-db.DATABASE_URL}
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-api
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  kind: SCHEDULED
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: fio-sync
-  run_command: node apps/api/dist/scripts/sync-fio.js && node apps/api/dist/scripts/sync-all-users.js
-  schedule:
-    cron: 42 * * * *
+  - envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-api
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: PRE_DEPLOY
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: db-migrate
+    run_command: node apps/api/dist/scripts/db-migrate.js
+  - envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-api
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: POST_DEPLOY
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: db-init
+    run_command: node apps/api/dist/scripts/db-init-idempotent.js
+  - envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-api
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: SCHEDULED
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: fio-sync
+    run_command: node apps/api/dist/scripts/sync-fio.js all
+    schedule:
+      cron: 42 * * * *
 name: prod-kawakawa-cx
 region: nyc
 services:
-- envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${kawa-db.DATABASE_URL}
-  - key: PORT
-    scope: RUN_TIME
-    value: "3000"
-  http_port: 3000
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-api
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: kawa-api
-- http_port: 80
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-web
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: kawa-web
+  - envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+      - key: PORT
+        scope: RUN_TIME
+        value: '3000'
+    http_port: 3000
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-api
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: kawa-api
+  - http_port: 80
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-web
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: kawa-web
 workers:
-- envs:
-  - key: DATABASE_URL
-    scope: RUN_TIME
-    value: ${kawa-db.DATABASE_URL}
-  image:
-    registry: ghcr.io
-    registry_type: GHCR
-    repository: keenan-v1/kawakawa-bot
-    tag: main
-  instance_count: 1
-  instance_size_slug: apps-s-1vcpu-0.5gb
-  log_destinations:
-  - name: prod-kawakawa-cx
-    open_search:
-      basic_auth:
-        user: doadmin
-      cluster_name: db-opensearch-kawakawa-cx
-      index_name: logs-prod-kawakawa-cx
-  name: kawa-bot
+  - envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${kawa-db.DATABASE_URL}
+    image:
+      registry: ghcr.io
+      registry_type: GHCR
+      repository: keenan-v1/kawakawa-bot
+      tag: main
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    log_destinations:
+      - name: prod-kawakawa-cx
+        open_search:
+          basic_auth:
+            user: doadmin
+          cluster_name: db-opensearch-kawakawa-cx
+          index_name: logs-prod-kawakawa-cx
+    name: kawa-bot

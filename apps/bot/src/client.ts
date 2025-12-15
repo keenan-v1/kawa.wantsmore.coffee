@@ -222,19 +222,14 @@ export async function syncCommandsIfChanged(commands: Command[]): Promise<boolea
 
   const localCommandData = commands.map(cmd => cmd.data.toJSON() as Record<string, unknown>)
 
-  // Fetch currently registered commands from Discord
+  // Fetch currently registered global commands from Discord
+  // (global commands are the authoritative source since they support DMs)
   let remoteCommands: Record<string, unknown>[]
   try {
-    if (config.guildId) {
-      remoteCommands = (await rest.get(
-        Routes.applicationGuildCommands(config.clientId, config.guildId)
-      )) as Record<string, unknown>[]
-    } else {
-      remoteCommands = (await rest.get(Routes.applicationCommands(config.clientId))) as Record<
-        string,
-        unknown
-      >[]
-    }
+    remoteCommands = (await rest.get(Routes.applicationCommands(config.clientId))) as Record<
+      string,
+      unknown
+    >[]
   } catch (error) {
     logger.warn({ error }, 'Could not fetch remote commands, deploying all')
     await deployCommands(commands)
@@ -255,8 +250,8 @@ export async function syncCommandsIfChanged(commands: Command[]): Promise<boolea
 
 /**
  * Deploy slash commands to Discord.
- * If guildId is provided, commands are deployed to that guild (instant).
- * If guildId is null, commands are deployed globally (takes up to 1 hour).
+ * Commands are always deployed globally (for DM support).
+ * If guildId is provided, commands are also deployed to that guild (instant updates).
  */
 export async function deployCommands(commands: Command[]): Promise<void> {
   const config = await getConfig()
@@ -266,20 +261,26 @@ export async function deployCommands(commands: Command[]): Promise<void> {
 
   logger.info({ commandCount: commandData.length }, 'Deploying commands')
 
+  // Always deploy globally for DM support (takes up to 1 hour to propagate)
+  const globalData = (await rest.put(Routes.applicationCommands(config.clientId), {
+    body: commandData,
+  })) as unknown[]
+
+  logger.info({ deployedCount: globalData.length }, 'Global commands deployed')
+
+  // Also deploy to guild for instant updates (if configured)
   if (config.guildId) {
-    // Guild commands - instant update
-    const data = (await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), {
-      body: commandData,
-    })) as unknown[]
+    const guildData = (await rest.put(
+      Routes.applicationGuildCommands(config.clientId, config.guildId),
+      {
+        body: commandData,
+      }
+    )) as unknown[]
 
-    logger.info({ deployedCount: data.length, guildId: config.guildId }, 'Guild commands deployed')
-  } else {
-    // Global commands - takes up to 1 hour to propagate
-    const data = (await rest.put(Routes.applicationCommands(config.clientId), {
-      body: commandData,
-    })) as unknown[]
-
-    logger.info({ deployedCount: data.length }, 'Global commands deployed')
+    logger.info(
+      { deployedCount: guildData.length, guildId: config.guildId },
+      'Guild commands deployed'
+    )
   }
 }
 
