@@ -402,15 +402,24 @@
                           </v-chip>
                         </td>
                         <td class="text-right">
-                          <v-btn
-                            size="small"
-                            variant="tonal"
-                            color="primary"
-                            prepend-icon="mdi-pencil"
-                            @click.stop="editSellOrder(order)"
-                          >
-                            Edit
-                          </v-btn>
+                          <div class="d-flex justify-end ga-1">
+                            <v-btn
+                              size="small"
+                              variant="tonal"
+                              color="primary"
+                              prepend-icon="mdi-pencil"
+                              @click.stop="editSellOrder(order)"
+                            >
+                              Edit
+                            </v-btn>
+                            <v-btn
+                              size="small"
+                              variant="tonal"
+                              color="error"
+                              icon="mdi-delete"
+                              @click.stop="confirmDeleteSellOrder(order)"
+                            />
+                          </div>
                         </td>
                       </tr>
                     </tbody>
@@ -463,15 +472,24 @@
                           </v-chip>
                         </td>
                         <td class="text-right">
-                          <v-btn
-                            size="small"
-                            variant="tonal"
-                            color="primary"
-                            prepend-icon="mdi-pencil"
-                            @click.stop="editBuyOrder(order)"
-                          >
-                            Edit
-                          </v-btn>
+                          <div class="d-flex justify-end ga-1">
+                            <v-btn
+                              size="small"
+                              variant="tonal"
+                              color="primary"
+                              prepend-icon="mdi-pencil"
+                              @click.stop="editBuyOrder(order)"
+                            >
+                              Edit
+                            </v-btn>
+                            <v-btn
+                              size="small"
+                              variant="tonal"
+                              color="error"
+                              icon="mdi-delete"
+                              @click.stop="confirmDeleteBuyOrder(order)"
+                            />
+                          </div>
                         </td>
                       </tr>
                     </tbody>
@@ -544,6 +562,19 @@
 
     <!-- Buy Order Edit Dialog -->
     <BuyOrderEditDialog v-model="editBuyDialog" :order="editingBuyOrder" @saved="onEditSaved" />
+
+    <!-- Delete Confirmation Dialog -->
+    <ConfirmationDialog
+      v-model="deleteDialog"
+      :title="`Delete ${deletingOrderType === 'sell' ? 'Sell' : 'Buy'} Order?`"
+      :message="`Are you sure you want to delete this ${deletingOrderType} order? This action cannot be undone.`"
+      confirm-text="Delete"
+      confirm-color="error"
+      icon="mdi-delete-alert"
+      icon-color="error"
+      :loading="deleting"
+      @confirm="executeDelete"
+    />
   </v-container>
 </template>
 
@@ -569,6 +600,7 @@ import OrderDialog from '../components/OrderDialog.vue'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
 import SellOrderEditDialog from '../components/SellOrderEditDialog.vue'
 import BuyOrderEditDialog from '../components/BuyOrderEditDialog.vue'
+import ConfirmationDialog from '../components/ConfirmationDialog.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 import FioAgeChip from '../components/FioAgeChip.vue'
 import CommodityDisplay from '../components/CommodityDisplay.vue'
@@ -641,6 +673,12 @@ const editSellDialog = ref(false)
 const editingSellOrder = ref<SellOrderResponse | null>(null)
 const editBuyDialog = ref(false)
 const editingBuyOrder = ref<BuyOrderResponse | null>(null)
+
+// Delete dialog state
+const deleteDialog = ref(false)
+const deletingOrderType = ref<'sell' | 'buy'>('sell')
+const deletingOrderId = ref<number>(0)
+const deleting = ref(false)
 
 // Filters with URL deep linking
 const { filters, hasActiveFilters, clearFilters, setFilter } = useUrlFilters({
@@ -853,6 +891,41 @@ const viewBuyOrder = (order: BuyOrderResponse) => {
 const onEditSaved = () => {
   showSnackbar('Order updated successfully')
   loadOrders()
+}
+
+// Confirm delete sell order
+const confirmDeleteSellOrder = (order: SellOrderResponse) => {
+  deletingOrderType.value = 'sell'
+  deletingOrderId.value = order.id
+  deleteDialog.value = true
+}
+
+// Confirm delete buy order
+const confirmDeleteBuyOrder = (order: BuyOrderResponse) => {
+  deletingOrderType.value = 'buy'
+  deletingOrderId.value = order.id
+  deleteDialog.value = true
+}
+
+// Execute the delete
+const executeDelete = async () => {
+  try {
+    deleting.value = true
+    if (deletingOrderType.value === 'sell') {
+      await api.sellOrders.delete(deletingOrderId.value)
+    } else {
+      await api.buyOrders.delete(deletingOrderId.value)
+    }
+    showSnackbar(`${deletingOrderType.value === 'sell' ? 'Sell' : 'Buy'} order deleted`)
+    deleteDialog.value = false
+    loadOrders()
+  } catch (error) {
+    console.error('Failed to delete order', error)
+    const message = error instanceof Error ? error.message : 'Failed to delete order'
+    showSnackbar(message, 'error')
+  } finally {
+    deleting.value = false
+  }
 }
 
 // Handle order updated from detail dialog
