@@ -351,6 +351,9 @@ export class AdminDiscordController extends Controller {
         case 'currency':
           config.currency = value as 'CIS' | 'ICA' | 'AIC' | 'NCC'
           break
+        case 'messageVisibility':
+          config.messageVisibility = value as 'ephemeral' | 'public'
+          break
         case 'visibilityEnforced':
           config.visibilityEnforced = value === 'true'
           break
@@ -359,6 +362,9 @@ export class AdminDiscordController extends Controller {
           break
         case 'currencyEnforced':
           config.currencyEnforced = value === 'true'
+          break
+        case 'messageVisibilityEnforced':
+          config.messageVisibilityEnforced = value === 'true'
           break
         case 'announceInternal':
           config.announceInternal = value
@@ -402,6 +408,9 @@ export class AdminDiscordController extends Controller {
         case 'currency':
           config.currency = value as 'CIS' | 'ICA' | 'AIC' | 'NCC'
           break
+        case 'messageVisibility':
+          config.messageVisibility = value as 'ephemeral' | 'public'
+          break
         case 'visibilityEnforced':
           config.visibilityEnforced = value === 'true'
           break
@@ -410,6 +419,9 @@ export class AdminDiscordController extends Controller {
           break
         case 'currencyEnforced':
           config.currencyEnforced = value === 'true'
+          break
+        case 'messageVisibilityEnforced':
+          config.messageVisibilityEnforced = value === 'true'
           break
         case 'announceInternal':
           config.announceInternal = value
@@ -445,6 +457,9 @@ export class AdminDiscordController extends Controller {
     if (body.currency !== undefined) {
       updates.push({ key: 'currency', value: body.currency })
     }
+    if (body.messageVisibility !== undefined) {
+      updates.push({ key: 'messageVisibility', value: body.messageVisibility })
+    }
     if (body.visibilityEnforced !== undefined) {
       updates.push({
         key: 'visibilityEnforced',
@@ -461,6 +476,12 @@ export class AdminDiscordController extends Controller {
       updates.push({
         key: 'currencyEnforced',
         value: body.currencyEnforced === null ? null : String(body.currencyEnforced),
+      })
+    }
+    if (body.messageVisibilityEnforced !== undefined) {
+      updates.push({
+        key: 'messageVisibilityEnforced',
+        value: body.messageVisibilityEnforced === null ? null : String(body.messageVisibilityEnforced),
       })
     }
     if (body.announceInternal !== undefined) {
