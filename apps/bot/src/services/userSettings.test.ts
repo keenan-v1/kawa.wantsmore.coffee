@@ -86,6 +86,8 @@ describe('userSettings', () => {
         'discord.locationDisplayMode': 'natural-ids-only',
         'discord.commodityDisplayMode': 'ticker-only',
         'discord.messageVisibility': 'ephemeral',
+        'display.locationDisplayMode': 'both',
+        'display.commodityDisplayMode': 'both',
         'market.preferredCurrency': 'CIS',
         'market.defaultPriceList': null,
         'market.automaticPricing': false,

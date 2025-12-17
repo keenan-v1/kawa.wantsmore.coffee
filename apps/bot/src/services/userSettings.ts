@@ -8,13 +8,20 @@ import { eq, and, inArray } from 'drizzle-orm'
 import { settingsService } from '@kawakawa/services/settings'
 import type { LocationDisplayMode, CommodityDisplayMode, MessageVisibility } from '@kawakawa/types'
 
+// Special value to indicate "use website setting"
+export const USE_WEBSITE_SETTING = 'use-website'
+
 // Default values for Discord bot settings
 // Discord-specific display settings are separate from web to allow different preferences
 const DEFAULTS = {
   // Discord-specific display settings (separate from web)
-  'discord.locationDisplayMode': 'natural-ids-only' as LocationDisplayMode, // IDs only for compact Discord display
-  'discord.commodityDisplayMode': 'ticker-only' as CommodityDisplayMode, // Tickers only for compact Discord display
-  'discord.messageVisibility': 'ephemeral' as MessageVisibility, // Ephemeral by default
+  // Can be set to USE_WEBSITE_SETTING to inherit from web display settings
+  'discord.locationDisplayMode': 'natural-ids-only' as LocationDisplayMode | typeof USE_WEBSITE_SETTING,
+  'discord.commodityDisplayMode': 'ticker-only' as CommodityDisplayMode | typeof USE_WEBSITE_SETTING,
+  'discord.messageVisibility': 'ephemeral' as MessageVisibility, // Discord-only, no web equivalent
+  // Web display settings (fetched to support "use website" option)
+  'display.locationDisplayMode': 'both' as LocationDisplayMode,
+  'display.commodityDisplayMode': 'both' as CommodityDisplayMode,
   // Shared market settings
   'market.preferredCurrency': 'CIS',
   'market.defaultPriceList': null as string | null,
@@ -128,6 +135,7 @@ export async function getSettingsByDiscordId(
 /**
  * Get display settings for a Discord user with fallbacks.
  * Uses Discord-specific display settings (separate from web preferences).
+ * If a Discord setting is set to 'use-website', it will use the web display setting.
  */
 export async function getDisplaySettings(discordId: string): Promise<{
   locationDisplayMode: LocationDisplayMode
@@ -139,11 +147,32 @@ export async function getDisplaySettings(discordId: string): Promise<{
 }> {
   const settings = await getSettingsByDiscordId(discordId)
 
+  // Get Discord settings (may be 'use-website')
+  const discordLocationMode =
+    (settings?.['discord.locationDisplayMode'] ?? DEFAULTS['discord.locationDisplayMode']) as
+      | LocationDisplayMode
+      | typeof USE_WEBSITE_SETTING
+  const discordCommodityMode =
+    (settings?.['discord.commodityDisplayMode'] ?? DEFAULTS['discord.commodityDisplayMode']) as
+      | CommodityDisplayMode
+      | typeof USE_WEBSITE_SETTING
+
+  // Resolve 'use-website' to web settings
+  const locationDisplayMode =
+    discordLocationMode === USE_WEBSITE_SETTING
+      ? ((settings?.['display.locationDisplayMode'] ??
+          DEFAULTS['display.locationDisplayMode']) as LocationDisplayMode)
+      : discordLocationMode
+
+  const commodityDisplayMode =
+    discordCommodityMode === USE_WEBSITE_SETTING
+      ? ((settings?.['display.commodityDisplayMode'] ??
+          DEFAULTS['display.commodityDisplayMode']) as CommodityDisplayMode)
+      : discordCommodityMode
+
   return {
-    locationDisplayMode: (settings?.['discord.locationDisplayMode'] ??
-      DEFAULTS['discord.locationDisplayMode']) as LocationDisplayMode,
-    commodityDisplayMode: (settings?.['discord.commodityDisplayMode'] ??
-      DEFAULTS['discord.commodityDisplayMode']) as CommodityDisplayMode,
+    locationDisplayMode,
+    commodityDisplayMode,
     messageVisibility: (settings?.['discord.messageVisibility'] ??
       DEFAULTS['discord.messageVisibility']) as MessageVisibility,
     preferredCurrency: (settings?.['market.preferredCurrency'] ??

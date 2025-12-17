@@ -21,7 +21,12 @@ import type {
 import type { Command } from '../../client.js'
 import { db, priceLists } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
-import { getUserSettings, setSetting, deleteSetting } from '../../services/userSettings.js'
+import {
+  getUserSettings,
+  setSetting,
+  deleteSetting,
+  USE_WEBSITE_SETTING,
+} from '../../services/userSettings.js'
 import { formatLocation, resolveLocation } from '../../services/locationService.js'
 import { formatCommodityWithMode, resolveCommodity } from '../../services/commodityService.js'
 import type { LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
@@ -46,6 +51,7 @@ const SETTING_DEFINITIONS: SettingDef[] = [
     description: 'How locations are shown in Discord',
     type: 'enum',
     options: [
+      { label: 'Use website setting', value: USE_WEBSITE_SETTING },
       { label: 'Names only (Katoa)', value: 'names-only' },
       { label: 'IDs only (UV-351a)', value: 'natural-ids-only' },
       { label: 'Both (Katoa [UV-351a])', value: 'both' },
@@ -57,9 +63,20 @@ const SETTING_DEFINITIONS: SettingDef[] = [
     description: 'How commodities are shown in Discord',
     type: 'enum',
     options: [
+      { label: 'Use website setting', value: USE_WEBSITE_SETTING },
       { label: 'Tickers only (COF)', value: 'ticker-only' },
       { label: 'Names only (Coffee)', value: 'name-only' },
       { label: 'Both (COF - Coffee)', value: 'both' },
+    ],
+  },
+  {
+    key: 'discord.messageVisibility',
+    label: 'Message Visibility',
+    description: 'Whether replies are private or public',
+    type: 'enum',
+    options: [
+      { label: 'Private (only you)', value: 'ephemeral' },
+      { label: 'Public (visible to all)', value: 'public' },
     ],
   },
   // Market settings
@@ -111,7 +128,11 @@ function getSettingDef(key: string): SettingDef | undefined {
   return SETTING_DEFINITIONS.find(d => d.key === key)
 }
 
-function formatSettingValue(key: string, value: unknown): string {
+function formatSettingValue(
+  key: string,
+  value: unknown,
+  allSettings?: Record<string, unknown>
+): string {
   const def = getSettingDef(key)
   if (!def) return String(value)
 
@@ -125,7 +146,22 @@ function formatSettingValue(key: string, value: unknown): string {
 
   if (def.type === 'enum' && def.options) {
     const opt = def.options.find(o => o.value === value)
-    return opt?.label ?? String(value)
+    const label = opt?.label ?? String(value)
+
+    // For "use-website", show the resolved value from web settings
+    if (value === USE_WEBSITE_SETTING && allSettings) {
+      const webKey = key.replace('discord.', 'display.')
+      const webValue = allSettings[webKey]
+      if (webValue !== undefined) {
+        // Find the label for the web value (excluding the use-website option)
+        const webOpt = def.options.find(o => o.value === webValue && o.value !== USE_WEBSITE_SETTING)
+        if (webOpt) {
+          return `${label} → ${webOpt.label}`
+        }
+      }
+    }
+
+    return label
   }
 
   // Favorites are handled separately by formatFavoritesValue
@@ -209,7 +245,7 @@ export const settings: Command = {
       embed.addFields({
         name: '📺 Display (Discord)',
         value: displaySettings
-          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key])}`)
+          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`)
           .join('\n'),
         inline: false,
       })
@@ -218,7 +254,7 @@ export const settings: Command = {
       embed.addFields({
         name: '💰 Market',
         value: marketSettings
-          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key])}`)
+          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`)
           .join('\n'),
         inline: false,
       })
