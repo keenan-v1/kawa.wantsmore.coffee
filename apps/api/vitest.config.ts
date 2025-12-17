@@ -15,7 +15,17 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.config.*',
         '**/index.ts',
+        // Re-export files with no logic
+        'src/services/discordService.ts',
+        'src/services/settingsService.ts',
+        'src/utils/permissionService.ts',
       ],
+      thresholds: {
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      },
     },
   },
 })

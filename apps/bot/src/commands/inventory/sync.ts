@@ -104,15 +104,24 @@ export const sync: Command = {
     }
 
     // Set description based on status
+    const whatWeSyncInfo =
+      '\n\n**What we sync:**\n' +
+      '• Your FIO profile (username, company)\n' +
+      '• Inventory from all storage locations\n' +
+      '• Contracts with other players\n\n' +
+      "_We don't access your financial data or personal settings._"
+
     if (hasFioCredentials) {
       embed.setDescription(
         'Your FIO credentials are configured.\n\n' +
-          '**Note:** Inventory sync runs automatically. Use `/inventory` to view your synced inventory.'
+          '**Note:** Inventory sync runs automatically. Use `/inventory` to view your synced inventory.' +
+          whatWeSyncInfo
       )
     } else {
       embed.setDescription(
         'Configure your FIO credentials to enable inventory syncing.\n\n' +
-          'You can find your FIO API key at [fnar.net](https://fnar.net) under your profile settings.'
+          'You can find your FIO API key at [fnar.net](https://fnar.net) under your profile settings.' +
+          whatWeSyncInfo
       )
     }
 

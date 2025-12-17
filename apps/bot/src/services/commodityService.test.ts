@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   formatCommodity,
+  formatCommodityWithMode,
   resolveCommodity,
   getCommodity,
   getAllCommodities,
@@ -49,6 +50,38 @@ describe('commodityService', () => {
 
     it('handles empty string', () => {
       expect(formatCommodity('')).toBe('')
+    })
+  })
+
+  describe('formatCommodityWithMode', () => {
+    it('returns ticker only in ticker-only mode', async () => {
+      const result = await formatCommodityWithMode('h2o', 'ticker-only')
+      expect(result).toBe('H2O')
+    })
+
+    it('returns name only in name-only mode', async () => {
+      const result = await formatCommodityWithMode('h2o', 'name-only')
+      expect(result).toBe('Water')
+    })
+
+    it('returns ticker and name in both mode', async () => {
+      const result = await formatCommodityWithMode('h2o', 'both')
+      expect(result).toBe('H2O - Water')
+    })
+
+    it('defaults to both mode', async () => {
+      const result = await formatCommodityWithMode('h2o')
+      expect(result).toBe('H2O - Water')
+    })
+
+    it('returns uppercase ticker for unknown commodity', async () => {
+      const result = await formatCommodityWithMode('unknown', 'both')
+      expect(result).toBe('UNKNOWN')
+    })
+
+    it('is case-insensitive for input', async () => {
+      const result = await formatCommodityWithMode('RaT', 'name-only')
+      expect(result).toBe('Rations')
     })
   })
 

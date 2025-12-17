@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   index,
   jsonb,
+  bigint,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -72,6 +73,16 @@ export const priceListTypeEnum = pgEnum('price_list_type', ['fio', 'custom'])
 export const importSourceTypeEnum = pgEnum('import_source_type', ['csv', 'google_sheets'])
 
 export const importFormatEnum = pgEnum('import_format', ['flat', 'pivot', 'kawa'])
+
+// ==================== FIO CONTRACT SYSTEM ENUMS ====================
+export const fioContractStatusEnum = pgEnum('fio_contract_status', [
+  'pending',
+  'partially_fulfilled',
+  'fulfilled',
+  'closed',
+  'breached',
+  'terminated',
+])
 
 // ==================== SETTINGS (Generic key-value with history) ====================
 export const settings = pgTable(
@@ -305,6 +316,88 @@ export const fioInventory = pgTable('fio_inventory', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// ==================== FIO USER DATA (Profile from FIO /user/{UserName} endpoint) ====================
+export const fioUserData = pgTable(
+  'fio_user_data',
+  {
+    id: serial('id').primaryKey(),
+
+    // Link to our user
+    userId: integer('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    // FIO identifiers
+    fioUserId: varchar('fio_user_id', { length: 50 }).notNull(), // FIO's UserId
+    fioUserName: varchar('fio_user_name', { length: 100 }).notNull(),
+
+    // Company info (used to match contract partners)
+    companyId: varchar('company_id', { length: 50 }),
+    companyName: varchar('company_name', { length: 100 }),
+    companyCode: varchar('company_code', { length: 20 }), // e.g., "CAFS"
+
+    // Corporation info
+    corporationId: varchar('corporation_id', { length: 50 }),
+    corporationName: varchar('corporation_name', { length: 100 }),
+    corporationCode: varchar('corporation_code', { length: 20 }), // e.g., "KAWA"
+
+    // Country/faction info
+    countryId: varchar('country_id', { length: 50 }),
+    countryCode: varchar('country_code', { length: 20 }),
+    countryName: varchar('country_name', { length: 100 }),
+
+    // Timestamps
+    fioTimestamp: timestamp('fio_timestamp').notNull(), // From FIO
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    companyCodeIdx: index('fio_user_data_company_code_idx').on(table.companyCode),
+    corporationCodeIdx: index('fio_user_data_corporation_code_idx').on(table.corporationCode),
+  })
+)
+
+// ==================== FIO CONTRACTS (Synced from FIO /contract/allcontracts endpoint) ====================
+export const fioContracts = pgTable(
+  'fio_contracts',
+  {
+    id: serial('id').primaryKey(),
+
+    // FIO identifiers
+    fioContractId: varchar('fio_contract_id', { length: 50 }).notNull().unique(), // UUID from FIO
+    localId: varchar('local_id', { length: 20 }).notNull(), // Human-readable "M6SSM9O"
+
+    // User who synced this contract
+    syncedByUserId: integer('synced_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    // Party info (from syncing user's perspective)
+    userParty: varchar('user_party', { length: 20 }).notNull(), // 'CUSTOMER' or 'PROVIDER'
+    partnerCompanyCode: varchar('partner_company_code', { length: 20 }),
+    partnerName: varchar('partner_name', { length: 100 }).notNull(),
+    partnerUserId: integer('partner_user_id').references(() => users.id, { onDelete: 'set null' }), // Matched app user (if found)
+
+    // Contract metadata
+    status: fioContractStatusEnum('status').notNull(),
+    name: varchar('name', { length: 200 }),
+    preamble: text('preamble'),
+    contractDateMs: bigint('contract_date_ms', { mode: 'number' }).notNull(),
+    dueDateMs: bigint('due_date_ms', { mode: 'number' }),
+
+    // Timestamps
+    fioTimestamp: timestamp('fio_timestamp').notNull(), // From FIO
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    syncedByIdx: index('fio_contracts_synced_by_idx').on(table.syncedByUserId),
+    partnerIdx: index('fio_contracts_partner_idx').on(table.partnerUserId),
+    localIdIdx: index('fio_contracts_local_id_idx').on(table.localId),
+  })
+)
+
 // ==================== SELL ORDERS ====================
 export const sellOrders = pgTable(
   'sell_orders',
@@ -408,6 +501,9 @@ export const orderReservations = pgTable(
     status: reservationStatusEnum('status').notNull().default('pending'),
     notes: text('notes'),
     expiresAt: timestamp('expires_at'),
+    // Link to FIO contract condition (if created from contract sync)
+    // Note: FK defined separately in fioContractConditions to avoid circular dependency
+    fioConditionId: integer('fio_condition_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -415,6 +511,53 @@ export const orderReservations = pgTable(
     sellOrderIdx: index('order_reservations_sell_order_idx').on(table.sellOrderId),
     buyOrderIdx: index('order_reservations_buy_order_idx').on(table.buyOrderId),
     counterpartyIdx: index('order_reservations_counterparty_idx').on(table.counterpartyUserId),
+    fioConditionIdx: index('order_reservations_fio_condition_idx').on(table.fioConditionId),
+  })
+)
+
+// ==================== FIO CONTRACT CONDITIONS (Line items from FIO contracts) ====================
+export const fioContractConditions = pgTable(
+  'fio_contract_conditions',
+  {
+    id: serial('id').primaryKey(),
+    contractId: integer('contract_id')
+      .notNull()
+      .references(() => fioContracts.id, { onDelete: 'cascade' }),
+
+    // FIO identifiers
+    fioConditionId: varchar('fio_condition_id', { length: 50 }).notNull().unique(),
+    conditionIndex: integer('condition_index').notNull(),
+
+    // Condition details
+    type: varchar('type', { length: 30 }).notNull(), // PAYMENT, PROVISION, DELIVERY, etc.
+    party: varchar('party', { length: 20 }).notNull(), // CUSTOMER or PROVIDER
+    status: varchar('status', { length: 20 }).notNull(), // PENDING, FULFILLED
+
+    // Material info (nullable for PAYMENT conditions)
+    materialTicker: varchar('material_ticker', { length: 10 }),
+    materialAmount: integer('material_amount'),
+    locationRaw: varchar('location_raw', { length: 100 }), // Raw address from FIO
+    locationId: varchar('location_id', { length: 20 }).references(() => fioLocations.naturalId), // Parsed/matched location
+
+    // Payment info (nullable for material conditions)
+    paymentAmount: decimal('payment_amount', { precision: 18, scale: 2 }),
+    paymentCurrency: varchar('payment_currency', { length: 10 }),
+
+    // Link to reservation (if matched)
+    reservationId: integer('reservation_id').references(() => orderReservations.id, {
+      onDelete: 'set null',
+    }),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  table => ({
+    contractIdx: index('fio_contract_conditions_contract_idx').on(table.contractId),
+    reservationIdx: index('fio_contract_conditions_reservation_idx').on(table.reservationId),
+    materialIdx: index('fio_contract_conditions_material_idx').on(
+      table.materialTicker,
+      table.locationId
+    ),
   })
 )
 
@@ -631,6 +774,42 @@ export const fioInventoryRelations = relations(fioInventory, ({ one }) => ({
   }),
 }))
 
+export const fioUserDataRelations = relations(fioUserData, ({ one }) => ({
+  user: one(users, {
+    fields: [fioUserData.userId],
+    references: [users.id],
+  }),
+}))
+
+export const fioContractsRelations = relations(fioContracts, ({ one, many }) => ({
+  syncedByUser: one(users, {
+    fields: [fioContracts.syncedByUserId],
+    references: [users.id],
+    relationName: 'syncedByUser',
+  }),
+  partnerUser: one(users, {
+    fields: [fioContracts.partnerUserId],
+    references: [users.id],
+    relationName: 'partnerUser',
+  }),
+  conditions: many(fioContractConditions),
+}))
+
+export const fioContractConditionsRelations = relations(fioContractConditions, ({ one }) => ({
+  contract: one(fioContracts, {
+    fields: [fioContractConditions.contractId],
+    references: [fioContracts.id],
+  }),
+  location: one(fioLocations, {
+    fields: [fioContractConditions.locationId],
+    references: [fioLocations.naturalId],
+  }),
+  reservation: one(orderReservations, {
+    fields: [fioContractConditions.reservationId],
+    references: [orderReservations.id],
+  }),
+}))
+
 export const sellOrdersRelations = relations(sellOrders, ({ one, many }) => ({
   user: one(users, {
     fields: [sellOrders.userId],
@@ -707,6 +886,10 @@ export const orderReservationsRelations = relations(orderReservations, ({ one })
   counterpartyUser: one(users, {
     fields: [orderReservations.counterpartyUserId],
     references: [users.id],
+  }),
+  fioCondition: one(fioContractConditions, {
+    fields: [orderReservations.fioConditionId],
+    references: [fioContractConditions.id],
   }),
 }))
 

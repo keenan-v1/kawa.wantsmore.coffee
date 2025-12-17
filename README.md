@@ -15,14 +15,14 @@ While the game has public commodity exchanges, this platform serves as the corpo
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Vue 3, TypeScript, Vuetify, Vite |
-| Backend | Node.js, Express, TSOA, TypeScript |
-| Database | PostgreSQL 17, Drizzle ORM |
-| Bot | Discord.js |
-| Infrastructure | Turborepo, pnpm, Docker |
-| Deployment | DigitalOcean App Platform |
+| Layer          | Technology                         |
+| -------------- | ---------------------------------- |
+| Frontend       | Vue 3, TypeScript, Vuetify, Vite   |
+| Backend        | Node.js, Express, TSOA, TypeScript |
+| Database       | PostgreSQL 17, Drizzle ORM         |
+| Bot            | Discord.js                         |
+| Infrastructure | Turborepo, pnpm, Docker            |
+| Deployment     | DigitalOcean App Platform          |
 
 ## Getting Started
 
@@ -37,6 +37,7 @@ While the game has public commodity exchanges, this platform serves as the corpo
 The easiest way to get started is using the dev container, which includes PostgreSQL and all dependencies pre-configured.
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/kawakawa-inc/kawakawa-cx.git
    cd kawakawa-cx
@@ -45,6 +46,7 @@ The easiest way to get started is using the dev container, which includes Postgr
 2. Open in VS Code and select **"Reopen in Container"** when prompted
 
 3. Initialize the database:
+
    ```bash
    make db-init-dev
    ```
@@ -61,6 +63,7 @@ The web app will be available at `http://localhost:5173` and the API at `http://
 If not using the dev container, you'll need to configure the database connection manually.
 
 1. Clone the repository and install dependencies:
+
    ```bash
    git clone https://github.com/kawakawa-inc/kawakawa-cx.git
    cd kawakawa-cx
@@ -68,12 +71,14 @@ If not using the dev container, you'll need to configure the database connection
    ```
 
 2. Create environment files from examples:
+
    ```bash
    cp .env.example .env
    cp apps/api/.env.example apps/api/.env
    ```
 
 3. Update `apps/api/.env` with your PostgreSQL connection:
+
    ```bash
    DATABASE_URL=postgresql://username:password@localhost:5432/kawa_market
    JWT_SECRET=your-secret-key  # Generate with: openssl rand -base64 32

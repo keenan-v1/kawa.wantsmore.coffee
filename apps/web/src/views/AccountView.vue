@@ -677,6 +677,25 @@
 
                 <v-divider class="my-4" />
 
+                <!-- Data Transparency Section -->
+                <div class="text-subtitle-1 font-weight-bold mb-3">What We Sync</div>
+                <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                  <div class="text-body-2">
+                    <strong>Profile:</strong> Username, Company Name/Code, Corporation, Country
+                  </div>
+                  <div class="text-body-2">
+                    <strong>Inventory:</strong> Storage locations and item quantities
+                  </div>
+                  <div class="text-body-2">
+                    <strong>Contracts:</strong> Trade agreements (auto-matched to your orders)
+                  </div>
+                  <div class="text-caption text-medium-emphasis mt-2">
+                    We do NOT sync: Financial data, subscription status, or personal settings
+                  </div>
+                </v-alert>
+
+                <v-divider class="my-4" />
+
                 <div class="text-subtitle-1 font-weight-bold mb-3">Sync Preferences</div>
 
                 <v-switch

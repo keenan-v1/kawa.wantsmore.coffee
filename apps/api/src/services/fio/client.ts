@@ -372,6 +372,41 @@ export class FioClient {
   }
 
   /**
+   * Fetch all contracts for a user from FIO API
+   * Returns all contracts the user is party to (as CUSTOMER or PROVIDER)
+   * Requires API key authentication via Authorization header
+   */
+  async getUserContracts<T>(apiKey: string): Promise<T> {
+    const url = new URL(`${this.baseUrl}/contract/allcontracts`)
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: apiKey,
+    }
+
+    try {
+      const response = await fetch(url.toString(), { headers })
+
+      if (!response.ok) {
+        throw new FioApiError(
+          `FIO API request failed: ${response.statusText}`,
+          response.status,
+          await response.text()
+        )
+      }
+
+      return (await response.json()) as T
+    } catch (error) {
+      if (error instanceof FioApiError) {
+        throw error
+      }
+      throw new FioApiError(
+        `Failed to fetch user contracts from FIO API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
+    }
+  }
+
+  /**
    * Get the jump count (number of system jumps) between two locations
    * Locations can be: SystemId, PlanetId, PlanetNaturalId, or PlanetName
    * Results are cached since planetary distances don't change.

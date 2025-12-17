@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FioInventoryController } from './FioInventoryController.js'
 import { db } from '../db/index.js'
 import * as syncUserInventoryModule from '../services/fio/sync-user-inventory.js'
+import * as syncUserDataModule from '../services/fio/sync-user-data.js'
+import * as syncContractsModule from '../services/fio/sync-contracts.js'
 import * as userSettingsService from '../services/userSettingsService.js'
 
 vi.mock('../db/index.js', () => ({
@@ -40,6 +42,14 @@ vi.mock('../db/index.js', () => ({
 
 vi.mock('../services/fio/sync-user-inventory.js', () => ({
   syncUserInventory: vi.fn(),
+}))
+
+vi.mock('../services/fio/sync-user-data.js', () => ({
+  syncFioUserData: vi.fn(),
+}))
+
+vi.mock('../services/fio/sync-contracts.js', () => ({
+  syncUserContracts: vi.fn(),
 }))
 
 vi.mock('../services/userSettingsService.js', () => ({
@@ -141,6 +151,18 @@ describe('FioInventoryController', () => {
       // Mock excluded locations from userSettingsService
       vi.mocked(userSettingsService.getSetting).mockResolvedValueOnce(['UV-351a'])
 
+      // Mock user data sync
+      vi.mocked(syncUserDataModule.syncFioUserData).mockResolvedValueOnce({
+        success: true,
+        inserted: 1,
+        updated: 0,
+        errors: [],
+        companyCode: 'CAFS',
+        corporationCode: 'KAWA',
+        fioTimestamp: '2024-01-01T12:00:00.000Z',
+      })
+
+      // Mock inventory sync
       vi.mocked(syncUserInventoryModule.syncUserInventory).mockResolvedValueOnce({
         success: true,
         inserted: 50,
@@ -151,6 +173,21 @@ describe('FioInventoryController', () => {
         skippedUnknownCommodities: 1,
         skippedExcludedLocations: 5,
         fioLastSync: '2024-01-01T12:00:00.000Z',
+      })
+
+      // Mock contracts sync
+      vi.mocked(syncContractsModule.syncUserContracts).mockResolvedValueOnce({
+        success: true,
+        inserted: 5,
+        updated: 0,
+        errors: [],
+        contractsProcessed: 5,
+        conditionsProcessed: 10,
+        reservationsCreated: 2,
+        reservationsUpdated: 0,
+        skippedNoMatch: 3,
+        skippedExternalPartner: 5,
+        skippedAlreadyLinked: 0,
       })
 
       const result = await controller.syncInventory(mockRequest)
@@ -164,13 +201,31 @@ describe('FioInventoryController', () => {
         skippedUnknownCommodities: 1,
         skippedExcludedLocations: 5,
         fioLastSync: '2024-01-01T12:00:00.000Z',
+        userData: {
+          success: true,
+          companyCode: 'CAFS',
+          corporationCode: 'KAWA',
+        },
+        contracts: {
+          success: true,
+          contractsProcessed: 5,
+          reservationsCreated: 2,
+          skippedNoMatch: 3,
+          skippedExternalPartner: 5,
+        },
       })
+      expect(syncUserDataModule.syncFioUserData).toHaveBeenCalledWith(
+        1,
+        'fio-api-key-123',
+        'fiouser'
+      )
       expect(syncUserInventoryModule.syncUserInventory).toHaveBeenCalledWith(
         1,
         'fio-api-key-123',
         'fiouser',
         { excludedLocations: ['UV-351a'] }
       )
+      expect(syncContractsModule.syncUserContracts).toHaveBeenCalledWith(1, 'fio-api-key-123')
     })
 
     it('should throw error when FIO username is not configured', async () => {
@@ -226,6 +281,18 @@ describe('FioInventoryController', () => {
       // Mock excluded locations from userSettingsService (empty array)
       vi.mocked(userSettingsService.getSetting).mockResolvedValueOnce([])
 
+      // Mock user data sync (success)
+      vi.mocked(syncUserDataModule.syncFioUserData).mockResolvedValueOnce({
+        success: true,
+        inserted: 0,
+        updated: 1,
+        errors: [],
+        companyCode: 'CAFS',
+        corporationCode: 'KAWA',
+        fioTimestamp: '2024-01-01T12:00:00.000Z',
+      })
+
+      // Mock inventory sync (failure)
       vi.mocked(syncUserInventoryModule.syncUserInventory).mockResolvedValueOnce({
         success: false,
         inserted: 45,
@@ -236,6 +303,21 @@ describe('FioInventoryController', () => {
         skippedUnknownCommodities: 0,
         skippedExcludedLocations: 0,
         fioLastSync: null,
+      })
+
+      // Mock contracts sync (success)
+      vi.mocked(syncContractsModule.syncUserContracts).mockResolvedValueOnce({
+        success: true,
+        inserted: 0,
+        updated: 0,
+        errors: [],
+        contractsProcessed: 0,
+        conditionsProcessed: 0,
+        reservationsCreated: 0,
+        reservationsUpdated: 0,
+        skippedNoMatch: 0,
+        skippedExternalPartner: 0,
+        skippedAlreadyLinked: 0,
       })
 
       const result = await controller.syncInventory(mockRequest)
@@ -323,6 +405,161 @@ describe('FioInventoryController', () => {
 
       expect(result).toEqual({
         locationIds: [],
+      })
+    })
+  })
+
+  describe('getStats', () => {
+    it('should return FIO inventory statistics', async () => {
+      // Mock storage stats query
+      const mockStorageStats = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValueOnce([
+          {
+            storageCount: 3,
+            newestSync: new Date('2024-01-15T12:00:00Z'),
+            oldestFioUpload: new Date('2024-01-10T08:00:00Z'),
+            newestFioUpload: new Date('2024-01-15T10:00:00Z'),
+          },
+        ]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockStorageStats as any)
+
+      // Mock oldest location query
+      const mockOldestLocation = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValueOnce([
+          {
+            storageType: 'STORE',
+            locationNaturalId: 'UV-351a',
+            fioUploadedAt: new Date('2024-01-10T08:00:00Z'),
+          },
+        ]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockOldestLocation as any)
+
+      // Mock inventory stats query
+      const mockInventoryStats = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValueOnce([
+          { totalQuantity: 1000, ticker: 'H2O' },
+          { totalQuantity: 500, ticker: 'RAT' },
+          { totalQuantity: 200, ticker: 'H2O' },
+        ]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockInventoryStats as any)
+
+      const result = await controller.getStats(mockRequest)
+
+      expect(result).toEqual({
+        totalItems: 3,
+        totalQuantity: 1700,
+        uniqueCommodities: 2,
+        storageLocations: 3,
+        newestSyncTime: '2024-01-15T12:00:00.000Z',
+        oldestFioUploadTime: '2024-01-10T08:00:00.000Z',
+        oldestFioUploadLocation: {
+          storageType: 'STORE',
+          locationNaturalId: 'UV-351a',
+        },
+        newestFioUploadTime: '2024-01-15T10:00:00.000Z',
+      })
+    })
+
+    it('should return null values when no data exists', async () => {
+      // Mock storage stats query (empty)
+      const mockStorageStats = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValueOnce([
+          {
+            storageCount: 0,
+            newestSync: null,
+            oldestFioUpload: null,
+            newestFioUpload: null,
+          },
+        ]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockStorageStats as any)
+
+      // Mock oldest location query (empty)
+      const mockOldestLocation = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValueOnce([]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockOldestLocation as any)
+
+      // Mock inventory stats query (empty)
+      const mockInventoryStats = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValueOnce([]),
+      }
+      vi.mocked(db.select).mockReturnValueOnce(mockInventoryStats as any)
+
+      const result = await controller.getStats(mockRequest)
+
+      expect(result).toEqual({
+        totalItems: 0,
+        totalQuantity: 0,
+        uniqueCommodities: 0,
+        storageLocations: 0,
+        newestSyncTime: null,
+        oldestFioUploadTime: null,
+        oldestFioUploadLocation: null,
+        newestFioUploadTime: null,
+      })
+    })
+  })
+
+  describe('clearInventory', () => {
+    let mockDelete: any
+
+    beforeEach(() => {
+      mockDelete = {
+        where: vi.fn().mockResolvedValue(undefined),
+      }
+      vi.mocked(db.delete).mockReturnValue(mockDelete)
+    })
+
+    it('should clear all user inventory and storage', async () => {
+      // Mock getting storage IDs
+      mockSelect.where.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      // Mock count for each storage before deletion
+      const mockCountSelect = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([{ count: 10 }]),
+      }
+      vi.mocked(db.select)
+        .mockReturnValueOnce(mockSelect) // storage IDs
+        .mockReturnValueOnce(mockCountSelect as any) // count for storage 1
+        .mockReturnValueOnce(mockCountSelect as any) // count for storage 2
+        .mockReturnValueOnce(mockCountSelect as any) // count for storage 3
+
+      const result = await controller.clearInventory(mockRequest)
+
+      expect(result).toEqual({
+        success: true,
+        deletedItems: 30, // 10 items per storage
+        deletedStorages: 3,
+      })
+      expect(db.delete).toHaveBeenCalled()
+    })
+
+    it('should return zeros when user has no storage', async () => {
+      mockSelect.where.mockResolvedValueOnce([])
+
+      const result = await controller.clearInventory(mockRequest)
+
+      expect(result).toEqual({
+        success: true,
+        deletedItems: 0,
+        deletedStorages: 0,
       })
     })
   })

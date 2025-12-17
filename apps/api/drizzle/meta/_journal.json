@@ -36,6 +36,13 @@
       "when": 1765740913646,
       "tag": "0004_curvy_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1765910308170,
+      "tag": "0005_normal_nova",
+      "breakpoints": true
     }
   ]
 }

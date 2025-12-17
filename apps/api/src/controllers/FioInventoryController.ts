@@ -14,6 +14,8 @@ import { eq, count, min, max } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest } from '../utils/errors.js'
 import { syncUserInventory } from '../services/fio/sync-user-inventory.js'
+import { syncFioUserData } from '../services/fio/sync-user-data.js'
+import { syncUserContracts } from '../services/fio/sync-contracts.js'
 import * as userSettingsService from '../services/userSettingsService.js'
 
 interface FioInventorySyncResult {
@@ -25,6 +27,20 @@ interface FioInventorySyncResult {
   skippedUnknownCommodities: number
   skippedExcludedLocations: number
   fioLastSync: string | null
+  // User data sync results
+  userData: {
+    success: boolean
+    companyCode: string | null
+    corporationCode: string | null
+  }
+  // Contract sync results
+  contracts: {
+    success: boolean
+    contractsProcessed: number
+    reservationsCreated: number
+    skippedNoMatch: number
+    skippedExternalPartner: number
+  }
 }
 
 interface FioStatsResponse {
@@ -108,7 +124,8 @@ export class FioInventoryController extends Controller {
   }
 
   /**
-   * Sync the current user's inventory from FIO
+   * Sync the current user's data from FIO
+   * Syncs: user profile data, inventory, and contracts
    * Requires the user to have FIO credentials configured
    */
   @Post('sync')
@@ -134,20 +151,45 @@ export class FioInventoryController extends Controller {
       'fio.excludedLocations'
     )) as string[]
 
-    // Perform sync with excluded locations
-    const result = await syncUserInventory(userId, fioApiKey, fioUsername, {
+    // 1. Sync user profile data first (needed for contract partner matching)
+    const userDataResult = await syncFioUserData(userId, fioApiKey, fioUsername)
+
+    // 2. Sync inventory
+    const inventoryResult = await syncUserInventory(userId, fioApiKey, fioUsername, {
       excludedLocations: excludedLocations ?? [],
     })
 
+    // 3. Sync contracts and auto-match to orders
+    const contractsResult = await syncUserContracts(userId, fioApiKey)
+
+    // Combine all errors
+    const allErrors = [
+      ...userDataResult.errors,
+      ...inventoryResult.errors,
+      ...contractsResult.errors,
+    ]
+
     return {
-      success: result.success,
-      inserted: result.inserted,
-      storageLocations: result.storageLocations,
-      errors: result.errors,
-      skippedUnknownLocations: result.skippedUnknownLocations,
-      skippedUnknownCommodities: result.skippedUnknownCommodities,
-      skippedExcludedLocations: result.skippedExcludedLocations,
-      fioLastSync: result.fioLastSync,
+      success: inventoryResult.success && userDataResult.success && contractsResult.success,
+      inserted: inventoryResult.inserted,
+      storageLocations: inventoryResult.storageLocations,
+      errors: allErrors,
+      skippedUnknownLocations: inventoryResult.skippedUnknownLocations,
+      skippedUnknownCommodities: inventoryResult.skippedUnknownCommodities,
+      skippedExcludedLocations: inventoryResult.skippedExcludedLocations,
+      fioLastSync: inventoryResult.fioLastSync,
+      userData: {
+        success: userDataResult.success,
+        companyCode: userDataResult.companyCode,
+        corporationCode: userDataResult.corporationCode,
+      },
+      contracts: {
+        success: contractsResult.success,
+        contractsProcessed: contractsResult.contractsProcessed,
+        reservationsCreated: contractsResult.reservationsCreated,
+        skippedNoMatch: contractsResult.skippedNoMatch,
+        skippedExternalPartner: contractsResult.skippedExternalPartner,
+      },
     }
   }
 

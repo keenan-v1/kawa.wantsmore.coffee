@@ -294,3 +294,100 @@ export interface FioGroupHubResponse {
   PlayerStationaryShips: unknown[]
   Failures: unknown[]
 }
+
+// ==================== Contract API Types ====================
+
+// Contract condition from /contract/allcontracts endpoint
+export interface FioApiContractCondition {
+  ConditionId: string // UUID
+  Type:
+    | 'PAYMENT'
+    | 'PROVISION'
+    | 'DELIVERY'
+    | 'COMEX_PURCHASE_PICKUP'
+    | 'PROVISION_SHIPMENT'
+    | 'PICKUP_SHIPMENT'
+  Party: 'CUSTOMER' | 'PROVIDER'
+  Status: 'PENDING' | 'FULFILLED'
+  MaterialTicker: string | null // e.g., "RAT", "DW"
+  MaterialAmount: number | null
+  Address: string | null // Location like "Benten Station (BEN)" or "YI-705c"
+  Amount: number | null // Payment amount (for PAYMENT conditions)
+  Currency: string | null // Currency code (for PAYMENT conditions)
+  Dependencies: { Dependency: string }[]
+  ConditionIndex: number
+}
+
+// Contract from /contract/allcontracts endpoint
+export interface FioApiContract {
+  ContractId: string // UUID
+  ContractLocalId: string // Human-readable ID like "M6SSM9O"
+  Party: 'CUSTOMER' | 'PROVIDER' // Current user's role in contract
+  Status: 'PENDING' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CLOSED' | 'BREACHED' | 'TERMINATED'
+  PartnerCompanyCode: string | null // Trading partner's company code
+  PartnerName: string // Trading partner's display name
+  PartnerId: string | null // Trading partner's FIO user ID
+  Conditions: FioApiContractCondition[]
+  DateEpochMs: number // Contract creation timestamp
+  DueDateEpochMs: number | null // Contract due date
+  Preamble: string | null
+  Name: string | null
+  Timestamp: string // ISO timestamp of last sync from FIO
+}
+
+// ==================== User Data API Types ====================
+
+// User planet from /user/{UserName} endpoint
+export interface FioApiUserPlanet {
+  PlanetId: string // UUID
+  PlanetNaturalId: string // e.g., "UV-351a"
+  PlanetName: string
+}
+
+// User balance from /user/{UserName} endpoint
+export interface FioApiUserBalance {
+  UserDataBalanceId: string
+  Currency: string // e.g., "ICA", "CIS"
+  Amount: number
+}
+
+// User office from /user/{UserName} endpoint
+export interface FioApiUserOffice {
+  PlanetNaturalId: string
+  PlanetName: string
+  StartEpochMs: number
+  EndEpochMs: number
+}
+
+// User data from /user/{UserName} endpoint
+export interface FioApiUserData {
+  UserDataId: string
+  UserId: string
+  UserName: string
+  CompanyId: string
+  CompanyName: string
+  CompanyCode: string // e.g., "CAFS"
+  CorporationId: string | null
+  CorporationName: string | null
+  CorporationCode: string | null // e.g., "KAWA"
+  CountryId: string | null
+  CountryCode: string | null
+  CountryName: string | null
+  Planets: FioApiUserPlanet[]
+  Balances: FioApiUserBalance[]
+  Offices: FioApiUserOffice[]
+  OverallRating: string | null
+  ActivityRating: string | null
+  ReliabilityRating: string | null
+  StabilityRating: string | null
+  HeadquartersNaturalId: string | null
+  HeadquartersLevel: number
+  HeadquartersBasePermits: number
+  HeadquartersUsedBasePermits: number
+  AdditionalBasePermits: number
+  AdditionalProductionQueueSlots: number
+  RelocationLocked: boolean
+  NextRelocationTimeEpochMs: number
+  UserNameSubmitted: string
+  Timestamp: string // ISO timestamp of last sync from FIO
+}

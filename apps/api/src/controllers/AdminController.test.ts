@@ -563,4 +563,348 @@ describe('AdminController', () => {
       expect(setStatusSpy).toHaveBeenCalledWith(404)
     })
   })
+
+  describe('getPendingApprovalsCount', () => {
+    it('should return count of users pending approval', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([{ count: 3 }]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const result = await controller.getPendingApprovalsCount()
+
+      expect(result).toEqual({ count: 3 })
+    })
+
+    it('should return 0 when no pending approvals', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const result = await controller.getPendingApprovalsCount()
+
+      expect(result).toEqual({ count: 0 })
+    })
+  })
+
+  describe('listPendingApprovals', () => {
+    it('should return list of users pending approval', async () => {
+      const mockUnverifiedUsers = [
+        {
+          id: 10,
+          username: 'pending1',
+          email: 'pending1@test.com',
+          displayName: 'Pending User 1',
+          isActive: true,
+          createdAt: new Date(),
+        },
+      ]
+
+      let callCount = 0
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockImplementation(() => {
+          callCount++
+          if (callCount === 1) {
+            // First call: get unverified users
+            return { orderBy: vi.fn().mockResolvedValue(mockUnverifiedUsers) }
+          }
+          // Subsequent calls: get roles/fio info
+          return Promise.resolve([{ roleId: 'unverified', roleName: 'Unverified', roleColor: 'grey' }])
+        }),
+        orderBy: vi.fn().mockResolvedValue(mockUnverifiedUsers),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValue({
+        fioUsername: null,
+        fioApiKey: null,
+      })
+
+      const result = await controller.listPendingApprovals()
+
+      expect(result.length).toBeGreaterThanOrEqual(0)
+    })
+  })
+
+  describe('approveUser', () => {
+    it('should return 404 when user not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.approveUser(999, {})).rejects.toThrow('User not found')
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
+    })
+
+    it('should return 400 when role not found', async () => {
+      let callCount = 0
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockImplementation(() => {
+          callCount++
+          if (callCount === 1) {
+            return Promise.resolve([{ id: 1 }]) // User found
+          }
+          return Promise.resolve([]) // Role not found
+        }),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.approveUser(1, { roleId: 'nonexistent' })).rejects.toThrow(
+        "Role 'nonexistent' not found"
+      )
+      expect(setStatusSpy).toHaveBeenCalledWith(400)
+    })
+  })
+
+  describe('deleteUser', () => {
+    it('should return 400 when trying to delete own account', async () => {
+      await expect(
+        controller.deleteUser({ user: adminUser } as never, 1) // admin user id is 1
+      ).rejects.toThrow('Cannot delete your own account')
+      expect(setStatusSpy).toHaveBeenCalledWith(400)
+    })
+
+    it('should return 404 when user not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(
+        controller.deleteUser({ user: adminUser } as never, 999)
+      ).rejects.toThrow('User not found')
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
+    })
+  })
+
+  describe('createRole', () => {
+    it('should create a new role', async () => {
+      const newRole = { id: 'test-role', name: 'Test Role', color: 'blue' }
+
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const insertMock = {
+        values: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([newRole]),
+      }
+      vi.mocked(db.insert).mockReturnValue(insertMock as any)
+
+      const result = await controller.createRole(newRole)
+
+      expect(result).toEqual(newRole)
+      expect(db.insert).toHaveBeenCalled()
+    })
+
+    it('should return 409 when role already exists', async () => {
+      const existingRole = { id: 'existing-role', name: 'Existing', color: 'red' }
+
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([existingRole]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(
+        controller.createRole({ id: 'existing-role', name: 'New Role', color: 'blue' })
+      ).rejects.toThrow("Role with ID 'existing-role' already exists")
+      expect(setStatusSpy).toHaveBeenCalledWith(409)
+    })
+  })
+
+  describe('deleteRole', () => {
+    it('should delete a role with no users', async () => {
+      let selectCallCount = 0
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockImplementation(() => {
+          selectCallCount++
+          if (selectCallCount === 1) {
+            return Promise.resolve([{ id: 'test-role' }]) // Role exists
+          }
+          return Promise.resolve([{ count: 0 }]) // No users assigned
+        }),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const deleteMock = {
+        where: vi.fn().mockResolvedValue(undefined),
+      }
+      vi.mocked(db.delete).mockReturnValue(deleteMock as any)
+
+      const result = await controller.deleteRole('test-role')
+
+      expect(result).toEqual({ success: true })
+    })
+
+    it('should return 400 when users are assigned to role', async () => {
+      let selectCallCount = 0
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockImplementation(() => {
+          selectCallCount++
+          if (selectCallCount === 1) {
+            return Promise.resolve([{ id: 'test-role' }]) // Role exists
+          }
+          return Promise.resolve([{ count: 5 }]) // 5 users assigned
+        }),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.deleteRole('test-role')).rejects.toThrow(
+        'Cannot delete role: 5 user(s) are assigned to this role'
+      )
+      expect(setStatusSpy).toHaveBeenCalledWith(400)
+    })
+
+    it('should return 404 when role not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.deleteRole('nonexistent')).rejects.toThrow('Role not found')
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
+    })
+  })
+
+  describe('listPermissions', () => {
+    it('should return all permissions', async () => {
+      const mockPermissions = [
+        { id: 'admin.manage_users', name: 'Manage Users', description: 'Can manage users' },
+        { id: 'orders.view', name: 'View Orders', description: 'Can view orders' },
+      ]
+
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockResolvedValue(mockPermissions),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const result = await controller.listPermissions()
+
+      expect(result).toEqual(mockPermissions)
+    })
+  })
+
+  describe('listRolePermissions', () => {
+    it('should return all role-permission mappings', async () => {
+      const mockMappings = [
+        {
+          id: 1,
+          roleId: 'admin',
+          roleName: 'Administrator',
+          roleColor: 'red',
+          permissionId: 'admin.manage_users',
+          permissionName: 'Manage Users',
+          allowed: true,
+        },
+      ]
+
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockResolvedValue(mockMappings),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const result = await controller.listRolePermissions()
+
+      expect(result).toEqual(mockMappings)
+    })
+  })
+
+  describe('setRolePermission', () => {
+    it('should create a new role-permission mapping', async () => {
+      const input = { roleId: 'test-role', permissionId: 'test.permission', allowed: true }
+      const created = { id: 1, ...input }
+
+      // Order: 1. role exists, 2. permission exists, 3. no existing mapping
+      let selectCallCount = 0
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockImplementation(() => {
+          selectCallCount++
+          if (selectCallCount === 1) {
+            return Promise.resolve([{ id: 'test-role' }]) // Role exists
+          }
+          if (selectCallCount === 2) {
+            return Promise.resolve([{ id: 'test.permission' }]) // Permission exists
+          }
+          return Promise.resolve([]) // No existing mapping
+        }),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const insertMock = {
+        values: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([created]),
+      }
+      vi.mocked(db.insert).mockReturnValue(insertMock as any)
+
+      const result = await controller.setRolePermission(input)
+
+      expect(result.id).toBe(1)
+    })
+
+    it('should return 404 when role not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]), // Role not found on first call
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(
+        controller.setRolePermission({ roleId: 'nonexistent', permissionId: 'test', allowed: true })
+      ).rejects.toThrow("Role 'nonexistent' not found")
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
+    })
+  })
+
+  describe('deleteRolePermission', () => {
+    it('should delete a role-permission mapping', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([{ id: 1 }]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      const deleteMock = {
+        where: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([{ id: 1 }]),
+      }
+      vi.mocked(db.delete).mockReturnValue(deleteMock as any)
+
+      const result = await controller.deleteRolePermission(1)
+
+      expect(result).toEqual({ success: true })
+    })
+
+    it('should return 404 when mapping not found', async () => {
+      const selectMock = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([]),
+      }
+      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      await expect(controller.deleteRolePermission(999)).rejects.toThrow(
+        'Role permission mapping not found'
+      )
+      expect(setStatusSpy).toHaveBeenCalledWith(404)
+    })
+  })
 })

@@ -486,6 +486,7 @@ export interface OrderReservation {
   expiresAt: string | null // ISO date string
   createdAt: string // ISO date string
   updatedAt: string // ISO date string
+  fioConditionId: number | null // Link to FIO contract condition if auto-matched
 }
 
 // Reservation with related order and user info
@@ -577,4 +578,105 @@ export interface GlobalDefaultsResponse {
 // Request body for PUT /admin/global-defaults
 export interface UpdateGlobalDefaultsRequest {
   settings: Record<string, unknown>
+}
+
+// ==================== FIO USER DATA ====================
+
+// FIO user data synced from /user/{UserName} endpoint
+export interface FioUserData {
+  id: number
+  userId: number
+  fioUserId: string
+  fioUserName: string
+  companyId: string | null
+  companyName: string | null
+  companyCode: string | null // Used to match contract partners (e.g., "CAFS")
+  corporationId: string | null
+  corporationName: string | null
+  corporationCode: string | null // In-game corp code (e.g., "KAWA") - informational only
+  countryId: string | null
+  countryCode: string | null
+  countryName: string | null
+  fioTimestamp: string // ISO timestamp from FIO
+  createdAt: string // ISO timestamp
+  updatedAt: string // ISO timestamp
+}
+
+// ==================== FIO CONTRACTS ====================
+
+export type FioContractStatus =
+  | 'pending'
+  | 'partially_fulfilled'
+  | 'fulfilled'
+  | 'closed'
+  | 'breached'
+  | 'terminated'
+
+export const FIO_CONTRACT_STATUSES: FioContractStatus[] = [
+  'pending',
+  'partially_fulfilled',
+  'fulfilled',
+  'closed',
+  'breached',
+  'terminated',
+]
+
+// FIO contract stored in database
+export interface FioContract {
+  id: number
+  fioContractId: string // UUID from FIO
+  localId: string // Human-readable ID like "M6SSM9O"
+  syncedByUserId: number // User who synced this contract
+  userParty: 'CUSTOMER' | 'PROVIDER' // Syncing user's role in contract
+  partnerCompanyCode: string | null // Trading partner's company code
+  partnerName: string // Trading partner's name
+  partnerUserId: number | null // Matched KAWA user (if found via companyCode)
+  status: FioContractStatus
+  name: string | null
+  preamble: string | null
+  contractDateMs: number // Contract creation epoch ms
+  dueDateMs: number | null // Contract due date epoch ms
+  fioTimestamp: string // ISO timestamp from FIO
+  createdAt: string // ISO timestamp
+  updatedAt: string // ISO timestamp
+}
+
+// Contract condition types from FIO
+export type FioConditionType =
+  | 'PAYMENT'
+  | 'PROVISION'
+  | 'DELIVERY'
+  | 'COMEX_PURCHASE_PICKUP'
+  | 'PROVISION_SHIPMENT'
+  | 'PICKUP_SHIPMENT'
+
+export type FioConditionParty = 'CUSTOMER' | 'PROVIDER'
+export type FioConditionStatus = 'PENDING' | 'FULFILLED'
+
+// FIO contract condition (line item) stored in database
+export interface FioContractCondition {
+  id: number
+  contractId: number
+  fioConditionId: string // UUID from FIO
+  conditionIndex: number
+  type: FioConditionType | string // Known types, but may have others
+  party: FioConditionParty
+  status: FioConditionStatus
+  // Material info (for PROVISION, DELIVERY, etc.)
+  materialTicker: string | null
+  materialAmount: number | null
+  locationRaw: string | null // Raw address from FIO (e.g., "Benten Station (BEN)")
+  locationId: string | null // Parsed/matched location natural ID
+  // Payment info (for PAYMENT conditions)
+  paymentAmount: number | null
+  paymentCurrency: string | null
+  // Link to reservation
+  reservationId: number | null // Linked reservation (if auto-matched or manually linked)
+  createdAt: string // ISO timestamp
+  updatedAt: string // ISO timestamp
+}
+
+// Extended type with conditions included
+export interface FioContractWithConditions extends FioContract {
+  conditions: FioContractCondition[]
 }

@@ -3,6 +3,7 @@ import { DiscordAuthController } from './DiscordAuthController.js'
 import { discordService } from '../services/discordService.js'
 import * as permissionService from '../utils/permissionService.js'
 import * as jwtUtils from '../utils/jwt.js'
+import { db } from '../db/index.js'
 
 vi.mock('../utils/permissionService.js', () => ({
   getPermissions: vi.fn(),
@@ -84,27 +85,13 @@ describe('DiscordAuthController', () => {
 
     // Default mock for JWT generation
     vi.mocked(jwtUtils.generateToken).mockReturnValue('mock-jwt-token')
-  })
 
-  // Helper to create mock select chain (for future use)
-  const _createMockSelectChain = (results: any[]) => {
-    let callIndex = 0
-    const mockChain: any = {
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockImplementation(() => {
-        const result = results[callIndex] || []
-        callIndex++
-        return Promise.resolve(result)
-      }),
-      limit: vi.fn().mockImplementation(() => {
-        const result = results[callIndex - 1] || []
-        return Promise.resolve(result)
-      }),
-      innerJoin: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-    }
-    return mockChain
-  }
+    // Default mock for discord settings
+    vi.mocked(discordService.getDiscordSettings).mockResolvedValue({
+      guildId: null,
+      autoApprovalEnabled: false,
+    })
+  })
 
   describe('getAuthUrl', () => {
     it('should return authorization URL with state', async () => {
@@ -173,6 +160,47 @@ describe('DiscordAuthController', () => {
       }
     })
 
+    it('should return error for missing code', async () => {
+      const result = await controller.handleCallback(undefined, 'state-token')
+
+      expect(result.type).toBe('error')
+    })
+
+    it('should return consent_required on consent_required error', async () => {
+      const result = await controller.handleCallback(undefined, undefined, 'consent_required')
+
+      expect(result.type).toBe('consent_required')
+    })
+
+    it('should return consent_required on interaction_required error', async () => {
+      const result = await controller.handleCallback(undefined, undefined, 'interaction_required')
+
+      expect(result.type).toBe('consent_required')
+    })
+
+    it('should return error on access_denied', async () => {
+      const result = await controller.handleCallback(undefined, undefined, 'access_denied')
+
+      expect(result.type).toBe('error')
+      if (result.type === 'error') {
+        expect(result.message).toContain('denied')
+      }
+    })
+
+    it('should return generic OAuth error', async () => {
+      const result = await controller.handleCallback(
+        undefined,
+        undefined,
+        'server_error',
+        'Something went wrong'
+      )
+
+      expect(result.type).toBe('error')
+      if (result.type === 'error') {
+        expect(result.message).toBe('Something went wrong')
+      }
+    })
+
     it('should handle Discord API errors gracefully', async () => {
       vi.mocked(discordService.exchangeCodeForTokens).mockRejectedValue(
         new Error('Discord API error')
@@ -183,6 +211,17 @@ describe('DiscordAuthController', () => {
       expect(result.type).toBe('error')
       if (result.type === 'error') {
         expect(result.message).toContain('Discord API error')
+      }
+    })
+
+    it('should handle non-Error exceptions', async () => {
+      vi.mocked(discordService.exchangeCodeForTokens).mockRejectedValue('Unknown error')
+
+      const result = await controller.handleCallback('auth-code', 'state-token')
+
+      expect(result.type).toBe('error')
+      if (result.type === 'error') {
+        expect(result.message).toContain('Failed to authenticate')
       }
     })
   })
@@ -197,4 +236,5 @@ describe('DiscordAuthController', () => {
       ).rejects.toThrow('Invalid or expired registration state')
     })
   })
+
 })
