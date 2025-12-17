@@ -290,8 +290,8 @@ h2o,ben,100`
         currencyDefault: 'CIS',
       })
 
-      expect(result.rows[0].ticker).toBe('H2O')
-      expect(result.rows[0].location).toBe('BEN')
+      expect(result.rows[0].ticker).toBe('H2O') // Tickers are uppercased
+      expect(result.rows[0].location).toBe('ben') // Locations preserve case (FIO IDs like UV-351a have lowercase)
     })
 
     it('should handle empty CSV', () => {

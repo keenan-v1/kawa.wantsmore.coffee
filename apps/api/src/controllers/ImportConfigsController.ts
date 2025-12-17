@@ -312,6 +312,19 @@ export class ImportConfigsController extends Controller {
       throw BadRequest('CSV import not yet implemented for non-sheets sources')
     }
 
+    // Get the price list to check for default location and currency
+    const priceList = await db
+      .select({
+        defaultLocationId: priceLists.defaultLocationId,
+        currency: priceLists.currency,
+      })
+      .from(priceLists)
+      .where(eq(priceLists.code, config.priceListCode))
+      .limit(1)
+
+    const defaultLocationId = priceList[0]?.defaultLocationId ?? undefined
+    const defaultCurrency = priceList[0]?.currency ?? undefined
+
     // Get field mapping from config, or use auto-detection
     const fieldMapping = (config.config?.fieldMapping as CsvFieldMapping) ?? {
       ticker: 'Ticker',
@@ -319,10 +332,12 @@ export class ImportConfigsController extends Controller {
       location: 'Location',
     }
 
-    // Import the data
+    // Import the data, using price list's defaults as fallback
     return importCsvPrices(csvContent, {
       exchangeCode: config.priceListCode,
       mapping: fieldMapping,
+      locationDefault: defaultLocationId,
+      currencyDefault: defaultCurrency,
     })
   }
 
@@ -894,16 +909,31 @@ export class ImportConfigsController extends Controller {
       throw BadRequest('Preview not yet implemented for non-sheets sources')
     }
 
+    // Get the price list to check for default location and currency
+    const priceList = await db
+      .select({
+        defaultLocationId: priceLists.defaultLocationId,
+        currency: priceLists.currency,
+      })
+      .from(priceLists)
+      .where(eq(priceLists.code, config.priceListCode))
+      .limit(1)
+
+    const defaultLocationId = priceList[0]?.defaultLocationId ?? undefined
+    const defaultCurrency = priceList[0]?.currency ?? undefined
+
     const fieldMapping = (config.config?.fieldMapping as CsvFieldMapping) ?? {
       ticker: 'Ticker',
       price: 'Price',
       location: 'Location',
     }
 
-    // Preview the data
+    // Preview the data, using price list's defaults as fallback
     return previewCsvImport(csvContent, {
       exchangeCode: config.priceListCode,
       mapping: fieldMapping,
+      locationDefault: defaultLocationId,
+      currencyDefault: defaultCurrency,
     })
   }
 }

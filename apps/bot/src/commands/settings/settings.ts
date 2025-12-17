@@ -154,7 +154,9 @@ function formatSettingValue(
       const webValue = allSettings[webKey]
       if (webValue !== undefined) {
         // Find the label for the web value (excluding the use-website option)
-        const webOpt = def.options.find(o => o.value === webValue && o.value !== USE_WEBSITE_SETTING)
+        const webOpt = def.options.find(
+          o => o.value === webValue && o.value !== USE_WEBSITE_SETTING
+        )
         if (webOpt) {
           return `${label} → ${webOpt.label}`
         }
@@ -245,7 +247,9 @@ export const settings: Command = {
       embed.addFields({
         name: '📺 Display (Discord)',
         value: displaySettings
-          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`)
+          .map(
+            def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`
+          )
           .join('\n'),
         inline: false,
       })
@@ -254,7 +258,9 @@ export const settings: Command = {
       embed.addFields({
         name: '💰 Market',
         value: marketSettings
-          .map(def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`)
+          .map(
+            def => `**${def.label}:** ${formatSettingValue(def.key, settings[def.key], settings)}`
+          )
           .join('\n'),
         inline: false,
       })

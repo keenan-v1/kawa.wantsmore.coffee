@@ -40,12 +40,13 @@ async function validateRows(
 
   const commoditySet = new Set(existingCommodities.map(c => c.ticker))
 
-  // Check which locations exist
+  // Check which locations exist (case-insensitive lookup)
   const existingLocations = await db
     .select({ naturalId: fioLocations.naturalId })
     .from(fioLocations)
 
-  const locationSet = new Set(existingLocations.map(l => l.naturalId))
+  // Map lowercase location to actual naturalId for case-insensitive matching
+  const locationMap = new Map(existingLocations.map(l => [l.naturalId.toLowerCase(), l.naturalId]))
 
   // Check if price list exists
   const priceList = await db
@@ -71,7 +72,9 @@ async function validateRows(
   const validated: ValidatedRow[] = []
   for (const row of rows) {
     const commodityExists = commoditySet.has(row.ticker)
-    const locationExists = locationSet.has(row.location)
+    // Case-insensitive location lookup - get the actual naturalId
+    const actualLocationId = locationMap.get(row.location.toLowerCase())
+    const locationExists = actualLocationId !== undefined
 
     if (!commodityExists) {
       errors.push({
@@ -94,6 +97,7 @@ async function validateRows(
     if (commodityExists && locationExists) {
       validated.push({
         ...row,
+        location: actualLocationId, // Use the correct case from database
         commodityExists,
         locationExists,
       })

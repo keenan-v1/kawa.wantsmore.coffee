@@ -16,8 +16,12 @@ export const USE_WEBSITE_SETTING = 'use-website'
 const DEFAULTS = {
   // Discord-specific display settings (separate from web)
   // Can be set to USE_WEBSITE_SETTING to inherit from web display settings
-  'discord.locationDisplayMode': 'natural-ids-only' as LocationDisplayMode | typeof USE_WEBSITE_SETTING,
-  'discord.commodityDisplayMode': 'ticker-only' as CommodityDisplayMode | typeof USE_WEBSITE_SETTING,
+  'discord.locationDisplayMode': 'natural-ids-only' as
+    | LocationDisplayMode
+    | typeof USE_WEBSITE_SETTING,
+  'discord.commodityDisplayMode': 'ticker-only' as
+    | CommodityDisplayMode
+    | typeof USE_WEBSITE_SETTING,
   'discord.messageVisibility': 'ephemeral' as MessageVisibility, // Discord-only, no web equivalent
   // Web display settings (fetched to support "use website" option)
   'display.locationDisplayMode': 'both' as LocationDisplayMode,
@@ -148,14 +152,10 @@ export async function getDisplaySettings(discordId: string): Promise<{
   const settings = await getSettingsByDiscordId(discordId)
 
   // Get Discord settings (may be 'use-website')
-  const discordLocationMode =
-    (settings?.['discord.locationDisplayMode'] ?? DEFAULTS['discord.locationDisplayMode']) as
-      | LocationDisplayMode
-      | typeof USE_WEBSITE_SETTING
-  const discordCommodityMode =
-    (settings?.['discord.commodityDisplayMode'] ?? DEFAULTS['discord.commodityDisplayMode']) as
-      | CommodityDisplayMode
-      | typeof USE_WEBSITE_SETTING
+  const discordLocationMode = (settings?.['discord.locationDisplayMode'] ??
+    DEFAULTS['discord.locationDisplayMode']) as LocationDisplayMode | typeof USE_WEBSITE_SETTING
+  const discordCommodityMode = (settings?.['discord.commodityDisplayMode'] ??
+    DEFAULTS['discord.commodityDisplayMode']) as CommodityDisplayMode | typeof USE_WEBSITE_SETTING
 
   // Resolve 'use-website' to web settings
   const locationDisplayMode =

@@ -204,12 +204,14 @@ export function parseCsv(content: string, options: CsvParseOptions): CsvParseRes
     const ticker = tickerValue.toUpperCase().trim()
 
     // Extract location (or use default)
+    // Note: Location IDs are case-sensitive (e.g., "UV-351a"), so we preserve case from defaults
+    // but trim whitespace from CSV values
     let location: string
     if (options.mapping.location !== undefined) {
       const locationValue = getFieldValue(fields, headers, options.mapping.location)
       if (!locationValue || locationValue.trim() === '') {
         if (options.locationDefault) {
-          location = options.locationDefault.toUpperCase()
+          location = options.locationDefault // Preserve case from database
         } else {
           errors.push({
             rowNumber,
@@ -220,10 +222,10 @@ export function parseCsv(content: string, options: CsvParseOptions): CsvParseRes
           continue
         }
       } else {
-        location = locationValue.toUpperCase().trim()
+        location = locationValue.trim() // Preserve case from CSV
       }
     } else if (options.locationDefault) {
-      location = options.locationDefault.toUpperCase()
+      location = options.locationDefault // Preserve case from database
     } else {
       errors.push({
         rowNumber,
