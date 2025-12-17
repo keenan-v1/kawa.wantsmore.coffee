@@ -9,10 +9,15 @@ import type {
   ModalSubmitInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
+import type { MessageVisibility } from '@kawakawa/types'
 import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
 import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
-import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
+import {
+  getChannelDefaults,
+  resolveEffectiveValue,
+  resolveMessageVisibility,
+} from '../../services/channelDefaults.js'
 import {
   getAvailableBuyOrders,
   formatOrderForSelect,
@@ -44,6 +49,15 @@ export const fill: Command = {
         .setDescription('Filter by location (optional)')
         .setRequired(false)
         .setAutocomplete(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('reply')
+        .setDescription('Reply visibility (default: your preference)')
+        .addChoices(
+          { name: 'Private (only you)', value: 'ephemeral' },
+          { name: 'Public (everyone)', value: 'public' }
+        )
     ) as SlashCommandBuilder,
 
   async autocomplete(interaction: AutocompleteInteraction): Promise<void> {
@@ -78,6 +92,7 @@ export const fill: Command = {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const commodityInput = interaction.options.getString('commodity', true)
     const locationInput = interaction.options.getString('location')
+    const replyOption = interaction.options.getString('reply') as MessageVisibility | null
 
     // Require linked account
     const result = await requireLinkedUser(interaction)
@@ -90,6 +105,13 @@ export const fill: Command = {
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
     const channelSettings = await getChannelDefaults(channelId)
+
+    // Resolve message visibility (command > channel > user > system default)
+    const { isEphemeral } = resolveMessageVisibility(
+      replyOption,
+      channelSettings,
+      displaySettings.messageVisibility
+    )
 
     // Determine visibility filter using channel defaults
     const visibilityFilter: 'all' | 'internal' | 'partner' = resolveEffectiveValue(
@@ -107,7 +129,7 @@ export const fill: Command = {
         content:
           `❌ Commodity ticker "${commodityInput.toUpperCase()}" not found.\n\n` +
           'Use the autocomplete suggestions to find valid tickers.',
-        flags: MessageFlags.Ephemeral,
+        flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       })
       return
     }
@@ -121,7 +143,7 @@ export const fill: Command = {
           content:
             `❌ Location "${locationInput}" not found.\n\n` +
             'Use the autocomplete suggestions to find valid locations.',
-          flags: MessageFlags.Ephemeral,
+          flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
         })
         return
       }
@@ -143,7 +165,7 @@ export const fill: Command = {
       msg += '.\n\nTry a different commodity or location.'
       await interaction.reply({
         content: msg,
-        flags: MessageFlags.Ephemeral,
+        flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       })
       return
     }
@@ -165,7 +187,7 @@ export const fill: Command = {
     const selectReply = await interaction.reply({
       content: `**Select a buy order for ${formatCommodity(resolvedCommodity.ticker)}:**`,
       components: [selectRow],
-      flags: MessageFlags.Ephemeral,
+      flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       withResponse: true,
     })
 

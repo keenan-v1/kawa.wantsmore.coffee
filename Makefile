@@ -1,6 +1,6 @@
 # Kawakawa CX - Development Commands
 
-.PHONY: help install dev build test lint lint-fix format format-check generate checkpoint db-init db-init-dev db-reset db-reset-mock db-drop db-mock-data db-studio fio-sync clean kill-dev dev-bot bot-deploy
+.PHONY: help install dev build test lint lint-fix format format-check knip generate checkpoint db-init db-init-dev db-reset db-reset-mock db-drop db-mock-data db-studio fio-sync clean kill-dev dev-bot bot-deploy
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -37,6 +37,9 @@ format: ## Format all files with Prettier
 
 format-check: ## Check formatting without modifying
 	pnpm format:check
+
+knip: ## Find unused files, dependencies, and exports
+	pnpm knip
 
 generate: ## Generate TSOA routes and Drizzle migrations
 	pnpm --filter @kawakawa/api tsoa:generate

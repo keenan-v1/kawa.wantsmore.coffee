@@ -726,6 +726,7 @@
                       <th>Visibility</th>
                       <th>Price List</th>
                       <th>Currency</th>
+                      <th>Reply</th>
                       <th>Announce</th>
                       <th class="text-right">Actions</th>
                     </tr>
@@ -768,6 +769,19 @@
                         <v-chip v-if="config.currency" size="small" color="purple">
                           {{ config.currency }}
                           <v-icon v-if="config.currencyEnforced" size="x-small" end
+                            >mdi-lock</v-icon
+                          >
+                        </v-chip>
+                        <span v-else class="text-caption text-medium-emphasis">—</span>
+                      </td>
+                      <td>
+                        <v-chip
+                          v-if="config.messageVisibility"
+                          size="small"
+                          :color="config.messageVisibility === 'ephemeral' ? 'grey' : 'teal'"
+                        >
+                          {{ config.messageVisibility === 'ephemeral' ? 'Private' : 'Public' }}
+                          <v-icon v-if="config.messageVisibilityEnforced" size="x-small" end
                             >mdi-lock</v-icon
                           >
                         </v-chip>
@@ -913,6 +927,28 @@
                 <v-col cols="4">
                   <v-switch
                     v-model="channelConfigForm.currencyEnforced"
+                    label="Enforced"
+                    color="warning"
+                    hide-details
+                    density="compact"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row>
+                <v-col cols="8">
+                  <v-select
+                    v-model="channelConfigForm.messageVisibility"
+                    :items="messageVisibilityOptions"
+                    label="Default Reply Visibility"
+                    clearable
+                    hint="Whether bot replies are private or public"
+                    persistent-hint
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-switch
+                    v-model="channelConfigForm.messageVisibilityEnforced"
                     label="Enforced"
                     color="warning"
                     hide-details
@@ -2131,6 +2167,7 @@ import type {
   GlobalDefaultSetting,
   ChannelConfigMap,
   Currency,
+  MessageVisibility,
 } from '@kawakawa/types'
 import { api } from '../services/api'
 import type {
@@ -2333,6 +2370,8 @@ const channelConfigForm = ref({
   priceListEnforced: false,
   currency: null as Currency | null,
   currencyEnforced: false,
+  messageVisibility: null as MessageVisibility | null,
+  messageVisibilityEnforced: false,
   announceInternal: null as string | null,
   announcePartner: null as string | null,
 })
@@ -2344,6 +2383,11 @@ const deletingChannelConfig = ref(false)
 const visibilityOptions = [
   { title: 'Internal (members only)', value: 'internal' },
   { title: 'Partner (trade partners)', value: 'partner' },
+]
+
+const messageVisibilityOptions = [
+  { title: 'Private (only user sees)', value: 'ephemeral' },
+  { title: 'Public (everyone sees)', value: 'public' },
 ]
 
 // Price settings state
@@ -3229,6 +3273,8 @@ const openCreateChannelConfigDialog = async () => {
     priceListEnforced: false,
     currency: null,
     currencyEnforced: false,
+    messageVisibility: null,
+    messageVisibilityEnforced: false,
     announceInternal: null,
     announcePartner: null,
   }
@@ -3251,6 +3297,8 @@ const openEditChannelConfigDialog = async (config: ChannelConfigMap) => {
     priceListEnforced: config.priceListEnforced ?? false,
     currency: config.currency ?? null,
     currencyEnforced: config.currencyEnforced ?? false,
+    messageVisibility: config.messageVisibility ?? null,
+    messageVisibilityEnforced: config.messageVisibilityEnforced ?? false,
     announceInternal: config.announceInternal ?? null,
     announcePartner: config.announcePartner ?? null,
   }
@@ -3275,6 +3323,8 @@ const saveChannelConfig = async () => {
       priceListEnforced: channelConfigForm.value.priceListEnforced,
       currency: channelConfigForm.value.currency,
       currencyEnforced: channelConfigForm.value.currencyEnforced,
+      messageVisibility: channelConfigForm.value.messageVisibility,
+      messageVisibilityEnforced: channelConfigForm.value.messageVisibilityEnforced,
       announceInternal: channelConfigForm.value.announceInternal,
       announcePartner: channelConfigForm.value.announcePartner,
     })

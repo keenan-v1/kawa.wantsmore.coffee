@@ -81,6 +81,7 @@ vi.mock('../../services/channelDefaults.js', () => ({
       systemDefault: unknown
     ) => commandOption ?? systemDefault
   ),
+  resolveMessageVisibility: vi.fn(() => ({ visibility: 'ephemeral', isEphemeral: true })),
 }))
 
 // Mock the database module
@@ -120,6 +121,8 @@ describe('query command', () => {
     vi.clearAllMocks()
     mockGetDisplaySettings.mockResolvedValue({
       locationDisplayMode: 'both',
+      commodityDisplayMode: 'ticker-only',
+      messageVisibility: 'ephemeral',
       preferredCurrency: 'CIS',
       favoritedLocations: [],
       favoritedCommodities: [],

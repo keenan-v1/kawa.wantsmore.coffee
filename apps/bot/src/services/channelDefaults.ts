@@ -8,7 +8,7 @@
 
 import { db, channelConfig } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
-import type { Currency, OrderType, ChannelConfigKey } from '@kawakawa/types'
+import type { Currency, OrderType, ChannelConfigKey, MessageVisibility } from '@kawakawa/types'
 
 /**
  * Channel settings aggregated from key-value store
@@ -18,10 +18,12 @@ export interface ChannelSettings {
   visibility: OrderType | null
   priceList: string | null
   currency: Currency | null
+  messageVisibility: MessageVisibility | null
   // Enforced flags
   visibilityEnforced: boolean
   priceListEnforced: boolean
   currencyEnforced: boolean
+  messageVisibilityEnforced: boolean
   // Announcement channels (where to send query announcements)
   announceInternal: string | null // Channel ID for internal visibility queries
   announcePartner: string | null // Channel ID for partner visibility queries
@@ -62,9 +64,11 @@ export async function getChannelConfig(channelId: string): Promise<ChannelSettin
     visibility: (configMap.get('visibility') as OrderType) || null,
     priceList: configMap.get('priceList') || null,
     currency: (configMap.get('currency') as Currency) || null,
+    messageVisibility: (configMap.get('messageVisibility') as MessageVisibility) || null,
     visibilityEnforced: parseBool(configMap.get('visibilityEnforced')),
     priceListEnforced: parseBool(configMap.get('priceListEnforced')),
     currencyEnforced: parseBool(configMap.get('currencyEnforced')),
+    messageVisibilityEnforced: parseBool(configMap.get('messageVisibilityEnforced')),
     announceInternal: configMap.get('announceInternal') || null,
     announcePartner: configMap.get('announcePartner') || null,
   }
@@ -164,4 +168,40 @@ export function wasOverriddenByChannel<T>(
   }
 
   return commandOption !== channelDefault
+}
+
+/**
+ * Resolve message visibility for a command.
+ *
+ * Resolution order when enforced = false:
+ *   1. Command option (user typed it explicitly)
+ *   2. Channel default
+ *   3. User default
+ *   4. System default (ephemeral)
+ *
+ * When enforced = true:
+ *   Channel default wins (no override possible)
+ *
+ * @param commandOption - Value from command option (null/undefined if not provided)
+ * @param channelSettings - Channel settings (or null if not configured)
+ * @param userDefault - User's default message visibility
+ * @returns Object with effective visibility and whether it's ephemeral
+ */
+export function resolveMessageVisibility(
+  commandOption: MessageVisibility | null | undefined,
+  channelSettings: ChannelSettings | null,
+  userDefault: MessageVisibility | null | undefined
+): { visibility: MessageVisibility; isEphemeral: boolean } {
+  const effectiveVisibility = resolveEffectiveValue(
+    commandOption,
+    channelSettings?.messageVisibility,
+    channelSettings?.messageVisibilityEnforced ?? false,
+    userDefault,
+    'ephemeral' as MessageVisibility
+  )
+
+  return {
+    visibility: effectiveVisibility,
+    isEphemeral: effectiveVisibility === 'ephemeral',
+  }
 }

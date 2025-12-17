@@ -520,7 +520,7 @@ describe('pagination', () => {
       const { interaction, replyFn } = createMockInteraction()
       const embed = new EmbedBuilder().setTitle('Test')
 
-      await sendSimpleResponse(interaction, embed, false)
+      await sendSimpleResponse(interaction, embed, { allowShare: false })
 
       const callArgs = replyFn.mock.calls[0][0]
       expect(callArgs.components).toHaveLength(0)
@@ -530,7 +530,7 @@ describe('pagination', () => {
       const { interaction, mockResponse } = createMockInteraction()
       const embed = new EmbedBuilder().setTitle('Test')
 
-      await sendSimpleResponse(interaction, embed, false)
+      await sendSimpleResponse(interaction, embed, { allowShare: false })
 
       expect(mockResponse.createMessageComponentCollector).not.toHaveBeenCalled()
     })
@@ -539,7 +539,7 @@ describe('pagination', () => {
       const { interaction, mockResponse } = createMockInteraction()
       const embed = new EmbedBuilder().setTitle('Test')
 
-      await sendSimpleResponse(interaction, embed, true)
+      await sendSimpleResponse(interaction, embed, { allowShare: true })
 
       expect(mockResponse.createMessageComponentCollector).toHaveBeenCalledTimes(1)
     })
@@ -548,7 +548,7 @@ describe('pagination', () => {
       const { interaction, collectHandlers } = createMockInteraction()
       const embed = new EmbedBuilder().setTitle('Test')
 
-      await sendSimpleResponse(interaction, embed, true)
+      await sendSimpleResponse(interaction, embed, { allowShare: true })
 
       const replyFn = vi.fn()
       const buttonInteraction = {

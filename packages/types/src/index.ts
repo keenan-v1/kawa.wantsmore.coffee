@@ -136,6 +136,11 @@ export type OrderType = 'internal' | 'partner'
 
 export const ORDER_TYPES: OrderType[] = ['internal', 'partner']
 
+// Message visibility - whether bot responses are ephemeral (private) or public
+export type MessageVisibility = 'ephemeral' | 'public'
+
+export const MESSAGE_VISIBILITIES: MessageVisibility[] = ['ephemeral', 'public']
+
 // User sell order (offer to sell)
 export interface SellOrder {
   id: number
@@ -256,9 +261,11 @@ export type ChannelConfigKey =
   | 'priceList' // Default price list code
   | 'visibility' // Default visibility: 'internal' | 'partner'
   | 'currency' // Default currency: Currency
+  | 'messageVisibility' // Default message visibility: 'ephemeral' | 'public'
   | 'priceListEnforced' // 'true' | 'false' - lock price list
   | 'visibilityEnforced' // 'true' | 'false' - lock visibility
   | 'currencyEnforced' // 'true' | 'false' - lock currency
+  | 'messageVisibilityEnforced' // 'true' | 'false' - lock message visibility
   | 'announceInternal' // Channel ID to announce internal visibility queries
   | 'announcePartner' // Channel ID to announce partner visibility queries
 
@@ -278,9 +285,11 @@ export interface ChannelConfigMap {
   priceList?: string
   visibility?: 'internal' | 'partner'
   currency?: Currency
+  messageVisibility?: MessageVisibility
   priceListEnforced?: boolean
   visibilityEnforced?: boolean
   currencyEnforced?: boolean
+  messageVisibilityEnforced?: boolean
   announceInternal?: string // Channel ID
   announcePartner?: string // Channel ID
 }
@@ -290,9 +299,11 @@ export interface UpdateChannelConfigRequest {
   priceList?: string | null
   visibility?: 'internal' | 'partner' | null
   currency?: Currency | null
+  messageVisibility?: MessageVisibility | null
   priceListEnforced?: boolean | null
   visibilityEnforced?: boolean | null
   currencyEnforced?: boolean | null
+  messageVisibilityEnforced?: boolean | null
   announceInternal?: string | null
   announcePartner?: string | null
 }

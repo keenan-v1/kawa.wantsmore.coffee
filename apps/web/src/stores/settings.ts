@@ -13,6 +13,7 @@ import type {
   LocationDisplayMode,
   CommodityDisplayMode,
   CommodityIconStyle,
+  MessageVisibility,
 } from '@kawakawa/types'
 import { api } from '../services/api'
 
@@ -230,6 +231,22 @@ export const useSettingsStore = () => {
     set: (value: string[]) => updateSetting('fio.excludedLocations', value),
   })
 
+  // Discord settings
+  const discordMessageVisibility = computed({
+    get: () => settingsValues.value['discord.messageVisibility'] as MessageVisibility,
+    set: (value: MessageVisibility) => updateSetting('discord.messageVisibility', value),
+  })
+
+  const discordLocationDisplayMode = computed({
+    get: () => settingsValues.value['discord.locationDisplayMode'] as LocationDisplayMode,
+    set: (value: LocationDisplayMode) => updateSetting('discord.locationDisplayMode', value),
+  })
+
+  const discordCommodityDisplayMode = computed({
+    get: () => settingsValues.value['discord.commodityDisplayMode'] as CommodityDisplayMode,
+    set: (value: CommodityDisplayMode) => updateSetting('discord.commodityDisplayMode', value),
+  })
+
   // ==================== HELPER GETTERS ====================
 
   // Get all settings for a category
@@ -290,6 +307,11 @@ export const useSettingsStore = () => {
     hasFioCredentials,
     fioAutoSync,
     fioExcludedLocations,
+
+    // Typed computed properties - Discord
+    discordMessageVisibility,
+    discordLocationDisplayMode,
+    discordCommodityDisplayMode,
 
     // Exported definitions for UI
     SETTING_DEFINITIONS,

@@ -68,6 +68,7 @@ vi.mock('../../services/channelDefaults.js', () => ({
       systemDefault: unknown
     ) => commandOption ?? systemDefault
   ),
+  resolveMessageVisibility: vi.fn(() => ({ visibility: 'ephemeral', isEphemeral: true })),
 }))
 
 vi.mock('../../services/reservationService.js', () => ({
@@ -85,6 +86,7 @@ describe('/fill command', () => {
     mockGetDisplaySettings.mockResolvedValue({
       locationDisplayMode: 'natural-ids-only',
       commodityDisplayMode: 'ticker-only',
+      messageVisibility: 'ephemeral',
       preferredCurrency: 'CIS',
       favoritedLocations: [],
       favoritedCommodities: [],

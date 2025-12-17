@@ -9,6 +9,7 @@ import type {
   LocationDisplayMode,
   CommodityDisplayMode,
   CommodityIconStyle,
+  MessageVisibility,
 } from './index'
 
 // Categories for grouping settings in the UI
@@ -18,6 +19,7 @@ export const SETTING_CATEGORIES = {
   MARKET: 'market',
   NOTIFICATIONS: 'notifications',
   FIO: 'fio',
+  DISCORD: 'discord',
 } as const
 
 export type SettingCategory = (typeof SETTING_CATEGORIES)[keyof typeof SETTING_CATEGORIES]
@@ -46,6 +48,10 @@ export const SETTING_CATEGORY_INFO: Record<
   [SETTING_CATEGORIES.FIO]: {
     label: 'FIO Integration',
     description: 'Settings for FIO data synchronization',
+  },
+  [SETTING_CATEGORIES.DISCORD]: {
+    label: 'Discord',
+    description: 'Discord bot preferences',
   },
 }
 
@@ -234,6 +240,37 @@ export const SETTING_DEFINITIONS = {
     label: 'Excluded Locations',
     description: 'Locations to exclude from FIO inventory sync (by ID or name)',
   } satisfies SettingDef<string[], 'string[]'>,
+
+  // ==================== DISCORD SETTINGS ====================
+  'discord.messageVisibility': {
+    key: 'discord.messageVisibility',
+    type: 'enum',
+    defaultValue: 'ephemeral' as MessageVisibility,
+    category: SETTING_CATEGORIES.DISCORD,
+    label: 'Message Visibility',
+    description: 'Whether bot responses are private (ephemeral) or public by default',
+    enumOptions: ['ephemeral', 'public'] as const,
+  } satisfies SettingDef<MessageVisibility, 'enum'>,
+
+  'discord.locationDisplayMode': {
+    key: 'discord.locationDisplayMode',
+    type: 'enum',
+    defaultValue: 'natural-ids-only' as LocationDisplayMode,
+    category: SETTING_CATEGORIES.DISCORD,
+    label: 'Location Display Mode',
+    description: 'How to display location names in Discord (compact for mobile)',
+    enumOptions: ['names-only', 'natural-ids-only', 'both'] as const,
+  } satisfies SettingDef<LocationDisplayMode, 'enum'>,
+
+  'discord.commodityDisplayMode': {
+    key: 'discord.commodityDisplayMode',
+    type: 'enum',
+    defaultValue: 'ticker-only' as CommodityDisplayMode,
+    category: SETTING_CATEGORIES.DISCORD,
+    label: 'Commodity Display Mode',
+    description: 'How to display commodity names in Discord (compact for mobile)',
+    enumOptions: ['ticker-only', 'name-only', 'both'] as const,
+  } satisfies SettingDef<CommodityDisplayMode, 'enum'>,
 } as const
 
 // Type-safe setting keys

@@ -18,8 +18,9 @@ import type {
 } from 'discord.js'
 import type { Command } from '../../client.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
+import { getChannelDefaults, resolveMessageVisibility } from '../../services/channelDefaults.js'
 import { formatLocation } from '../../services/display.js'
-import type { LocationDisplayMode, Currency } from '@kawakawa/types'
+import type { LocationDisplayMode, Currency, MessageVisibility } from '@kawakawa/types'
 import {
   getReservationsForUser,
   updateReservationStatus,
@@ -50,11 +51,21 @@ export const reservations: Command = {
           { name: 'Cancelled', value: 'cancelled' },
           { name: 'Rejected', value: 'rejected' }
         )
+    )
+    .addStringOption(option =>
+      option
+        .setName('reply')
+        .setDescription('Reply visibility (default: your preference)')
+        .addChoices(
+          { name: 'Private (only you)', value: 'ephemeral' },
+          { name: 'Public (everyone)', value: 'public' }
+        )
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const statusFilter =
       (interaction.options.getString('status') as ReservationStatus | 'all' | null) || 'all'
+    const replyOption = interaction.options.getString('reply') as MessageVisibility | null
 
     // Require linked account
     const result = await requireLinkedUser(interaction)
@@ -64,6 +75,17 @@ export const reservations: Command = {
     // Get user's display settings
     const displaySettings = await getDisplaySettings(interaction.user.id)
 
+    // Get channel defaults (if configured)
+    const channelId = interaction.channelId
+    const channelSettings = await getChannelDefaults(channelId)
+
+    // Resolve message visibility (command > channel > user > system default)
+    const { isEphemeral } = resolveMessageVisibility(
+      replyOption,
+      channelSettings,
+      displaySettings.messageVisibility
+    )
+
     // Get reservations
     const allReservations = await getReservationsForUser(userId, statusFilter)
 
@@ -71,7 +93,7 @@ export const reservations: Command = {
       const statusText = statusFilter === 'all' ? '' : ` with status "${statusFilter}"`
       await interaction.reply({
         content: `📭 No reservations found${statusText}.\n\nUse \`/reserve\` to reserve from a sell order or \`/fill\` to offer to fill a buy order.`,
-        flags: MessageFlags.Ephemeral,
+        flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       })
       return
     }
@@ -82,7 +104,8 @@ export const reservations: Command = {
       allReservations,
       userId,
       displaySettings.locationDisplayMode,
-      statusFilter
+      statusFilter,
+      isEphemeral
     )
   },
 }
@@ -95,7 +118,8 @@ async function sendReservationsWithPagination(
   allReservations: ReservationWithDetails[],
   userId: number,
   locationDisplayMode: string,
-  statusFilter: ReservationStatus | 'all'
+  statusFilter: ReservationStatus | 'all',
+  isEphemeral: boolean
 ): Promise<void> {
   const idPrefix = `reservations:${Date.now()}`
   let currentPage = 0
@@ -160,7 +184,7 @@ async function sendReservationsWithPagination(
   const response = await interaction.reply({
     embeds: [await buildEmbed(0)],
     components: [buildButtons(0)],
-    flags: MessageFlags.Ephemeral,
+    flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
   })
 
   const collector = response.createMessageComponentCollector({

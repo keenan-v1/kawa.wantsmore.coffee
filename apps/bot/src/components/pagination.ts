@@ -38,6 +38,8 @@ export interface PaginationOptions {
   allowShare?: boolean
   /** Custom footer text (page info appended) */
   footerText?: string
+  /** Whether the initial response should be ephemeral (default: true) */
+  ephemeral?: boolean
 }
 
 const DEFAULT_OPTIONS: Required<PaginationOptions> = {
@@ -48,6 +50,7 @@ const DEFAULT_OPTIONS: Required<PaginationOptions> = {
   idPrefix: 'page',
   allowShare: true,
   footerText: '',
+  ephemeral: true,
 }
 
 /**
@@ -198,7 +201,7 @@ export async function sendPaginatedResponse(
   options?: PaginationOptions
 ): Promise<void> {
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  const { pageSize, maxEmbedSize, timeout, idPrefix, allowShare } = opts
+  const { pageSize, maxEmbedSize, timeout, idPrefix, allowShare, ephemeral } = opts
 
   // Pre-calculate pages based on size limits
   const pages = calculatePages(allItems, pageSize, maxEmbedSize)
@@ -213,15 +216,16 @@ export async function sendPaginatedResponse(
   // Build initial embed and buttons
   const embed = buildPageEmbed(baseEmbed, getPageItems(0), 0, totalPages, allItems.length, opts)
 
-  // Only show buttons if there's more than one page or share is enabled
-  const showButtons = totalPages > 1 || allowShare
-  const components = showButtons ? [createButtons(0, totalPages, idPrefix, allowShare)] : []
+  // Only show buttons if there's more than one page or share is enabled (and is ephemeral)
+  const showShareButton = allowShare && ephemeral
+  const showButtons = totalPages > 1 || showShareButton
+  const components = showButtons ? [createButtons(0, totalPages, idPrefix, showShareButton)] : []
 
-  // Send initial response (ephemeral)
+  // Send initial response
   const response = await interaction.reply({
     embeds: [embed],
     components,
-    flags: MessageFlags.Ephemeral,
+    flags: ephemeral ? MessageFlags.Ephemeral : undefined,
   })
 
   // If no buttons needed, we're done
@@ -274,7 +278,7 @@ export async function sendPaginatedResponse(
         return
     }
 
-    // Update the ephemeral message with new page
+    // Update the message with new page
     const newEmbed = buildPageEmbed(
       baseEmbed,
       getPageItems(currentPage),
@@ -286,7 +290,7 @@ export async function sendPaginatedResponse(
 
     await buttonInteraction.update({
       embeds: [newEmbed],
-      components: [createButtons(currentPage, totalPages, idPrefix, allowShare)],
+      components: [createButtons(currentPage, totalPages, idPrefix, showShareButton)],
     })
   })
 
@@ -315,11 +319,15 @@ export async function sendPaginatedResponse(
 export async function sendSimpleResponse(
   interaction: ChatInputCommandInteraction,
   embed: EmbedBuilder,
-  allowShare = true
+  options?: { allowShare?: boolean; ephemeral?: boolean }
 ): Promise<void> {
   const idPrefix = 'simple'
+  const allowShare = options?.allowShare ?? true
+  const ephemeral = options?.ephemeral ?? true
 
-  const components = allowShare
+  // Only show share button if ephemeral and share is allowed
+  const showShareButton = allowShare && ephemeral
+  const components = showShareButton
     ? [
         new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
@@ -333,10 +341,10 @@ export async function sendSimpleResponse(
   const response = await interaction.reply({
     embeds: [embed],
     components,
-    flags: MessageFlags.Ephemeral,
+    flags: ephemeral ? MessageFlags.Ephemeral : undefined,
   })
 
-  if (!allowShare) {
+  if (!showShareButton) {
     return
   }
 

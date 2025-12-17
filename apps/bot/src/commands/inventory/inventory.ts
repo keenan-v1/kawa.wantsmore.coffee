@@ -374,40 +374,38 @@ async function sendInteractiveInventory(
   }
 
   const buildComponents = (page: number): ActionRowBuilder<ButtonBuilder>[] => {
-    const rows: ActionRowBuilder<ButtonBuilder>[] = []
+    const row = new ActionRowBuilder<ButtonBuilder>()
 
-    // Action buttons row
-    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${idPrefix}:share`)
-        .setLabel('📢 Share')
-        .setStyle(ButtonStyle.Secondary)
-    )
-    rows.push(actionRow)
-
-    // Pagination row (if multiple pages)
+    // Add pagination buttons if multiple pages
     if (totalPages > 1) {
-      const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      row.addComponents(
         new ButtonBuilder()
           .setCustomId(`${idPrefix}:prev`)
-          .setLabel('◀ Previous')
+          .setLabel('◀')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(page === 0),
         new ButtonBuilder()
           .setCustomId(`${idPrefix}:info`)
-          .setLabel(`${page + 1} / ${totalPages}`)
+          .setLabel(`${page + 1}/${totalPages}`)
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(true),
         new ButtonBuilder()
           .setCustomId(`${idPrefix}:next`)
-          .setLabel('Next ▶')
+          .setLabel('▶')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(page >= totalPages - 1)
       )
-      rows.push(navRow)
     }
 
-    return rows
+    // Add share button
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${idPrefix}:share`)
+        .setLabel('📢 Share')
+        .setStyle(ButtonStyle.Primary)
+    )
+
+    return [row]
   }
 
   const response = await interaction.reply({

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["eslint.config.js"],
+      "project": ["*.{js,ts}"]
+    },
+    "apps/api": {
+      "entry": ["src/index.ts", "src/scripts/*.ts", "src/controllers/*.ts"],
+      "project": ["src/**/*.ts", "!src/**/*.test.ts"],
+      "ignore": ["src/generated/**"],
+      "ignoreDependencies": ["@tsoa/runtime", "multer"]
+    },
+    "apps/bot": {
+      "entry": ["src/index.ts", "src/deploy-commands.ts"],
+      "project": ["src/**/*.ts", "!src/**/*.test.ts"],
+      "ignoreDependencies": ["pino-pretty"]
+    },
+    "apps/web": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**/*.{ts,vue}"],
+      "ignoreDependencies": ["@kawakawa/client"]
+    },
+    "packages/types": {
+      "entry": ["src/index.ts", "src/settings.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/db": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/services": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/client": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    }
+  },
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["openapi-typescript-codegen", "concurrently", "@vitest/coverage-v8"]
+}

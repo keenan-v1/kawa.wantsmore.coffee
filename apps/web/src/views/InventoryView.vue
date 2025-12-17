@@ -403,22 +403,30 @@
                         </td>
                         <td class="text-right">
                           <div class="d-flex justify-end ga-1">
-                            <v-btn
-                              size="small"
-                              variant="tonal"
-                              color="primary"
-                              prepend-icon="mdi-pencil"
-                              @click.stop="editSellOrder(order)"
-                            >
-                              Edit
-                            </v-btn>
-                            <v-btn
-                              size="small"
-                              variant="tonal"
-                              color="error"
-                              icon="mdi-delete"
-                              @click.stop="confirmDeleteSellOrder(order)"
-                            />
+                            <v-tooltip text="Edit order" location="top">
+                              <template #activator="{ props }">
+                                <v-btn
+                                  v-bind="props"
+                                  size="small"
+                                  variant="tonal"
+                                  color="primary"
+                                  icon="mdi-pencil"
+                                  @click.stop="editSellOrder(order)"
+                                />
+                              </template>
+                            </v-tooltip>
+                            <v-tooltip text="Delete order" location="top">
+                              <template #activator="{ props }">
+                                <v-btn
+                                  v-bind="props"
+                                  size="small"
+                                  variant="tonal"
+                                  color="error"
+                                  icon="mdi-delete"
+                                  @click.stop="confirmDeleteSellOrder(order)"
+                                />
+                              </template>
+                            </v-tooltip>
                           </div>
                         </td>
                       </tr>
@@ -473,22 +481,30 @@
                         </td>
                         <td class="text-right">
                           <div class="d-flex justify-end ga-1">
-                            <v-btn
-                              size="small"
-                              variant="tonal"
-                              color="primary"
-                              prepend-icon="mdi-pencil"
-                              @click.stop="editBuyOrder(order)"
-                            >
-                              Edit
-                            </v-btn>
-                            <v-btn
-                              size="small"
-                              variant="tonal"
-                              color="error"
-                              icon="mdi-delete"
-                              @click.stop="confirmDeleteBuyOrder(order)"
-                            />
+                            <v-tooltip text="Edit order" location="top">
+                              <template #activator="{ props }">
+                                <v-btn
+                                  v-bind="props"
+                                  size="small"
+                                  variant="tonal"
+                                  color="primary"
+                                  icon="mdi-pencil"
+                                  @click.stop="editBuyOrder(order)"
+                                />
+                              </template>
+                            </v-tooltip>
+                            <v-tooltip text="Delete order" location="top">
+                              <template #activator="{ props }">
+                                <v-btn
+                                  v-bind="props"
+                                  size="small"
+                                  variant="tonal"
+                                  color="error"
+                                  icon="mdi-delete"
+                                  @click.stop="confirmDeleteBuyOrder(order)"
+                                />
+                              </template>
+                            </v-tooltip>
                           </div>
                         </td>
                       </tr>

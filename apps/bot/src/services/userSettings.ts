@@ -6,7 +6,7 @@
 import { db, userSettings, userDiscordProfiles } from '@kawakawa/db'
 import { eq, and, inArray } from 'drizzle-orm'
 import { settingsService } from '@kawakawa/services/settings'
-import type { LocationDisplayMode, CommodityDisplayMode } from '@kawakawa/types'
+import type { LocationDisplayMode, CommodityDisplayMode, MessageVisibility } from '@kawakawa/types'
 
 // Default values for Discord bot settings
 // Discord-specific display settings are separate from web to allow different preferences
@@ -14,6 +14,7 @@ const DEFAULTS = {
   // Discord-specific display settings (separate from web)
   'discord.locationDisplayMode': 'natural-ids-only' as LocationDisplayMode, // IDs only for compact Discord display
   'discord.commodityDisplayMode': 'ticker-only' as CommodityDisplayMode, // Tickers only for compact Discord display
+  'discord.messageVisibility': 'ephemeral' as MessageVisibility, // Ephemeral by default
   // Shared market settings
   'market.preferredCurrency': 'CIS',
   'market.defaultPriceList': null as string | null,
@@ -131,6 +132,7 @@ export async function getSettingsByDiscordId(
 export async function getDisplaySettings(discordId: string): Promise<{
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
+  messageVisibility: MessageVisibility
   preferredCurrency: string
   favoritedLocations: string[]
   favoritedCommodities: string[]
@@ -142,6 +144,8 @@ export async function getDisplaySettings(discordId: string): Promise<{
       DEFAULTS['discord.locationDisplayMode']) as LocationDisplayMode,
     commodityDisplayMode: (settings?.['discord.commodityDisplayMode'] ??
       DEFAULTS['discord.commodityDisplayMode']) as CommodityDisplayMode,
+    messageVisibility: (settings?.['discord.messageVisibility'] ??
+      DEFAULTS['discord.messageVisibility']) as MessageVisibility,
     preferredCurrency: (settings?.['market.preferredCurrency'] ??
       DEFAULTS['market.preferredCurrency']) as string,
     favoritedLocations: (settings?.['market.favoritedLocations'] ??

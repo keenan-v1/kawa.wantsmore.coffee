@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js'
 import type { ChatInputCommandInteraction } from 'discord.js'
 import type { Command } from '../../client.js'
+import type { MessageVisibility } from '@kawakawa/types'
 import { db, sellOrders, buyOrders, users } from '@kawakawa/db'
 import { eq, and, desc, inArray } from 'drizzle-orm'
 import { searchUsers } from '../../autocomplete/index.js'
@@ -11,7 +12,11 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
-import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
+import {
+  getChannelDefaults,
+  resolveEffectiveValue,
+  resolveMessageVisibility,
+} from '../../services/channelDefaults.js'
 import { sendPaginatedResponse } from '../../components/pagination.js'
 import { enrichSellOrdersWithQuantities } from '@kawakawa/services/market'
 import {
@@ -126,6 +131,15 @@ export const query: Command = {
           { name: 'Internal (members)', value: 'internal' },
           { name: 'Partner (trade partners)', value: 'partner' }
         )
+    )
+    .addStringOption(option =>
+      option
+        .setName('reply')
+        .setDescription('Reply visibility (default: your preference)')
+        .addChoices(
+          { name: 'Private (only you)', value: 'ephemeral' },
+          { name: 'Public (everyone)', value: 'public' }
+        )
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -137,6 +151,7 @@ export const query: Command = {
       | 'internal'
       | 'partner'
       | null
+    const replyOption = interaction.options.getString('reply') as MessageVisibility | null
 
     // Get user's display preferences
     const displaySettings = await getDisplaySettings(interaction.user.id)
@@ -144,6 +159,13 @@ export const query: Command = {
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
     const channelSettings = await getChannelDefaults(channelId)
+
+    // Resolve message visibility (command > channel > user > system default)
+    const { isEphemeral } = resolveMessageVisibility(
+      replyOption,
+      channelSettings,
+      displaySettings.messageVisibility
+    )
 
     // Determine visibility using channel defaults
     // For query, 'internal' is the system default
@@ -201,7 +223,7 @@ export const query: Command = {
           content:
             `❌ Could not resolve: ${unresolvedTokens.map(t => `"${t}"`).join(', ')}\n\n` +
             'Use the autocomplete suggestions to find valid commodities, locations, or users.',
-          flags: MessageFlags.Ephemeral,
+          flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
         })
         return
       }
@@ -284,7 +306,7 @@ export const query: Command = {
     if (!hasOrders) {
       await interaction.reply({
         content: `📭 No orders found matching your filters.\n\n*${filterDesc}*`,
-        flags: MessageFlags.Ephemeral,
+        flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       })
       return
     }
@@ -371,11 +393,12 @@ export const query: Command = {
       }
     }
 
-    // Send paginated response (ephemeral to user) after announcement is delivered
+    // Send paginated response after announcement is delivered
     await sendPaginatedResponse(interaction, embed, allItems, {
       pageSize: ORDERS_PER_PAGE,
       allowShare: true,
-      footerText: 'Use 📢 Share to post publicly',
+      footerText: isEphemeral ? 'Use 📢 Share to post publicly' : undefined,
+      ephemeral: isEphemeral,
     })
   },
 }

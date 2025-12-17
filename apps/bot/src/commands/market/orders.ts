@@ -17,6 +17,7 @@ import type {
   StringSelectMenuInteraction,
 } from 'discord.js'
 import type { Command } from '../../client.js'
+import type { MessageVisibility } from '@kawakawa/types'
 import { db, sellOrders, buyOrders, users, userDiscordProfiles } from '@kawakawa/db'
 import { eq, and, desc } from 'drizzle-orm'
 import { searchCommodities, searchLocations, searchUsers } from '../../autocomplete/index.js'
@@ -27,7 +28,11 @@ import {
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings, getFioUsernames } from '../../services/userSettings.js'
-import { getChannelDefaults, resolveEffectiveValue } from '../../services/channelDefaults.js'
+import {
+  getChannelDefaults,
+  resolveEffectiveValue,
+  resolveMessageVisibility,
+} from '../../services/channelDefaults.js'
 import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
 import {
   formatGroupedOrdersMulti,
@@ -72,6 +77,15 @@ export const orders: Command = {
           { name: 'All', value: 'all' },
           { name: 'Internal (members)', value: 'internal' },
           { name: 'Partner (trade partners)', value: 'partner' }
+        )
+    )
+    .addStringOption(option =>
+      option
+        .setName('reply')
+        .setDescription('Reply visibility (default: your preference)')
+        .addChoices(
+          { name: 'Private (only you)', value: 'ephemeral' },
+          { name: 'Public (everyone)', value: 'public' }
         )
     ) as SlashCommandBuilder,
 
@@ -121,6 +135,7 @@ export const orders: Command = {
       | 'internal'
       | 'partner'
       | null
+    const replyOption = interaction.options.getString('reply') as MessageVisibility | null
 
     // Get user's display preferences
     const displaySettings = await getDisplaySettings(interaction.user.id)
@@ -128,6 +143,13 @@ export const orders: Command = {
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
     const channelSettings = await getChannelDefaults(channelId)
+
+    // Resolve message visibility (command > channel > user > system default)
+    const { isEphemeral } = resolveMessageVisibility(
+      replyOption,
+      channelSettings,
+      displaySettings.messageVisibility
+    )
 
     // Determine visibility using channel defaults
     // For view commands, 'all' means no filter, so we use it as the system default
@@ -157,7 +179,7 @@ export const orders: Command = {
       if (!resolvedCommodity) {
         await interaction.reply({
           content: `❌ Commodity "${commodityInput}" not found.`,
-          flags: MessageFlags.Ephemeral,
+          flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
         })
         return
       }
@@ -168,7 +190,7 @@ export const orders: Command = {
       if (!resolvedLocation) {
         await interaction.reply({
           content: `❌ Location "${locationInput}" not found.`,
-          flags: MessageFlags.Ephemeral,
+          flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
         })
         return
       }
@@ -179,7 +201,7 @@ export const orders: Command = {
       if (userResults.length === 0) {
         await interaction.reply({
           content: `❌ User "${userInput}" not found.`,
-          flags: MessageFlags.Ephemeral,
+          flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
         })
         return
       }
@@ -260,7 +282,7 @@ export const orders: Command = {
     if (!hasOrders) {
       await interaction.reply({
         content: `📭 No orders found matching your filters.\n\n*${filterDesc}*`,
-        flags: MessageFlags.Ephemeral,
+        flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
       })
       return
     }
@@ -325,7 +347,7 @@ export const orders: Command = {
       .setTimestamp()
 
     // Custom pagination with Manage button
-    await sendOrdersWithManage(interaction, baseEmbed, allItems, currentUserId)
+    await sendOrdersWithManage(interaction, baseEmbed, allItems, currentUserId, isEphemeral)
   },
 }
 
@@ -336,7 +358,8 @@ async function sendOrdersWithManage(
   interaction: ChatInputCommandInteraction,
   baseEmbed: EmbedBuilder,
   allItems: { name: string; value: string; inline?: boolean }[],
-  currentUserId: number | null
+  currentUserId: number | null,
+  isEphemeral: boolean
 ): Promise<void> {
   const idPrefix = `orders:${Date.now()}`
 
@@ -350,7 +373,10 @@ async function sendOrdersWithManage(
     const pageItems = pages[page] || []
     embed.setFields(...pageItems.map(item => ({ ...item, inline: item.inline ?? true })))
 
-    const footerLines = ['📢 Share to post publicly']
+    const footerLines: string[] = []
+    if (isEphemeral) {
+      footerLines.push('📢 Share to post publicly')
+    }
     if (currentUserId) {
       footerLines.push('🗑️ Manage to edit or delete your orders')
     }
@@ -378,12 +404,18 @@ async function sendOrdersWithManage(
         .setCustomId(`${idPrefix}:next`)
         .setLabel('▶')
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page >= totalPages - 1),
-      new ButtonBuilder()
-        .setCustomId(`${idPrefix}:share`)
-        .setLabel('📢 Share')
-        .setStyle(ButtonStyle.Primary)
+        .setDisabled(page >= totalPages - 1)
     )
+
+    // Add share button only if ephemeral
+    if (isEphemeral) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${idPrefix}:share`)
+          .setLabel('📢 Share')
+          .setStyle(ButtonStyle.Primary)
+      )
+    }
 
     // Add manage button if user is linked
     if (currentUserId) {
@@ -401,7 +433,7 @@ async function sendOrdersWithManage(
   const response = await interaction.reply({
     embeds: [buildEmbed(0)],
     components: [buildButtons(0)],
-    flags: MessageFlags.Ephemeral,
+    flags: isEphemeral ? MessageFlags.Ephemeral : undefined,
   })
 
   const collector = response.createMessageComponentCollector({

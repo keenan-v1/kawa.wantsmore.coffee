@@ -359,9 +359,9 @@ describe('inventory command', () => {
 
       await inventory.execute(interaction as never)
 
-      // Should have 2 component rows (action buttons + pagination)
+      // Should have 1 component row (pagination + share combined)
       const call = replyFn.mock.calls[0][0]
-      expect(call.components).toHaveLength(2)
+      expect(call.components).toHaveLength(1)
     })
   })
 

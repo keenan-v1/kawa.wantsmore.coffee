@@ -904,6 +904,52 @@
 
                 <v-divider class="my-4" />
 
+                <!-- Bot Preferences Section (only when connected) -->
+                <template v-if="discordStatus?.connected">
+                  <div class="text-subtitle-1 font-weight-bold mb-3">Bot Preferences</div>
+
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <v-select
+                        v-model="settingsStore.discordMessageVisibility.value"
+                        :items="messageVisibilityOptions"
+                        label="Reply Visibility"
+                        hint="Whether bot replies are private (only you) or public by default"
+                        persistent-hint
+                        density="compact"
+                        prepend-icon="mdi-eye"
+                      />
+                    </v-col>
+                    <v-col cols="12" md="6">
+                      <v-select
+                        v-model="settingsStore.discordLocationDisplayMode.value"
+                        :items="locationDisplayModeOptions"
+                        label="Location Display"
+                        hint="How locations are shown in bot messages"
+                        persistent-hint
+                        density="compact"
+                        prepend-icon="mdi-map-marker"
+                      />
+                    </v-col>
+                  </v-row>
+
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <v-select
+                        v-model="settingsStore.discordCommodityDisplayMode.value"
+                        :items="commodityDisplayModeOptions"
+                        label="Commodity Display"
+                        hint="How commodities are shown in bot messages"
+                        persistent-hint
+                        density="compact"
+                        prepend-icon="mdi-package-variant"
+                      />
+                    </v-col>
+                  </v-row>
+
+                  <v-divider class="my-4" />
+                </template>
+
                 <div class="text-subtitle-1 font-weight-bold mb-3">About Discord Integration</div>
 
                 <v-list density="compact" class="bg-transparent">
@@ -1081,7 +1127,7 @@ import DiscordIcon from '../components/DiscordIcon.vue'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 import { CURRENCIES } from '../types'
 import type { LocationDisplayMode, CommodityDisplayMode, CommodityIconStyle, Role } from '../types'
-import type { DiscordConnectionStatus } from '@kawakawa/types'
+import type { DiscordConnectionStatus, MessageVisibility } from '@kawakawa/types'
 import { api } from '../services/api'
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
@@ -1105,6 +1151,22 @@ const commodityIconStyles: { title: string; value: CommodityIconStyle }[] = [
   { title: 'Refined PRUN', value: 'rprun' },
   { title: 'Classic PRUN', value: 'prun' },
   { title: 'None', value: 'none' },
+]
+
+// Discord bot preference options
+const messageVisibilityOptions: { title: string; value: MessageVisibility }[] = [
+  { title: 'Private (only you)', value: 'ephemeral' },
+  { title: 'Public (everyone)', value: 'public' },
+]
+const locationDisplayModeOptions: { title: string; value: LocationDisplayMode }[] = [
+  { title: 'Names Only (e.g., Benten Station)', value: 'names-only' },
+  { title: 'IDs Only (e.g., BEN)', value: 'natural-ids-only' },
+  { title: 'Both (e.g., Benten Station (BEN))', value: 'both' },
+]
+const commodityDisplayModeOptions: { title: string; value: CommodityDisplayMode }[] = [
+  { title: 'Ticker Only (e.g., RAT)', value: 'ticker-only' },
+  { title: 'Name Only (e.g., Basic Rations)', value: 'name-only' },
+  { title: 'Both (e.g., RAT - Basic Rations)', value: 'both' },
 ]
 
 const ACCOUNT_TABS = [

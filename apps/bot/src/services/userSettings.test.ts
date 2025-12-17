@@ -85,6 +85,7 @@ describe('userSettings', () => {
       expect(result).toEqual({
         'discord.locationDisplayMode': 'natural-ids-only',
         'discord.commodityDisplayMode': 'ticker-only',
+        'discord.messageVisibility': 'ephemeral',
         'market.preferredCurrency': 'CIS',
         'market.defaultPriceList': null,
         'market.automaticPricing': false,
@@ -178,6 +179,7 @@ describe('userSettings', () => {
       expect(result).toEqual({
         locationDisplayMode: 'natural-ids-only',
         commodityDisplayMode: 'ticker-only',
+        messageVisibility: 'ephemeral',
         preferredCurrency: 'CIS',
         favoritedLocations: [],
         favoritedCommodities: [],
@@ -199,6 +201,7 @@ describe('userSettings', () => {
       expect(result).toEqual({
         locationDisplayMode: 'names-only',
         commodityDisplayMode: 'ticker-only',
+        messageVisibility: 'ephemeral',
         preferredCurrency: 'NC1',
         favoritedLocations: ['BEN'],
         favoritedCommodities: [],
