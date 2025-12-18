@@ -277,52 +277,75 @@ describe('FioInventoryController', () => {
   })
 
   describe('getStorageLocations', () => {
-    let mockSelectDistinct: any
+    let mockSelectChain: any
 
     beforeEach(() => {
-      mockSelectDistinct = {
+      mockSelectChain = {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
       }
-      vi.mocked(db.selectDistinct).mockReturnValue(mockSelectDistinct)
+      vi.mocked(db.select).mockReturnValue(mockSelectChain)
     })
 
     it('should return unique location IDs where user has inventory', async () => {
-      mockSelectDistinct.where.mockResolvedValueOnce([
-        { locationId: 'BEN' },
-        { locationId: 'UV-351a' },
-        { locationId: 'MON' },
+      mockSelectChain.where.mockResolvedValueOnce([
+        { locationId: 'BEN', type: 'STORE' },
+        { locationId: 'UV-351a', type: 'STORE' },
+        { locationId: 'MON', type: 'WAREHOUSE_STORE' },
       ])
 
       const result = await controller.getStorageLocations(mockRequest)
 
-      expect(result).toEqual({
-        locationIds: ['BEN', 'UV-351a', 'MON'],
-      })
-      expect(db.selectDistinct).toHaveBeenCalled()
+      expect(result.locationIds).toEqual(['BEN', 'UV-351a', 'MON'])
+      expect(result.locations).toEqual([
+        { locationId: 'BEN', storageTypes: ['STORE'] },
+        { locationId: 'UV-351a', storageTypes: ['STORE'] },
+        { locationId: 'MON', storageTypes: ['WAREHOUSE_STORE'] },
+      ])
+      expect(db.select).toHaveBeenCalled()
     })
 
     it('should filter out null location IDs', async () => {
-      mockSelectDistinct.where.mockResolvedValueOnce([
-        { locationId: 'BEN' },
-        { locationId: null },
-        { locationId: 'MON' },
+      mockSelectChain.where.mockResolvedValueOnce([
+        { locationId: 'BEN', type: 'STORE' },
+        { locationId: null, type: 'STORE' },
+        { locationId: 'MON', type: 'STORE' },
       ])
 
       const result = await controller.getStorageLocations(mockRequest)
 
-      expect(result).toEqual({
-        locationIds: ['BEN', 'MON'],
-      })
+      expect(result.locationIds).toEqual(['BEN', 'MON'])
+      expect(result.locations).toHaveLength(2)
     })
 
     it('should return empty array when user has no storage', async () => {
-      mockSelectDistinct.where.mockResolvedValueOnce([])
+      mockSelectChain.where.mockResolvedValueOnce([])
 
       const result = await controller.getStorageLocations(mockRequest)
 
       expect(result).toEqual({
         locationIds: [],
+        locations: [],
+      })
+    })
+
+    it('should group multiple storage types per location', async () => {
+      mockSelectChain.where.mockResolvedValueOnce([
+        { locationId: 'BEN', type: 'STORE' },
+        { locationId: 'BEN', type: 'WAREHOUSE_STORE' },
+        { locationId: 'MON', type: 'STORE' },
+      ])
+
+      const result = await controller.getStorageLocations(mockRequest)
+
+      expect(result.locationIds).toEqual(['BEN', 'MON'])
+      expect(result.locations).toContainEqual({
+        locationId: 'BEN',
+        storageTypes: expect.arrayContaining(['STORE', 'WAREHOUSE_STORE']),
+      })
+      expect(result.locations).toContainEqual({
+        locationId: 'MON',
+        storageTypes: ['STORE'],
       })
     })
   })

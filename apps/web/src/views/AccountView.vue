@@ -537,6 +537,7 @@
                   v-model="settingsStore.favoritedCommodities.value"
                   :items="commodityKeyValueItems"
                   :loading="loadingCommodities"
+                  :show-icons="hasIcons"
                   label="Favorite Commodities"
                   prepend-icon="mdi-star-outline"
                   multiple
@@ -1243,13 +1244,34 @@ const loadingPriceLists = ref(false)
 const loadingLocations = ref(false)
 const loadingCommodities = ref(false)
 
+// Check if commodity icons are enabled
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
+
 // Convert options to KeyValueItem format for KeyValueAutocomplete
 const locationKeyValueItems = computed<KeyValueItem[]>(() =>
-  locationOptions.value.map(opt => ({ key: opt.value, display: opt.title }))
+  locationOptions.value.map(opt => ({
+    key: opt.value,
+    display: opt.title,
+    locationType: locationService.getLocationType(opt.value) ?? undefined,
+    isUserLocation: locationService.isUserLocation(opt.value),
+    storageTypes: locationService.getStorageTypes(opt.value),
+  }))
 )
-const commodityKeyValueItems = computed<KeyValueItem[]>(() =>
-  commodityOptions.value.map(opt => ({ key: opt.value, display: opt.title }))
-)
+const commodityKeyValueItems = computed<KeyValueItem[]>(() => {
+  // Get all commodities from cache to include name and category for icons
+  const allCommodities = commodityService.getAllCommoditiesSync()
+  const commodityMap = new Map(allCommodities.map(c => [c.ticker, c]))
+
+  return commodityOptions.value.map(opt => {
+    const commodity = commodityMap.get(opt.value)
+    return {
+      key: opt.value,
+      display: opt.title,
+      name: commodity?.name,
+      category: commodity?.category,
+    }
+  })
+})
 
 // Sorted location options with icons: favorites (star), FIO storage (house), then alphabetical
 const sortedLocationOptions = computed(() => {

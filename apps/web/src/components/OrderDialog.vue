@@ -46,6 +46,7 @@
                     v-model="buyForm.commodityTicker"
                     :items="commodities"
                     :favorites="settingsStore.favoritedCommodities.value"
+                    :show-icons="hasIcons"
                     label="Commodity"
                     :rules="[v => !!v || 'Commodity is required']"
                     :loading="loadingCommodities"
@@ -343,6 +344,7 @@
                       v-model="sellForm.commodityTicker"
                       :items="commodities"
                       :favorites="settingsStore.favoritedCommodities.value"
+                      :show-icons="hasIcons"
                       label="Commodity"
                       :rules="[v => !!v || 'Commodity is required']"
                       :loading="loadingCommodities"
@@ -1023,6 +1025,9 @@ const canUseDynamicPricing = computed(() => {
   return !!settingsStore.defaultPriceList.value
 })
 
+// Check if commodity icons should be shown
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
+
 // Current form's usePriceList state
 const currentUsePriceList = computed(() => {
   return activeTab.value === 'buy' ? buyForm.value.usePriceList : sellForm.value.usePriceList
@@ -1287,6 +1292,8 @@ const loadCommodities = async () => {
     commodities.value = data.map(c => ({
       key: c.ticker,
       display: commodityService.getCommodityDisplay(c.ticker, userStore.getCommodityDisplayMode()),
+      name: c.name,
+      category: c.category,
     }))
   } catch (error) {
     console.error('Failed to load commodities', error)
@@ -1299,10 +1306,17 @@ const loadCommodities = async () => {
 const loadLocations = async () => {
   try {
     loadingLocations.value = true
-    const data = await locationService.getAllLocations()
+    // Fetch all locations and user's storage locations in parallel
+    const [data] = await Promise.all([
+      locationService.getAllLocations(),
+      locationService.loadUserLocations(), // Ensure user locations are cached
+    ])
     locations.value = data.map(l => ({
       key: l.id,
       display: locationService.getLocationDisplay(l.id, userStore.getLocationDisplayMode()),
+      locationType: l.type,
+      isUserLocation: locationService.isUserLocation(l.id),
+      storageTypes: locationService.getStorageTypes(l.id),
     }))
   } catch (error) {
     console.error('Failed to load locations', error)

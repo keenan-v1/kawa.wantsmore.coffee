@@ -31,9 +31,19 @@ export function useDisplayHelpers() {
     return commodityService.getCommodityCategory(ticker)
   }
 
+  /**
+   * Get a commodity's name (for icon display).
+   */
+  const getCommodityName = (ticker: string): string => {
+    const commodities = commodityService.getAllCommoditiesSync()
+    const commodity = commodities.find(c => c.ticker === ticker)
+    return commodity?.name ?? ticker
+  }
+
   return {
     getLocationDisplay,
     getCommodityDisplay,
     getCommodityCategory,
+    getCommodityName,
   }
 }

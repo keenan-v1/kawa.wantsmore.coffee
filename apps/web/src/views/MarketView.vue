@@ -114,6 +114,7 @@
                 v-model="filters.commodity"
                 :items="commodityOptions"
                 :favorites="settingsStore.favoritedCommodities.value"
+                :show-icons="hasIcons"
                 label="Commodity"
                 density="compact"
                 clearable
@@ -636,12 +637,14 @@ import OrderTypeChip from '../components/OrderTypeChip.vue'
 import PricingModeChip from '../components/PricingModeChip.vue'
 import CommodityDisplay from '../components/CommodityDisplay.vue'
 import { localizeMaterialCategory } from '../utils/materials'
+import { locationService } from '../services/locationService'
 import type { CommodityCategory } from '@kawakawa/types'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { snackbar, showSnackbar } = useSnackbar()
-const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
+const { getLocationDisplay, getCommodityDisplay, getCommodityCategory, getCommodityName } =
+  useDisplayHelpers()
 const { getFioAgeColor } = useFormatters()
 
 // Check if commodity icons are enabled
@@ -852,6 +855,8 @@ const commodityOptions = computed((): KeyValueItem[] => {
   return Array.from(tickers).map(ticker => ({
     key: ticker,
     display: getCommodityDisplay(ticker),
+    name: getCommodityName(ticker),
+    category: getCommodityCategory(ticker) ?? undefined,
   }))
 })
 
@@ -872,6 +877,9 @@ const locationOptions = computed((): KeyValueItem[] => {
   return Array.from(locations).map(id => ({
     key: id,
     display: getLocationDisplay(id),
+    locationType: locationService.getLocationType(id) ?? undefined,
+    isUserLocation: locationService.isUserLocation(id),
+    storageTypes: locationService.getStorageTypes(id),
   }))
 })
 

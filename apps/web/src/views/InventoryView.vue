@@ -116,6 +116,7 @@
                 v-model="filters.commodity"
                 :items="commodityOptions"
                 :favorites="settingsStore.favoritedCommodities.value"
+                :show-icons="hasIcons"
                 label="Commodity"
                 density="compact"
                 clearable
@@ -621,12 +622,14 @@ import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueA
 import FioAgeChip from '../components/FioAgeChip.vue'
 import CommodityDisplay from '../components/CommodityDisplay.vue'
 import { localizeMaterialCategory } from '../utils/materials'
+import { locationService } from '../services/locationService'
 import type { CommodityCategory } from '@kawakawa/types'
 
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { snackbar, showSnackbar } = useSnackbar()
-const { getLocationDisplay, getCommodityDisplay } = useDisplayHelpers()
+const { getLocationDisplay, getCommodityDisplay, getCommodityCategory, getCommodityName } =
+  useDisplayHelpers()
 const { formatDateTime, formatRelativeTime, getSyncStatusColor } = useFormatters()
 
 // Check if FIO is configured
@@ -721,6 +724,8 @@ const commodityOptions = computed((): KeyValueItem[] => {
   return Array.from(tickers).map(ticker => ({
     key: ticker,
     display: getCommodityDisplay(ticker),
+    name: getCommodityName(ticker),
+    category: getCommodityCategory(ticker) ?? undefined,
   }))
 })
 
@@ -735,12 +740,25 @@ const categoryOptions = computed(() => {
 })
 
 const locationOptions = computed((): KeyValueItem[] => {
-  const locations = new Set(
-    inventory.value.map(i => i.locationId).filter((id): id is string => id !== null)
-  )
-  return Array.from(locations).map(id => ({
+  // Group storage types by location
+  const locationStorageTypes = new Map<string, Set<string>>()
+  for (const item of inventory.value) {
+    if (item.locationId) {
+      if (!locationStorageTypes.has(item.locationId)) {
+        locationStorageTypes.set(item.locationId, new Set())
+      }
+      if (item.storageType) {
+        locationStorageTypes.get(item.locationId)!.add(item.storageType)
+      }
+    }
+  }
+
+  return Array.from(locationStorageTypes.keys()).map(id => ({
     key: id,
     display: getLocationDisplay(id),
+    locationType: locationService.getLocationType(id) ?? undefined,
+    isUserLocation: true, // All locations in inventory are user's locations
+    storageTypes: Array.from(locationStorageTypes.get(id) ?? []),
   }))
 })
 

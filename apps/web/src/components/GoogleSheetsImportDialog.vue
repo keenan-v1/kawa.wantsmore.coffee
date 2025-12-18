@@ -474,6 +474,9 @@ const locationOptions = computed((): KeyValueItem[] => {
   return locationService.getAllLocationsSync().map(loc => ({
     key: loc.id,
     display: locationService.getLocationDisplay(loc.id, userStore.getLocationDisplayMode()),
+    locationType: loc.type,
+    isUserLocation: locationService.isUserLocation(loc.id),
+    storageTypes: locationService.getStorageTypes(loc.id),
   }))
 })
 

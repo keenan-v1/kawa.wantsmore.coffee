@@ -11,6 +11,9 @@ import type { LocationDisplayMode, CommodityDisplayMode, MessageVisibility } fro
 // Special value to indicate "use website setting"
 export const USE_WEBSITE_SETTING = 'use-website'
 
+// Special value to indicate "use channel default" for message visibility
+export const USE_CHANNEL_DEFAULT = 'use-channel'
+
 // Default values for Discord bot settings
 // Discord-specific display settings are separate from web to allow different preferences
 const DEFAULTS = {
@@ -22,7 +25,7 @@ const DEFAULTS = {
   'discord.commodityDisplayMode': 'ticker-only' as
     | CommodityDisplayMode
     | typeof USE_WEBSITE_SETTING,
-  'discord.messageVisibility': 'ephemeral' as MessageVisibility, // Discord-only, no web equivalent
+  'discord.messageVisibility': 'ephemeral' as MessageVisibility | typeof USE_CHANNEL_DEFAULT, // Discord-only, no web equivalent
   // Web display settings (fetched to support "use website" option)
   'display.locationDisplayMode': 'both' as LocationDisplayMode,
   'display.commodityDisplayMode': 'both' as CommodityDisplayMode,
@@ -144,7 +147,7 @@ export async function getSettingsByDiscordId(
 export async function getDisplaySettings(discordId: string): Promise<{
   locationDisplayMode: LocationDisplayMode
   commodityDisplayMode: CommodityDisplayMode
-  messageVisibility: MessageVisibility
+  messageVisibility: MessageVisibility | typeof USE_CHANNEL_DEFAULT
   preferredCurrency: string
   favoritedLocations: string[]
   favoritedCommodities: string[]
@@ -174,7 +177,7 @@ export async function getDisplaySettings(discordId: string): Promise<{
     locationDisplayMode,
     commodityDisplayMode,
     messageVisibility: (settings?.['discord.messageVisibility'] ??
-      DEFAULTS['discord.messageVisibility']) as MessageVisibility,
+      DEFAULTS['discord.messageVisibility']) as MessageVisibility | typeof USE_CHANNEL_DEFAULT,
     preferredCurrency: (settings?.['market.preferredCurrency'] ??
       DEFAULTS['market.preferredCurrency']) as string,
     favoritedLocations: (settings?.['market.favoritedLocations'] ??

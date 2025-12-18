@@ -26,6 +26,7 @@ import {
   setSetting,
   deleteSetting,
   USE_WEBSITE_SETTING,
+  USE_CHANNEL_DEFAULT,
 } from '../../services/userSettings.js'
 import { formatLocation, resolveLocation } from '../../services/locationService.js'
 import { formatCommodityWithMode, resolveCommodity } from '../../services/commodityService.js'
@@ -75,6 +76,7 @@ const SETTING_DEFINITIONS: SettingDef[] = [
     description: 'Whether replies are private or public',
     type: 'enum',
     options: [
+      { label: 'Use channel default', value: USE_CHANNEL_DEFAULT },
       { label: 'Private (only you)', value: 'ephemeral' },
       { label: 'Public (visible to all)', value: 'public' },
     ],

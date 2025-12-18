@@ -4,15 +4,30 @@ import type { Location, LocationDisplayMode } from '../types'
 
 // Cache keys and TTL
 const CACHE_KEY = 'kawakawa:locations'
+const USER_LOCATIONS_KEY = 'kawakawa:userLocations'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const USER_LOCATIONS_TTL_MS = 5 * 60 * 1000 // 5 minutes (user inventory can change)
 
 interface CacheEntry {
   data: Location[]
   timestamp: number
 }
 
+interface UserLocationInfo {
+  locationId: string
+  storageTypes: string[]
+}
+
+interface UserLocationsCacheEntry {
+  data: UserLocationInfo[]
+  timestamp: number
+}
+
 // In-memory cache for fast access during session
 let cachedLocations: Location[] | null = null
+// User's storage locations (where they have inventory) with storage types
+let cachedUserLocations: Map<string, string[]> | null = null
+let userLocationsLoadedAt = 0
 
 // Load from localStorage on module init
 const loadFromStorage = (): Location[] | null => {
@@ -154,6 +169,13 @@ export const locationService = {
     return Array.from(systems).sort()
   },
 
+  // Get location type by ID (synchronous, uses cache)
+  getLocationType: (id: string): Location['type'] | null => {
+    if (!cachedLocations) return null
+    const location = cachedLocations.find(l => l.id === id)
+    return location?.type ?? null
+  },
+
   // Get stations only (for dropdowns)
   getStationOptions: async (mode: LocationDisplayMode = 'names-only') => {
     const locations = await fetchLocations()
@@ -186,6 +208,83 @@ export const locationService = {
   // Clear cache (useful for refresh)
   clearCache: (): void => {
     cachedLocations = null
+    cachedUserLocations = null
+    userLocationsLoadedAt = 0
     localStorage.removeItem(CACHE_KEY)
+    localStorage.removeItem(USER_LOCATIONS_KEY)
+  },
+
+  // Load user's storage locations (where they have inventory) with storage types
+  loadUserLocations: async (): Promise<Map<string, string[]>> => {
+    // Check if cache is still valid
+    const age = Date.now() - userLocationsLoadedAt
+    if (cachedUserLocations && age < USER_LOCATIONS_TTL_MS) {
+      return cachedUserLocations
+    }
+
+    // Try loading from localStorage first
+    try {
+      const stored = localStorage.getItem(USER_LOCATIONS_KEY)
+      if (stored) {
+        const entry: UserLocationsCacheEntry = JSON.parse(stored)
+        const storedAge = Date.now() - entry.timestamp
+        if (storedAge < USER_LOCATIONS_TTL_MS) {
+          cachedUserLocations = new Map(entry.data.map(l => [l.locationId, l.storageTypes]))
+          userLocationsLoadedAt = entry.timestamp
+          return cachedUserLocations
+        }
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+
+    // Fetch from API
+    try {
+      const response = await fetch('/api/fio/inventory/locations', {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('jwt') ?? ''}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch user locations')
+      }
+      const data = await response.json()
+      const locations: UserLocationInfo[] = data.locations ?? []
+
+      // Cache the result as Map<locationId, storageTypes>
+      cachedUserLocations = new Map(locations.map(l => [l.locationId, l.storageTypes]))
+      userLocationsLoadedAt = Date.now()
+
+      // Save to localStorage
+      try {
+        const entry: UserLocationsCacheEntry = {
+          data: locations,
+          timestamp: userLocationsLoadedAt,
+        }
+        localStorage.setItem(USER_LOCATIONS_KEY, JSON.stringify(entry))
+      } catch {
+        // Ignore localStorage errors
+      }
+
+      return cachedUserLocations
+    } catch {
+      // Return empty map on error
+      return new Map()
+    }
+  },
+
+  // Check if a location is a user location (synchronous, uses cache)
+  isUserLocation: (id: string): boolean => {
+    return cachedUserLocations?.has(id) ?? false
+  },
+
+  // Get storage types for a user location (synchronous, uses cache)
+  getStorageTypes: (id: string): string[] | undefined => {
+    return cachedUserLocations?.get(id)
+  },
+
+  // Get all user location IDs (synchronous, uses cache)
+  getUserLocationIds: (): Set<string> => {
+    return cachedUserLocations ? new Set(cachedUserLocations.keys()) : new Set()
   },
 }

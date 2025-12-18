@@ -246,6 +246,7 @@
                 <KeyValueAutocomplete
                   v-model="adjustmentForm.commodityTicker"
                   :items="allCommodityOptions"
+                  :show-icons="hasIcons"
                   label="Commodity (optional)"
                   clearable
                 />
@@ -363,10 +364,12 @@ import {
 import { locationService } from '../services/locationService'
 import { commodityService } from '../services/commodityService'
 import { useUserStore } from '../stores/user'
+import { useSettingsStore } from '../stores/settings'
 import { useDialogBehavior } from '../composables'
 import KeyValueAutocomplete, { type KeyValueItem } from '../components/KeyValueAutocomplete.vue'
 
 const userStore = useUserStore()
+const settingsStore = useSettingsStore()
 
 // State
 const loading = ref(false)
@@ -469,11 +472,17 @@ const getCommodityDisplay = (ticker: string): string => {
   return commodityService.getCommodityDisplay(ticker, userStore.getCommodityDisplayMode())
 }
 
+// Check if commodity icons are enabled
+const hasIcons = computed(() => settingsStore.commodityIconStyle.value !== 'none')
+
 const locationOptions = computed((): KeyValueItem[] => {
   const locations = new Set(adjustments.value.map(a => a.locationId).filter(Boolean) as string[])
   return Array.from(locations).map(id => ({
     key: id,
     display: getLocationDisplay(id),
+    locationType: locationService.getLocationType(id) ?? undefined,
+    isUserLocation: locationService.isUserLocation(id),
+    storageTypes: locationService.getStorageTypes(id),
   }))
 })
 
@@ -481,6 +490,9 @@ const allLocationOptions = computed((): KeyValueItem[] => {
   return locationService.getAllLocationsSync().map(loc => ({
     key: loc.id,
     display: getLocationDisplay(loc.id),
+    locationType: loc.type,
+    isUserLocation: locationService.isUserLocation(loc.id),
+    storageTypes: locationService.getStorageTypes(loc.id),
   }))
 })
 
@@ -488,6 +500,8 @@ const allCommodityOptions = computed((): KeyValueItem[] => {
   return commodityService.getAllCommoditiesSync().map(c => ({
     key: c.ticker,
     display: getCommodityDisplay(c.ticker),
+    name: c.name,
+    category: c.category,
   }))
 })
 

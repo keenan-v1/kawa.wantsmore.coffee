@@ -266,6 +266,9 @@ onMounted(async () => {
   if (isAuthenticated.value && isVerified.value) {
     commodityService.prefetch().catch(err => console.error('Failed to prefetch commodities:', err))
     locationService.prefetch().catch(err => console.error('Failed to prefetch locations:', err))
+    locationService
+      .loadUserLocations()
+      .catch(err => console.error('Failed to load user locations:', err))
     roleService.prefetch().catch(err => console.error('Failed to prefetch roles:', err))
     // Fetch pending approvals count for admins
     fetchPendingApprovalsCount()

@@ -178,23 +178,45 @@ export class FioInventoryController extends Controller {
   }
 
   /**
-   * Get the unique location IDs where the user has FIO inventory
+   * Get the unique location IDs where the user has FIO inventory,
+   * along with their storage types (STORE = base, WAREHOUSE_STORE = warehouse, etc.)
    */
   @Get('locations')
-  public async getStorageLocations(
-    @Request() request: { user: JwtPayload }
-  ): Promise<{ locationIds: string[] }> {
+  public async getStorageLocations(@Request() request: { user: JwtPayload }): Promise<{
+    locationIds: string[]
+    locations: Array<{ locationId: string; storageTypes: string[] }>
+  }> {
     const userId = request.user.userId
 
-    const locations = await db
-      .selectDistinct({ locationId: fioUserStorage.locationId })
+    const storages = await db
+      .select({
+        locationId: fioUserStorage.locationId,
+        type: fioUserStorage.type,
+      })
       .from(fioUserStorage)
       .where(eq(fioUserStorage.userId, userId))
 
-    // Filter out null locationIds and return unique list
-    const locationIds = locations.map(l => l.locationId).filter((id): id is string => id !== null)
+    // Group storage types by location
+    const locationMap = new Map<string, Set<string>>()
+    for (const storage of storages) {
+      if (storage.locationId) {
+        if (!locationMap.has(storage.locationId)) {
+          locationMap.set(storage.locationId, new Set())
+        }
+        locationMap.get(storage.locationId)!.add(storage.type)
+      }
+    }
 
-    return { locationIds }
+    // Convert to array format
+    const locations = Array.from(locationMap.entries()).map(([locationId, types]) => ({
+      locationId,
+      storageTypes: Array.from(types),
+    }))
+
+    // Also return simple locationIds array for backward compatibility
+    const locationIds = locations.map(l => l.locationId)
+
+    return { locationIds, locations }
   }
 
   /**

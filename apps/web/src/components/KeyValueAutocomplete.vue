@@ -17,19 +17,48 @@
     :closable-chips="multiple"
     @focus="onFocus"
     @keydown="onKeydown"
+    @update:model-value="onSelect"
   >
     <template v-if="multiple" #chip="{ props: chipProps, item }">
       <v-chip v-bind="chipProps" class="chip-spacing">
         {{ item.title }}
       </v-chip>
     </template>
-    <template v-if="showFavoriteStars" #item="{ item, props: itemProps }">
-      <v-list-item v-bind="itemProps">
-        <template #prepend>
+    <template
+      v-if="showFavoriteStars || showIcons || hasLocationTypes"
+      #item="{ item, props: itemProps }"
+    >
+      <v-list-item v-bind="itemProps" class="autocomplete-item">
+        <!-- Prepend: location type emojis -->
+        <template v-if="item.raw.locationType" #prepend>
+          <span class="location-icons">
+            <span class="location-icon">{{ getPrimaryLocationEmoji(item.raw) }}</span>
+            <span class="location-icon warehouse-icon">{{
+              getSecondaryLocationEmoji(item.raw)
+            }}</span>
+          </span>
+        </template>
+        <!-- Title with inline commodity icon -->
+        <template #title>
+          <span class="item-title">
+            <CommodityIcon
+              v-if="showIcons && item.raw.category"
+              :commodity="{
+                ticker: item.raw.key,
+                name: item.raw.name || item.raw.display,
+                category: item.raw.category,
+              }"
+              class="item-icon"
+            />
+            <span>{{ item.title }}</span>
+          </span>
+        </template>
+        <!-- Append: favorite star on the right -->
+        <template v-if="showFavoriteStars" #append>
           <v-icon
             size="small"
-            :color="favoritesSet.has(item.value) ? 'amber' : 'grey-darken-1'"
-            class="mr-2 favorite-star"
+            :color="favoritesSet.has(item.value) ? 'amber' : 'grey-darken-2'"
+            :class="['favorite-star', { 'favorite-star-empty': !favoritesSet.has(item.value) }]"
             @click.stop="toggleFavorite(item.value)"
           >
             {{ favoritesSet.has(item.value) ? 'mdi-star' : 'mdi-star-outline' }}
@@ -41,15 +70,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import CommodityIcon from './CommodityIcon.vue'
 
 /**
  * An item with a key (ID/ticker) and display text.
  * When searching, exact matches on the key are prioritized first.
+ * Optionally includes commodity data for icon display.
  */
 export interface KeyValueItem {
   key: string
   display: string
+  /** Optional: commodity name for icon display */
+  name?: string
+  /** Optional: commodity category for icon display */
+  category?: string
+  /** Optional: location type for sorting (Station > Planet) */
+  locationType?: 'Station' | 'Planet' | 'Platform' | 'Ship'
+  /** Optional: true if this is a user's location (has inventory there) */
+  isUserLocation?: boolean
+  /** Optional: storage types at this location (STORE, WAREHOUSE_STORE, etc.) */
+  storageTypes?: string[]
 }
 
 type ValidationRule = (v: unknown) => boolean | string
@@ -70,14 +111,17 @@ const props = withDefaults(
     multiple?: boolean
     /** Hide the favorite stars in dropdown items (useful when selecting favorites themselves) */
     hideFavoriteStars?: boolean
+    /** Show commodity icons in dropdown items (requires items to have category) */
+    showIcons?: boolean
   }>(),
   {
     rules: () => [],
     loading: false,
     required: false,
-    favorites: () => [],
+    favorites: undefined,
     multiple: false,
     hideFavoriteStars: false,
+    showIcons: false,
   }
 )
 
@@ -95,14 +139,41 @@ const autocompleteRef = ref<InstanceType<typeof import('vuetify/components').VAu
 const searchText = ref('')
 
 // Create a Set for efficient favorite lookups
-const favoritesSet = computed(() => new Set(props.favorites))
+const favoritesSet = computed(() => new Set(props.favorites ?? []))
 
-// Show stars if favorites prop is provided and not explicitly hidden
-const showFavoriteStars = computed(() => !props.hideFavoriteStars && props.favorites.length > 0)
+// Show stars if favorites prop is provided (even if empty) and not explicitly hidden
+const showFavoriteStars = computed(() => !props.hideFavoriteStars && props.favorites !== undefined)
+
+// Check if any items have storage types (for showing emoji in dropdown)
+const hasLocationTypes = computed(() => props.items.some(item => item.storageTypes?.length))
+
+// Get primary location emoji (first slot):
+// - Station → 🛰️
+// - Planet with base (STORE) → 🏠
+// - Planet without base → 🌍
+const getPrimaryLocationEmoji = (item: KeyValueItem): string => {
+  const hasBase = item.storageTypes?.includes('STORE')
+
+  if (item.locationType === 'Station') {
+    return '🛰️'
+  }
+  if (item.locationType === 'Planet') {
+    return hasBase ? '🏠' : '🌍'
+  }
+  // Fallback for other types
+  return hasBase ? '🏠' : ''
+}
+
+// Get secondary location emoji (second slot):
+// - Only shows 🏭 if user has warehouse at this location
+const getSecondaryLocationEmoji = (item: KeyValueItem): string => {
+  const hasWarehouse = item.storageTypes?.includes('WAREHOUSE_STORE')
+  return hasWarehouse ? '🏭' : ''
+}
 
 // Toggle a favorite on/off
 const toggleFavorite = (key: string) => {
-  const currentFavorites = [...props.favorites]
+  const currentFavorites = [...(props.favorites ?? [])]
   const index = currentFavorites.indexOf(key)
   if (index >= 0) {
     currentFavorites.splice(index, 1)
@@ -184,40 +255,115 @@ const onKeydown = (event: Event) => {
   searchText.value = ''
 }
 
+// Blur the input after selection to close dropdown and show selected value
+// (only for single-select mode, multiple mode should stay open for more selections)
+const onSelect = () => {
+  if (!props.multiple) {
+    nextTick(() => {
+      autocompleteRef.value?.blur()
+    })
+  }
+}
+
+// Location type sort priority: Station > Planet > Platform > Ship > undefined
+const locationTypePriority: Record<string, number> = {
+  Station: 0,
+  Planet: 1,
+  Platform: 2,
+  Ship: 3,
+}
+
+// Compare two items by location type (lower priority number = first)
+const compareByLocationType = (a: KeyValueItem, b: KeyValueItem): number => {
+  const aPriority = a.locationType ? (locationTypePriority[a.locationType] ?? 99) : 99
+  const bPriority = b.locationType ? (locationTypePriority[b.locationType] ?? 99) : 99
+  return aPriority - bPriority
+}
+
+// Sort items by location type first, then alphabetically
+const sortByLocationThenAlpha = (items: KeyValueItem[]): KeyValueItem[] => {
+  return [...items].sort((a, b) => {
+    const typeCompare = compareByLocationType(a, b)
+    if (typeCompare !== 0) return typeCompare
+    return a.display.localeCompare(b.display)
+  })
+}
+
 // Filter and sort items based on search text
 // Sorting priority:
 // 1. Favorites (when no search)
-// 2. Exact key matches (when searching)
-// 3. Partial key matches
-// 4. Display text matches
-// Items are sorted alphabetically within each group
+// 2. User locations (where user has inventory)
+// 3. Other locations
+// 4. Exact key matches (when searching)
+// 5. Partial key matches
+// 6. Display text matches
+// For locations: Station > Planet within each group
+// Items are sorted alphabetically within each type group
 const sortedFilteredItems = computed(() => {
   const search = searchText.value.toLowerCase().trim()
-  const hasFavorites = props.favorites.length > 0
+  const hasFavorites = (props.favorites?.length ?? 0) > 0
+  const hasLocationTypes = props.items.some(item => item.locationType)
+  const hasUserLocations = props.items.some(item => item.isUserLocation)
 
-  // If no search, return items with favorites first, then sorted by display
+  // If no search, return items with favorites first, then user locations, then others
   if (!search) {
+    // No favorites - check for user locations
     if (!hasFavorites) {
+      if (hasUserLocations) {
+        // Split into user locations and other locations
+        const userLocItems: KeyValueItem[] = []
+        const otherItems: KeyValueItem[] = []
+        for (const item of props.items) {
+          if (item.isUserLocation) {
+            userLocItems.push(item)
+          } else {
+            otherItems.push(item)
+          }
+        }
+        if (hasLocationTypes) {
+          return [...sortByLocationThenAlpha(userLocItems), ...sortByLocationThenAlpha(otherItems)]
+        }
+        userLocItems.sort((a, b) => a.display.localeCompare(b.display))
+        otherItems.sort((a, b) => a.display.localeCompare(b.display))
+        return [...userLocItems, ...otherItems]
+      }
+      // Sort by location type (if present), then alphabetically
+      if (hasLocationTypes) {
+        return sortByLocationThenAlpha(props.items)
+      }
       return [...props.items].sort((a, b) => a.display.localeCompare(b.display))
     }
 
-    // Split into favorites and non-favorites
+    // Split into favorites, user locations, and others
     const favoriteItems: KeyValueItem[] = []
-    const nonFavoriteItems: KeyValueItem[] = []
+    const userLocItems: KeyValueItem[] = []
+    const otherItems: KeyValueItem[] = []
 
     for (const item of props.items) {
       if (favoritesSet.value.has(item.key)) {
         favoriteItems.push(item)
+      } else if (item.isUserLocation) {
+        userLocItems.push(item)
       } else {
-        nonFavoriteItems.push(item)
+        otherItems.push(item)
       }
+    }
+
+    // Sort each group by location type (if present), then alphabetically
+    if (hasLocationTypes) {
+      return [
+        ...sortByLocationThenAlpha(favoriteItems),
+        ...sortByLocationThenAlpha(userLocItems),
+        ...sortByLocationThenAlpha(otherItems),
+      ]
     }
 
     // Sort each group alphabetically
     favoriteItems.sort((a, b) => a.display.localeCompare(b.display))
-    nonFavoriteItems.sort((a, b) => a.display.localeCompare(b.display))
+    userLocItems.sort((a, b) => a.display.localeCompare(b.display))
+    otherItems.sort((a, b) => a.display.localeCompare(b.display))
 
-    return [...favoriteItems, ...nonFavoriteItems]
+    return [...favoriteItems, ...userLocItems, ...otherItems]
   }
 
   // Filter items that match either key or display
@@ -228,7 +374,7 @@ const sortedFilteredItems = computed(() => {
   })
 
   // Sort with exact key matches first, then partial key matches, then display matches
-  // Within same match level, favorites come first
+  // Within same match level, favorites come first, then location type
   return filtered.sort((a, b) => {
     const aKeyLower = a.key.toLowerCase()
     const bKeyLower = b.key.toLowerCase()
@@ -251,12 +397,24 @@ const sortedFilteredItems = computed(() => {
     if (aKeyContains && !bKeyContains) return -1
     if (!aKeyContains && bKeyContains) return 1
 
-    // Same match priority - favorites first if no search
+    // Same match priority - favorites first
     if (hasFavorites) {
       const aIsFavorite = favoritesSet.value.has(a.key)
       const bIsFavorite = favoritesSet.value.has(b.key)
       if (aIsFavorite && !bIsFavorite) return -1
       if (!aIsFavorite && bIsFavorite) return 1
+    }
+
+    // Same favorite status - user locations next
+    if (hasUserLocations) {
+      if (a.isUserLocation && !b.isUserLocation) return -1
+      if (!a.isUserLocation && b.isUserLocation) return 1
+    }
+
+    // Same user location status - sort by location type if present
+    if (hasLocationTypes) {
+      const typeCompare = compareByLocationType(a, b)
+      if (typeCompare !== 0) return typeCompare
     }
 
     // Same priority level - sort alphabetically by display
@@ -281,16 +439,61 @@ defineExpose({ focus })
 </script>
 
 <style scoped>
+.item-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:deep(.item-icon) {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
+.location-icons {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  width: 2.5em;
+}
+
+.location-icon {
+  font-size: 1rem;
+  width: 1.25em;
+  text-align: center;
+}
+
+.warehouse-icon:empty {
+  /* Reserve space even when empty for alignment */
+}
+
+.chip-spacing {
+  margin: 2px;
+}
+</style>
+
+<!-- Unscoped styles for dropdown content (rendered in teleport) -->
+<style>
 .favorite-star {
   cursor: pointer;
-  transition: transform 0.1s ease;
+  transition:
+    transform 0.1s ease,
+    opacity 0.15s ease;
 }
 
 .favorite-star:hover {
   transform: scale(1.2);
 }
 
-.chip-spacing {
-  margin: 2px;
+/* Hide empty stars by default, show on hover */
+.favorite-star-empty {
+  opacity: 0;
+}
+
+.autocomplete-item:hover .favorite-star-empty,
+.v-list-item:hover .favorite-star-empty {
+  opacity: 1;
 }
 </style>

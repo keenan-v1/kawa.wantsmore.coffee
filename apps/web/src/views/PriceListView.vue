@@ -53,6 +53,7 @@
               v-model="filters.commodity"
               :items="commodityOptions"
               :favorites="settingsStore.favoritedCommodities.value"
+              :show-icons="hasIcons"
               label="Commodity"
               density="compact"
               clearable
@@ -422,7 +423,8 @@ import type { CommodityCategory } from '@kawakawa/types'
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 const { snackbar, showSnackbar } = useSnackbar()
-const { getLocationDisplay, getCommodityDisplay, getCommodityCategory } = useDisplayHelpers()
+const { getLocationDisplay, getCommodityDisplay, getCommodityCategory, getCommodityName } =
+  useDisplayHelpers()
 const { formatDate, formatPrice } = useFormatters()
 
 // State
@@ -569,6 +571,9 @@ const locationOptions = computed((): KeyValueItem[] => {
   return Array.from(locations).map(id => ({
     key: id,
     display: getLocationDisplay(id),
+    locationType: locationService.getLocationType(id) ?? undefined,
+    isUserLocation: locationService.isUserLocation(id),
+    storageTypes: locationService.getStorageTypes(id),
   }))
 })
 
@@ -577,6 +582,8 @@ const commodityOptions = computed((): KeyValueItem[] => {
   return Array.from(tickers).map(ticker => ({
     key: ticker,
     display: getCommodityDisplay(ticker),
+    name: getCommodityName(ticker),
+    category: getCommodityCategory(ticker) ?? undefined,
   }))
 })
 
@@ -597,6 +604,7 @@ const allLocationOptions = computed((): KeyValueItem[] => {
   return locationService.getAllLocationsSync().map(loc => ({
     key: loc.id,
     display: getLocationDisplay(loc.id),
+    locationType: loc.type,
   }))
 })
 
@@ -604,6 +612,8 @@ const allCommodityOptions = computed((): KeyValueItem[] => {
   return commodityService.getAllCommoditiesSync().map(c => ({
     key: c.ticker,
     display: getCommodityDisplay(c.ticker),
+    name: c.name,
+    category: c.category,
   }))
 })
 

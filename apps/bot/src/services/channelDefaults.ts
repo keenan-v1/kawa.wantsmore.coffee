@@ -9,6 +9,7 @@
 import { db, channelConfig } from '@kawakawa/db'
 import { eq } from 'drizzle-orm'
 import type { Currency, OrderType, ChannelConfigKey, MessageVisibility } from '@kawakawa/types'
+import { USE_CHANNEL_DEFAULT } from './userSettings.js'
 
 /**
  * Channel settings aggregated from key-value store
@@ -176,7 +177,7 @@ export function wasOverriddenByChannel<T>(
  * Resolution order when enforced = false:
  *   1. Command option (user typed it explicitly)
  *   2. Channel default
- *   3. User default
+ *   3. User default (unless 'use-channel', which skips to channel default)
  *   4. System default (ephemeral)
  *
  * When enforced = true:
@@ -184,19 +185,23 @@ export function wasOverriddenByChannel<T>(
  *
  * @param commandOption - Value from command option (null/undefined if not provided)
  * @param channelSettings - Channel settings (or null if not configured)
- * @param userDefault - User's default message visibility
+ * @param userDefault - User's default message visibility (or 'use-channel' to defer to channel)
  * @returns Object with effective visibility and whether it's ephemeral
  */
 export function resolveMessageVisibility(
   commandOption: MessageVisibility | null | undefined,
   channelSettings: ChannelSettings | null,
-  userDefault: MessageVisibility | null | undefined
+  userDefault: MessageVisibility | typeof USE_CHANNEL_DEFAULT | null | undefined
 ): { visibility: MessageVisibility; isEphemeral: boolean } {
+  // If user's preference is 'use-channel', treat as no preference (null)
+  // This allows channel default to be used in the resolution chain
+  const effectiveUserDefault = userDefault === USE_CHANNEL_DEFAULT ? null : userDefault
+
   const effectiveVisibility = resolveEffectiveValue(
     commandOption,
     channelSettings?.messageVisibility,
     channelSettings?.messageVisibilityEnforced ?? false,
-    userDefault,
+    effectiveUserDefault,
     'ephemeral' as MessageVisibility
   )
 

@@ -481,7 +481,8 @@ export class AdminDiscordController extends Controller {
     if (body.messageVisibilityEnforced !== undefined) {
       updates.push({
         key: 'messageVisibilityEnforced',
-        value: body.messageVisibilityEnforced === null ? null : String(body.messageVisibilityEnforced),
+        value:
+          body.messageVisibilityEnforced === null ? null : String(body.messageVisibilityEnforced),
       })
     }
     if (body.announceInternal !== undefined) {
