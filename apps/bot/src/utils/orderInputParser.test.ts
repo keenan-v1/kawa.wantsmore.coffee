@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { parseOrderInput, formatLimitMode } from './orderInputParser.js'
+import {
+  parseOrderInput,
+  formatLimitMode,
+  parseMultiOrderInput,
+  parseSmartOrderInput,
+} from './orderInputParser.js'
 
 // Mock the display services
 vi.mock('../services/display.js', () => ({
@@ -266,6 +271,243 @@ describe('orderInputParser', () => {
     it('returns empty string if quantity is null', () => {
       expect(formatLimitMode('reserve', null)).toBe('')
       expect(formatLimitMode('max_sell', null)).toBe('')
+    })
+  })
+
+  describe('parseMultiOrderInput', () => {
+    beforeEach(() => {
+      // Extend mock to include more commodities for multi-ticker tests
+      mockResolveCommodity.mockImplementation(async (ticker: string) => {
+        const commodities: Record<string, { ticker: string; name: string }> = {
+          COF: { ticker: 'COF', name: 'Coffee' },
+          CAF: { ticker: 'CAF', name: 'Caffeinated Beans' },
+          H2O: { ticker: 'H2O', name: 'Water' },
+          H: { ticker: 'H', name: 'Hydrogen' },
+          DW: { ticker: 'DW', name: 'Drinking Water' },
+          RAT: { ticker: 'RAT', name: 'Basic Rations' },
+          OVE: { ticker: 'OVE', name: 'Basic Overalls' },
+          EXO: { ticker: 'EXO', name: 'Exoskeleton' },
+        }
+        return commodities[ticker.toUpperCase()] || null
+      })
+
+      mockResolveLocation.mockImplementation(async (locationId: string) => {
+        const locations: Record<string, { naturalId: string; name: string; type: string }> = {
+          Katoa: { naturalId: 'KW-020c', name: 'Katoa', type: 'planet' },
+          'KW-020c': { naturalId: 'KW-020c', name: 'Katoa', type: 'planet' },
+          Stella: { naturalId: 'OT-580b', name: 'Stella', type: 'planet' },
+          BEN: { naturalId: 'BEN', name: 'Benten', type: 'station' },
+          Moria: { naturalId: 'UV-351a', name: 'Moria', type: 'planet' },
+        }
+        return locations[locationId] || null
+      })
+    })
+
+    describe('valid multi-format input', () => {
+      it('parses single ticker with quantity and location', async () => {
+        const result = await parseMultiOrderInput('DW 1000 BEN')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(1)
+        expect(result.orders[0]).toEqual({
+          ticker: 'DW',
+          quantity: 1000,
+          commodityName: 'Drinking Water',
+        })
+        expect(result.location).toBe('BEN')
+      })
+
+      it('parses multiple tickers with quantities and location', async () => {
+        const result = await parseMultiOrderInput('DW 1000 RAT 500 BEN')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(2)
+        expect(result.orders[0]).toEqual({
+          ticker: 'DW',
+          quantity: 1000,
+          commodityName: 'Drinking Water',
+        })
+        expect(result.orders[1]).toEqual({
+          ticker: 'RAT',
+          quantity: 500,
+          commodityName: 'Basic Rations',
+        })
+        expect(result.location).toBe('BEN')
+      })
+
+      it('parses example from requirements: DW 1000 RAT 1000 OVE 500 EXO 250 BEN', async () => {
+        const result = await parseMultiOrderInput('DW 1000 RAT 1000 OVE 500 EXO 250 BEN')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(4)
+        expect(result.orders.map(o => ({ t: o.ticker, q: o.quantity }))).toEqual([
+          { t: 'DW', q: 1000 },
+          { t: 'RAT', q: 1000 },
+          { t: 'OVE', q: 500 },
+          { t: 'EXO', q: 250 },
+        ])
+        expect(result.location).toBe('BEN')
+      })
+
+      it('resolves location info correctly', async () => {
+        const result = await parseMultiOrderInput('COF 100 BEN')
+
+        expect(result.resolvedLocation).toEqual({
+          naturalId: 'BEN',
+          name: 'Benten',
+          type: 'station',
+        })
+      })
+    })
+
+    describe('not multi-format (fallback scenarios)', () => {
+      it('returns isMultiFormat false for comma-separated tickers', async () => {
+        const result = await parseMultiOrderInput('COF,CAF,H2O Katoa')
+
+        expect(result.isMultiFormat).toBe(false)
+        expect(result.orders).toHaveLength(0)
+      })
+
+      it('returns isMultiFormat false for too few tokens', async () => {
+        const result = await parseMultiOrderInput('COF')
+
+        expect(result.isMultiFormat).toBe(false)
+      })
+
+      it('returns isMultiFormat false for two tokens only', async () => {
+        const result = await parseMultiOrderInput('COF BEN')
+
+        expect(result.isMultiFormat).toBe(false)
+      })
+
+      it('returns isMultiFormat false when commodity has no following number', async () => {
+        const result = await parseMultiOrderInput('COF CAF BEN')
+
+        expect(result.isMultiFormat).toBe(false)
+      })
+
+      it('returns isMultiFormat false for empty input', async () => {
+        const result = await parseMultiOrderInput('')
+
+        expect(result.isMultiFormat).toBe(false)
+        expect(result.orders).toHaveLength(0)
+      })
+
+      it('returns isMultiFormat false when last token is not a location', async () => {
+        mockResolveLocation.mockResolvedValue(null)
+        const result = await parseMultiOrderInput('COF 100 INVALID')
+
+        expect(result.isMultiFormat).toBe(false)
+      })
+    })
+
+    describe('edge cases', () => {
+      it('handles whitespace-only input', async () => {
+        const result = await parseMultiOrderInput('   ')
+
+        expect(result.isMultiFormat).toBe(false)
+        expect(result.orders).toHaveLength(0)
+      })
+
+      it('handles location in middle position', async () => {
+        // BEN appears in middle, should still work if followed by more ticker-qty pairs
+        const result = await parseMultiOrderInput('COF 100 BEN')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(1)
+        expect(result.location).toBe('BEN')
+      })
+
+      it('tracks unresolved tokens', async () => {
+        mockResolveCommodity.mockImplementation(async (ticker: string) => {
+          if (ticker.toUpperCase() === 'COF') {
+            return { ticker: 'COF', name: 'Coffee' }
+          }
+          return null
+        })
+
+        // INVALID is not a commodity or location
+        mockResolveLocation.mockImplementation(async (loc: string) => {
+          if (loc === 'BEN') {
+            return { naturalId: 'BEN', name: 'Benten', type: 'station' }
+          }
+          return null
+        })
+
+        const result = await parseMultiOrderInput('COF 100 BEN')
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.unresolvedTokens).toHaveLength(0)
+      })
+    })
+  })
+
+  describe('parseSmartOrderInput', () => {
+    beforeEach(() => {
+      // Extend mock for smart parsing tests
+      mockResolveCommodity.mockImplementation(async (ticker: string) => {
+        const commodities: Record<string, { ticker: string; name: string }> = {
+          COF: { ticker: 'COF', name: 'Coffee' },
+          CAF: { ticker: 'CAF', name: 'Caffeinated Beans' },
+          H2O: { ticker: 'H2O', name: 'Water' },
+          DW: { ticker: 'DW', name: 'Drinking Water' },
+          RAT: { ticker: 'RAT', name: 'Basic Rations' },
+        }
+        return commodities[ticker.toUpperCase()] || null
+      })
+
+      mockResolveLocation.mockImplementation(async (locationId: string) => {
+        const locations: Record<string, { naturalId: string; name: string; type: string }> = {
+          Katoa: { naturalId: 'KW-020c', name: 'Katoa', type: 'planet' },
+          BEN: { naturalId: 'BEN', name: 'Benten', type: 'station' },
+        }
+        return locations[locationId] || null
+      })
+    })
+
+    it('returns multi-format result for TICKER QTY TICKER QTY LOCATION', async () => {
+      const result = await parseSmartOrderInput('DW 1000 RAT 500 BEN', { forBuy: true })
+
+      expect(result.isMultiFormat).toBe(true)
+      expect(result.multi).not.toBeNull()
+      expect(result.single).toBeNull()
+      expect(result.multi?.orders).toHaveLength(2)
+    })
+
+    it('falls back to single-format for comma-separated tickers', async () => {
+      const result = await parseSmartOrderInput('COF,CAF Katoa 1000', { forBuy: true })
+
+      expect(result.isMultiFormat).toBe(false)
+      expect(result.multi).toBeNull()
+      expect(result.single).not.toBeNull()
+      expect(result.single?.tickers).toEqual(['COF', 'CAF'])
+      expect(result.single?.quantity).toBe(1000)
+    })
+
+    it('falls back to single-format for single ticker with quantity', async () => {
+      const result = await parseSmartOrderInput('COF Katoa 500', { forBuy: true })
+
+      expect(result.isMultiFormat).toBe(false)
+      expect(result.single).not.toBeNull()
+      expect(result.single?.tickers).toEqual(['COF'])
+      expect(result.single?.quantity).toBe(500)
+    })
+
+    it('passes options to single-format parser', async () => {
+      const result = await parseSmartOrderInput('COF Katoa 1500', { forSell: true })
+
+      expect(result.isMultiFormat).toBe(false)
+      expect(result.single).not.toBeNull()
+      // For sell, bare number becomes reserve
+      expect(result.single?.limitMode).toBe('reserve')
+      expect(result.single?.limitQuantity).toBe(1500)
+    })
+
+    it('handles empty input', async () => {
+      const result = await parseSmartOrderInput('', { forBuy: true })
+
+      expect(result.isMultiFormat).toBe(false)
+      expect(result.single).not.toBeNull()
+      expect(result.single?.tickers).toEqual([])
     })
   })
 })

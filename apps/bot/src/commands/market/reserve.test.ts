@@ -38,7 +38,7 @@ vi.mock('discord.js', () => getDiscordMock())
 vi.mock('@kawakawa/db', () => ({
   db: { query: mockDbQuery },
   userDiscordProfiles: {},
-  channelDefaults: {},
+  channelConfig: {},
 }))
 
 // Mock services
@@ -57,8 +57,8 @@ vi.mock('../../services/userSettings.js', () => ({
   getDisplaySettings: mockGetDisplaySettings,
 }))
 
-vi.mock('../../services/channelDefaults.js', () => ({
-  getChannelDefaults: vi.fn().mockResolvedValue(null),
+vi.mock('../../services/channelConfig.js', () => ({
+  getChannelConfig: vi.fn().mockResolvedValue(null),
   resolveEffectiveValue: vi.fn(
     (
       commandOption: unknown,

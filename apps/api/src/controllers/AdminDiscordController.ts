@@ -429,6 +429,9 @@ export class AdminDiscordController extends Controller {
         case 'announcePartner':
           config.announcePartner = value
           break
+        case 'commandPrefix':
+          config.commandPrefix = value
+          break
       }
     }
 
@@ -490,6 +493,9 @@ export class AdminDiscordController extends Controller {
     }
     if (body.announcePartner !== undefined) {
       updates.push({ key: 'announcePartner', value: body.announcePartner })
+    }
+    if (body.commandPrefix !== undefined) {
+      updates.push({ key: 'commandPrefix', value: body.commandPrefix })
     }
 
     // Process each update

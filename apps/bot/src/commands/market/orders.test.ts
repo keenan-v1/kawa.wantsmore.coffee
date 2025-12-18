@@ -79,9 +79,9 @@ vi.mock('../../services/orderFormatter.js', () => ({
   buildFilterDescription: mockBuildFilterDescription,
 }))
 
-// Mock channel defaults service
-vi.mock('../../services/channelDefaults.js', () => ({
-  getChannelDefaults: vi.fn().mockResolvedValue(null),
+// Mock channel config service
+vi.mock('../../services/channelConfig.js', () => ({
+  getChannelConfig: vi.fn().mockResolvedValue(null),
   resolveEffectiveValue: vi.fn(
     (
       commandOption: unknown,
@@ -116,7 +116,7 @@ vi.mock('@kawakawa/db', () => ({
   },
   users: { username: 'username' },
   userDiscordProfiles: { discordId: 'discordId', userId: 'userId' },
-  channelDefaults: {},
+  channelConfig: {},
 }))
 
 // Mock drizzle-orm

@@ -14,10 +14,10 @@ import { searchCommodities, searchLocations } from '../../autocomplete/index.js'
 import { resolveCommodity, resolveLocation, formatCommodity } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
 import {
-  getChannelDefaults,
+  getChannelConfig,
   resolveEffectiveValue,
   resolveMessageVisibility,
-} from '../../services/channelDefaults.js'
+} from '../../services/channelConfig.js'
 import {
   getAvailableSellOrders,
   formatOrderForSelect,
@@ -104,7 +104,7 @@ export const reserve: Command = {
 
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
-    const channelSettings = await getChannelDefaults(channelId)
+    const channelSettings = await getChannelConfig(channelId)
 
     // Resolve message visibility (command > channel > user > system default)
     const { isEphemeral } = resolveMessageVisibility(

@@ -53,8 +53,8 @@ vi.mock('@kawakawa/services/market', () => ({
   getOrderDisplayPrice: mockGetOrderDisplayPrice,
 }))
 
-vi.mock('../../services/channelDefaults.js', () => ({
-  getChannelDefaults: vi.fn().mockResolvedValue(null),
+vi.mock('../../services/channelConfig.js', () => ({
+  getChannelConfig: vi.fn().mockResolvedValue(null),
   resolveMessageVisibility: vi.fn(() => ({ visibility: 'ephemeral', isEphemeral: true })),
 }))
 

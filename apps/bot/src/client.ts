@@ -10,6 +10,7 @@ import {
 import type { ChatInputCommandInteraction, AutocompleteInteraction } from 'discord.js'
 import { getConfig } from './config.js'
 import logger from './utils/logger.js'
+import { handleMessageCommand } from './services/messageCommands.js'
 
 export interface Command {
   data: {
@@ -34,6 +35,8 @@ export function createClient(): BotClient {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.GuildMessages, // Required for prefix commands in guilds
+      GatewayIntentBits.MessageContent, // Required to read message content for prefix commands
     ],
   }) as BotClient
 
@@ -115,6 +118,15 @@ export function setupEventHandlers(client: BotClient): void {
       } catch (error) {
         logger.error({ command: interaction.commandName, error }, 'Autocomplete error')
       }
+    }
+  })
+
+  // Handle prefix commands (text-based commands like !help, !buy, etc.)
+  client.on(Events.MessageCreate, async message => {
+    try {
+      await handleMessageCommand(message, client)
+    } catch (error) {
+      logger.error({ error, userId: message.author.id }, 'Message command handler error')
     }
   })
 }
@@ -218,18 +230,21 @@ function commandsEqual(
  */
 export async function syncCommandsIfChanged(commands: Command[]): Promise<boolean> {
   const config = await getConfig()
+
+  if (!config.guildId) {
+    throw new Error('DISCORD_GUILD_ID is required for command deployment')
+  }
+
   const rest = new REST().setToken(config.token)
 
   const localCommandData = commands.map(cmd => cmd.data.toJSON() as Record<string, unknown>)
 
-  // Fetch currently registered global commands from Discord
-  // (global commands are the authoritative source since they support DMs)
+  // Fetch currently registered guild commands from Discord
   let remoteCommands: Record<string, unknown>[]
   try {
-    remoteCommands = (await rest.get(Routes.applicationCommands(config.clientId))) as Record<
-      string,
-      unknown
-    >[]
+    remoteCommands = (await rest.get(
+      Routes.applicationGuildCommands(config.clientId, config.guildId)
+    )) as Record<string, unknown>[]
   } catch (error) {
     logger.warn({ error }, 'Could not fetch remote commands, deploying all')
     await deployCommands(commands)
@@ -250,38 +265,33 @@ export async function syncCommandsIfChanged(commands: Command[]): Promise<boolea
 
 /**
  * Deploy slash commands to Discord.
- * Commands are always deployed globally (for DM support).
- * If guildId is provided, commands are also deployed to that guild (instant updates).
+ * Commands are deployed to the configured guild only (no global deployment).
+ * This avoids duplicate commands appearing in Discord.
  */
 export async function deployCommands(commands: Command[]): Promise<void> {
   const config = await getConfig()
+
+  if (!config.guildId) {
+    throw new Error('DISCORD_GUILD_ID is required for command deployment')
+  }
+
   const rest = new REST().setToken(config.token)
 
   const commandData = commands.map(cmd => cmd.data.toJSON())
 
-  logger.info({ commandCount: commandData.length }, 'Deploying commands')
+  logger.info({ commandCount: commandData.length, guildId: config.guildId }, 'Deploying commands')
 
-  // Always deploy globally for DM support (takes up to 1 hour to propagate)
-  const globalData = (await rest.put(Routes.applicationCommands(config.clientId), {
-    body: commandData,
-  })) as unknown[]
+  const guildData = (await rest.put(
+    Routes.applicationGuildCommands(config.clientId, config.guildId),
+    {
+      body: commandData,
+    }
+  )) as unknown[]
 
-  logger.info({ deployedCount: globalData.length }, 'Global commands deployed')
-
-  // Also deploy to guild for instant updates (if configured)
-  if (config.guildId) {
-    const guildData = (await rest.put(
-      Routes.applicationGuildCommands(config.clientId, config.guildId),
-      {
-        body: commandData,
-      }
-    )) as unknown[]
-
-    logger.info(
-      { deployedCount: guildData.length, guildId: config.guildId },
-      'Guild commands deployed'
-    )
-  }
+  logger.info(
+    { deployedCount: guildData.length, guildId: config.guildId },
+    'Guild commands deployed'
+  )
 }
 
 /**

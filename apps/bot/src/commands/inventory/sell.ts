@@ -16,10 +16,10 @@ import { searchLocations } from '../../autocomplete/index.js'
 import { formatCommodity, formatLocation, resolveLocation } from '../../services/display.js'
 import { getMarketSettings, getDisplaySettings } from '../../services/userSettings.js'
 import {
-  getChannelDefaults,
+  getChannelConfig,
   resolveEffectiveValue,
   wasOverriddenByChannel,
-} from '../../services/channelDefaults.js'
+} from '../../services/channelConfig.js'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { isValidCurrency, VALID_CURRENCIES, type ValidCurrency } from '../../utils/validation.js'
 import { parseOrderInput, formatLimitMode, type LimitMode } from '../../utils/orderInputParser.js'
@@ -99,7 +99,7 @@ export const sell: Command = {
 
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
-    const channelSettings = await getChannelDefaults(channelId)
+    const channelSettings = await getChannelConfig(channelId)
 
     // Get options
     const input = interaction.options.getString('input', true)

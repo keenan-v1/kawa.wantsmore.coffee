@@ -18,7 +18,7 @@ import type {
 } from 'discord.js'
 import type { Command } from '../../client.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
-import { getChannelDefaults, resolveMessageVisibility } from '../../services/channelDefaults.js'
+import { getChannelConfig, resolveMessageVisibility } from '../../services/channelConfig.js'
 import { formatLocation } from '../../services/display.js'
 import type { LocationDisplayMode, Currency, MessageVisibility } from '@kawakawa/types'
 import {
@@ -77,7 +77,7 @@ export const reservations: Command = {
 
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
-    const channelSettings = await getChannelDefaults(channelId)
+    const channelSettings = await getChannelConfig(channelId)
 
     // Resolve message visibility (command > channel > user > system default)
     const { isEphemeral } = resolveMessageVisibility(

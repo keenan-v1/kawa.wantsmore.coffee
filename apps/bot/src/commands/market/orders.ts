@@ -29,10 +29,10 @@ import {
 } from '../../services/display.js'
 import { getDisplaySettings, getFioUsernames } from '../../services/userSettings.js'
 import {
-  getChannelDefaults,
+  getChannelConfig,
   resolveEffectiveValue,
   resolveMessageVisibility,
-} from '../../services/channelDefaults.js'
+} from '../../services/channelConfig.js'
 import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
 import {
   formatGroupedOrdersMulti,
@@ -142,7 +142,7 @@ export const orders: Command = {
 
     // Get channel defaults (if configured)
     const channelId = interaction.channelId
-    const channelSettings = await getChannelDefaults(channelId)
+    const channelSettings = await getChannelConfig(channelId)
 
     // Resolve message visibility (command > channel > user > system default)
     const { isEphemeral } = resolveMessageVisibility(

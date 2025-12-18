@@ -719,125 +719,331 @@
                   <v-progress-circular indeterminate />
                 </div>
 
-                <v-table v-else-if="channelConfigs.length > 0" density="compact">
-                  <thead>
-                    <tr>
-                      <th>Channel</th>
-                      <th>Visibility</th>
-                      <th>Price List</th>
-                      <th>Currency</th>
-                      <th>Reply</th>
-                      <th>Announce</th>
-                      <th class="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="config in channelConfigs" :key="config.channelId">
-                      <td>
-                        <div class="d-flex flex-column">
-                          <span class="font-weight-medium">{{
-                            getChannelName(config.channelId)
-                          }}</span>
-                          <span class="text-caption text-medium-emphasis">{{
-                            config.channelId
-                          }}</span>
+                <template v-else>
+                  <!-- Default Settings (Channel 0) -->
+                  <v-card
+                    variant="outlined"
+                    class="mb-4"
+                    :class="{ 'border-primary': defaultChannelConfig }"
+                  >
+                    <v-card-title class="d-flex align-center py-3">
+                      <v-icon class="mr-2" color="primary">mdi-earth</v-icon>
+                      <div>
+                        <span class="font-weight-medium">Default Settings</span>
+                        <div class="text-caption text-medium-emphasis">
+                          Applied to all channels unless overridden
                         </div>
-                      </td>
-                      <td>
+                      </div>
+                      <v-spacer />
+                      <div v-if="defaultChannelConfig" class="d-flex align-center ga-1 mr-2">
                         <v-chip
-                          v-if="config.visibility"
-                          size="small"
-                          :color="config.visibility === 'internal' ? 'blue' : 'orange'"
+                          v-for="chip in getConfigSummary(defaultChannelConfig)"
+                          :key="chip.label"
+                          size="x-small"
+                          :color="chip.color"
                         >
-                          {{ config.visibility }}
-                          <v-icon v-if="config.visibilityEnforced" size="x-small" end
-                            >mdi-lock</v-icon
-                          >
+                          {{ chip.label }}
+                          <v-icon v-if="chip.icon" size="x-small" end>{{ chip.icon }}</v-icon>
                         </v-chip>
-                        <span v-else class="text-caption text-medium-emphasis">—</span>
-                      </td>
-                      <td>
-                        <v-chip v-if="config.priceList" size="small" color="green">
-                          {{ config.priceList }}
-                          <v-icon v-if="config.priceListEnforced" size="x-small" end
-                            >mdi-lock</v-icon
-                          >
-                        </v-chip>
-                        <span v-else class="text-caption text-medium-emphasis">—</span>
-                      </td>
-                      <td>
-                        <v-chip v-if="config.currency" size="small" color="purple">
-                          {{ config.currency }}
-                          <v-icon v-if="config.currencyEnforced" size="x-small" end
-                            >mdi-lock</v-icon
-                          >
-                        </v-chip>
-                        <span v-else class="text-caption text-medium-emphasis">—</span>
-                      </td>
-                      <td>
-                        <v-chip
-                          v-if="config.messageVisibility"
-                          size="small"
-                          :color="config.messageVisibility === 'ephemeral' ? 'grey' : 'teal'"
-                        >
-                          {{ config.messageVisibility === 'ephemeral' ? 'Private' : 'Public' }}
-                          <v-icon v-if="config.messageVisibilityEnforced" size="x-small" end
-                            >mdi-lock</v-icon
-                          >
-                        </v-chip>
-                        <span v-else class="text-caption text-medium-emphasis">—</span>
-                      </td>
-                      <td>
-                        <div class="d-flex gap-1">
-                          <v-icon
-                            v-if="config.announceInternal"
-                            size="small"
-                            color="blue"
-                            title="Internal queries announced"
-                          >
-                            mdi-bullhorn
-                          </v-icon>
-                          <v-icon
-                            v-if="config.announcePartner"
-                            size="small"
-                            color="orange"
-                            title="Partner queries announced"
-                          >
-                            mdi-bullhorn-outline
-                          </v-icon>
-                          <span
-                            v-if="!config.announceInternal && !config.announcePartner"
-                            class="text-caption text-medium-emphasis"
-                            >—</span
-                          >
-                        </div>
-                      </td>
-                      <td class="text-right">
-                        <v-btn
-                          icon
-                          size="small"
-                          variant="text"
-                          @click="openEditChannelConfigDialog(config)"
-                        >
-                          <v-icon>mdi-pencil</v-icon>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          size="small"
-                          variant="text"
-                          color="error"
-                          @click="confirmDeleteChannelConfig(config)"
-                        >
-                          <v-icon>mdi-delete</v-icon>
-                        </v-btn>
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
+                      </div>
+                      <v-btn
+                        v-if="defaultChannelConfig"
+                        icon
+                        size="small"
+                        variant="text"
+                        @click="openEditChannelConfigDialog(defaultChannelConfig)"
+                      >
+                        <v-icon>mdi-pencil</v-icon>
+                      </v-btn>
+                      <v-btn
+                        v-else
+                        size="small"
+                        color="primary"
+                        variant="tonal"
+                        prepend-icon="mdi-plus"
+                        @click="openCreateChannelConfigDialog(true)"
+                      >
+                        Configure
+                      </v-btn>
+                    </v-card-title>
+                    <v-expand-transition>
+                      <v-card-text v-if="defaultChannelConfig" class="pt-0">
+                        <v-row dense>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Visibility</div>
+                            <v-chip
+                              v-if="defaultChannelConfig.visibility"
+                              size="small"
+                              :color="
+                                defaultChannelConfig.visibility === 'internal' ? 'blue' : 'orange'
+                              "
+                            >
+                              {{ defaultChannelConfig.visibility }}
+                              <v-icon
+                                v-if="defaultChannelConfig.visibilityEnforced"
+                                size="x-small"
+                                end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Price List</div>
+                            <v-chip
+                              v-if="defaultChannelConfig.priceList"
+                              size="small"
+                              color="green"
+                            >
+                              {{ defaultChannelConfig.priceList }}
+                              <v-icon
+                                v-if="defaultChannelConfig.priceListEnforced"
+                                size="x-small"
+                                end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Currency</div>
+                            <v-chip
+                              v-if="defaultChannelConfig.currency"
+                              size="small"
+                              color="purple"
+                            >
+                              {{ defaultChannelConfig.currency }}
+                              <v-icon
+                                v-if="defaultChannelConfig.currencyEnforced"
+                                size="x-small"
+                                end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Reply Visibility</div>
+                            <v-chip
+                              v-if="defaultChannelConfig.messageVisibility"
+                              size="small"
+                              :color="
+                                defaultChannelConfig.messageVisibility === 'ephemeral'
+                                  ? 'grey'
+                                  : 'teal'
+                              "
+                            >
+                              {{
+                                defaultChannelConfig.messageVisibility === 'ephemeral'
+                                  ? 'Private'
+                                  : 'Public'
+                              }}
+                              <v-icon
+                                v-if="defaultChannelConfig.messageVisibilityEnforced"
+                                size="x-small"
+                                end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Command Prefix</div>
+                            <v-chip
+                              v-if="defaultChannelConfig.commandPrefix"
+                              size="small"
+                              color="indigo"
+                            >
+                              {{ defaultChannelConfig.commandPrefix }}
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Announcements</div>
+                            <div class="d-flex ga-1">
+                              <v-icon
+                                v-if="defaultChannelConfig.announceInternal"
+                                size="small"
+                                color="blue"
+                                title="Internal queries announced"
+                              >
+                                mdi-bullhorn
+                              </v-icon>
+                              <v-icon
+                                v-if="defaultChannelConfig.announcePartner"
+                                size="small"
+                                color="orange"
+                                title="Partner queries announced"
+                              >
+                                mdi-bullhorn-outline
+                              </v-icon>
+                              <span
+                                v-if="
+                                  !defaultChannelConfig.announceInternal &&
+                                  !defaultChannelConfig.announcePartner
+                                "
+                                class="text-medium-emphasis"
+                                >—</span
+                              >
+                            </div>
+                          </v-col>
+                        </v-row>
+                      </v-card-text>
+                    </v-expand-transition>
+                  </v-card>
 
-                <v-alert v-else type="info" variant="tonal" density="compact">
-                  No channel configs. Add a channel to set defaults.
-                </v-alert>
+                  <!-- Channel-Specific Configs -->
+                  <v-expansion-panels
+                    v-if="regularChannelConfigs.length > 0"
+                    variant="accordion"
+                    class="mb-4"
+                  >
+                    <v-expansion-panel
+                      v-for="config in regularChannelConfigs"
+                      :key="config.channelId"
+                    >
+                      <v-expansion-panel-title>
+                        <div class="d-flex align-center flex-grow-1">
+                          <v-icon class="mr-2" size="small">mdi-pound</v-icon>
+                          <div>
+                            <span class="font-weight-medium">{{
+                              getChannelName(config.channelId)
+                            }}</span>
+                            <div class="text-caption text-medium-emphasis">
+                              {{ config.channelId }}
+                            </div>
+                          </div>
+                          <v-spacer />
+                          <div class="d-flex align-center ga-1 mr-4">
+                            <v-chip
+                              v-for="chip in getConfigSummary(config)"
+                              :key="chip.label"
+                              size="x-small"
+                              :color="chip.color"
+                            >
+                              {{ chip.label }}
+                              <v-icon v-if="chip.icon" size="x-small" end>{{ chip.icon }}</v-icon>
+                            </v-chip>
+                          </div>
+                        </div>
+                      </v-expansion-panel-title>
+                      <v-expansion-panel-text>
+                        <v-row dense>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Visibility</div>
+                            <v-chip
+                              v-if="config.visibility"
+                              size="small"
+                              :color="config.visibility === 'internal' ? 'blue' : 'orange'"
+                            >
+                              {{ config.visibility }}
+                              <v-icon v-if="config.visibilityEnforced" size="x-small" end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Price List</div>
+                            <v-chip v-if="config.priceList" size="small" color="green">
+                              {{ config.priceList }}
+                              <v-icon v-if="config.priceListEnforced" size="x-small" end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Currency</div>
+                            <v-chip v-if="config.currency" size="small" color="purple">
+                              {{ config.currency }}
+                              <v-icon v-if="config.currencyEnforced" size="x-small" end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Reply Visibility</div>
+                            <v-chip
+                              v-if="config.messageVisibility"
+                              size="small"
+                              :color="config.messageVisibility === 'ephemeral' ? 'grey' : 'teal'"
+                            >
+                              {{ config.messageVisibility === 'ephemeral' ? 'Private' : 'Public' }}
+                              <v-icon v-if="config.messageVisibilityEnforced" size="x-small" end
+                                >mdi-lock</v-icon
+                              >
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Command Prefix</div>
+                            <v-chip v-if="config.commandPrefix" size="small" color="indigo">
+                              {{ config.commandPrefix }}
+                            </v-chip>
+                            <span v-else class="text-medium-emphasis">—</span>
+                          </v-col>
+                          <v-col cols="6" md="3">
+                            <div class="text-caption text-medium-emphasis">Announcements</div>
+                            <div class="d-flex ga-1">
+                              <v-icon
+                                v-if="config.announceInternal"
+                                size="small"
+                                color="blue"
+                                title="Internal queries announced"
+                              >
+                                mdi-bullhorn
+                              </v-icon>
+                              <v-icon
+                                v-if="config.announcePartner"
+                                size="small"
+                                color="orange"
+                                title="Partner queries announced"
+                              >
+                                mdi-bullhorn-outline
+                              </v-icon>
+                              <span
+                                v-if="!config.announceInternal && !config.announcePartner"
+                                class="text-medium-emphasis"
+                                >—</span
+                              >
+                            </div>
+                          </v-col>
+                        </v-row>
+                        <v-divider class="my-3" />
+                        <div class="d-flex justify-end ga-2">
+                          <v-btn
+                            size="small"
+                            variant="text"
+                            prepend-icon="mdi-pencil"
+                            @click="openEditChannelConfigDialog(config)"
+                          >
+                            Edit
+                          </v-btn>
+                          <v-btn
+                            size="small"
+                            variant="text"
+                            color="error"
+                            prepend-icon="mdi-delete"
+                            @click="confirmDeleteChannelConfig(config)"
+                          >
+                            Delete
+                          </v-btn>
+                        </div>
+                      </v-expansion-panel-text>
+                    </v-expansion-panel>
+                  </v-expansion-panels>
+
+                  <v-alert
+                    v-if="regularChannelConfigs.length === 0"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                  >
+                    No channel-specific configs. Add a channel to override the defaults.
+                  </v-alert>
+                </template>
               </v-card-text>
             </v-card>
           </v-col>
@@ -847,10 +1053,29 @@
         <v-dialog v-model="channelConfigDialog.show" max-width="600">
           <v-card>
             <v-card-title>
-              {{ channelConfigDialog.isEdit ? 'Edit' : 'Add' }} Channel Config
+              <template v-if="channelConfigForm.channelId === '0'">
+                {{ channelConfigDialog.isEdit ? 'Edit' : 'Configure' }} Default Settings
+              </template>
+              <template v-else>
+                {{ channelConfigDialog.isEdit ? 'Edit' : 'Add' }} Channel Config
+              </template>
             </v-card-title>
             <v-card-text>
+              <!-- For default settings (channel 0), show info alert instead of channel selector -->
+              <v-alert
+                v-if="channelConfigForm.channelId === '0'"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-4"
+              >
+                <v-icon size="small" class="mr-1">mdi-earth</v-icon>
+                These settings apply to all channels unless overridden by channel-specific config.
+              </v-alert>
+
+              <!-- Channel selector for non-default configs -->
               <v-autocomplete
+                v-else
                 v-model="channelConfigForm.channelId"
                 :items="discordChannels"
                 item-title="name"
@@ -953,6 +1178,21 @@
                     color="warning"
                     hide-details
                     density="compact"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row>
+                <v-col cols="12">
+                  <v-text-field
+                    v-model="channelConfigForm.commandPrefix"
+                    label="Command Prefix"
+                    placeholder="e.g., !, ?, ."
+                    clearable
+                    hint="Prefix for text commands (e.g., !help, ?query). Leave empty to disable text commands."
+                    persistent-hint
+                    prepend-icon="mdi-pound"
+                    maxlength="5"
                   />
                 </v-col>
               </v-row>
@@ -2374,6 +2614,7 @@ const channelConfigForm = ref({
   messageVisibilityEnforced: false,
   announceInternal: null as string | null,
   announcePartner: null as string | null,
+  commandPrefix: null as string | null,
 })
 const savingChannelConfig = ref(false)
 const deleteChannelConfigDialog = ref({ show: false, channelId: '' })
@@ -3259,14 +3500,66 @@ const loadDiscordChannels = async () => {
 }
 
 const getChannelName = (channelId: string): string => {
+  if (channelId === '0') return 'Default Settings'
   const channel = discordChannels.value.find(c => c.id === channelId)
   return channel?.name ? `#${channel.name}` : 'Unknown'
 }
 
-const openCreateChannelConfigDialog = async () => {
+// Computed: separate default config (channel 0) from regular channel configs
+const defaultChannelConfig = computed(() => {
+  return channelConfigs.value.find(c => c.channelId === '0') ?? null
+})
+
+const regularChannelConfigs = computed(() => {
+  return channelConfigs.value.filter(c => c.channelId !== '0')
+})
+
+// Helper to get config summary chips for expansion panel title
+const getConfigSummary = (config: ChannelConfigMap) => {
+  const chips: Array<{ label: string; color: string; icon?: string }> = []
+
+  if (config.visibility) {
+    chips.push({
+      label: config.visibility,
+      color: config.visibility === 'internal' ? 'blue' : 'orange',
+      icon: config.visibilityEnforced ? 'mdi-lock' : undefined,
+    })
+  }
+  if (config.priceList) {
+    chips.push({
+      label: config.priceList,
+      color: 'green',
+      icon: config.priceListEnforced ? 'mdi-lock' : undefined,
+    })
+  }
+  if (config.currency) {
+    chips.push({
+      label: config.currency,
+      color: 'purple',
+      icon: config.currencyEnforced ? 'mdi-lock' : undefined,
+    })
+  }
+  if (config.messageVisibility) {
+    chips.push({
+      label: config.messageVisibility === 'ephemeral' ? 'Private' : 'Public',
+      color: config.messageVisibility === 'ephemeral' ? 'grey' : 'teal',
+      icon: config.messageVisibilityEnforced ? 'mdi-lock' : undefined,
+    })
+  }
+  if (config.commandPrefix) {
+    chips.push({
+      label: `prefix: ${config.commandPrefix}`,
+      color: 'indigo',
+    })
+  }
+
+  return chips
+}
+
+const openCreateChannelConfigDialog = async (isDefault = false) => {
   channelConfigDialog.value = { show: true, isEdit: false }
   channelConfigForm.value = {
-    channelId: '',
+    channelId: isDefault ? '0' : '',
     visibility: null,
     visibilityEnforced: false,
     priceList: null,
@@ -3277,6 +3570,7 @@ const openCreateChannelConfigDialog = async () => {
     messageVisibilityEnforced: false,
     announceInternal: null,
     announcePartner: null,
+    commandPrefix: null,
   }
   // Load required data for dropdowns
   if (discordChannels.value.length === 0) {
@@ -3301,6 +3595,7 @@ const openEditChannelConfigDialog = async (config: ChannelConfigMap) => {
     messageVisibilityEnforced: config.messageVisibilityEnforced ?? false,
     announceInternal: config.announceInternal ?? null,
     announcePartner: config.announcePartner ?? null,
+    commandPrefix: config.commandPrefix ?? null,
   }
   // Load required data for dropdowns
   if (discordChannels.value.length === 0) {
@@ -3327,11 +3622,13 @@ const saveChannelConfig = async () => {
       messageVisibilityEnforced: channelConfigForm.value.messageVisibilityEnforced,
       announceInternal: channelConfigForm.value.announceInternal,
       announcePartner: channelConfigForm.value.announcePartner,
+      commandPrefix: channelConfigForm.value.commandPrefix,
     })
+    const isDefault = channelConfigForm.value.channelId === '0'
     showSnackbar(
       channelConfigDialog.value.isEdit
-        ? 'Channel config updated successfully'
-        : 'Channel config created successfully'
+        ? `${isDefault ? 'Default' : 'Channel'} config updated successfully`
+        : `${isDefault ? 'Default' : 'Channel'} config created successfully`
     )
     channelConfigDialog.value.show = false
     await loadChannelConfigs()

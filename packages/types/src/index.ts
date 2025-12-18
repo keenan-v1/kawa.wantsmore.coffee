@@ -268,6 +268,7 @@ export type ChannelConfigKey =
   | 'messageVisibilityEnforced' // 'true' | 'false' - lock message visibility
   | 'announceInternal' // Channel ID to announce internal visibility queries
   | 'announcePartner' // Channel ID to announce partner visibility queries
+  | 'commandPrefix' // Text command prefix (e.g., '!', '?', '.')
 
 // Single channel config entry (database row)
 export interface ChannelConfigEntry {
@@ -292,6 +293,7 @@ export interface ChannelConfigMap {
   messageVisibilityEnforced?: boolean
   announceInternal?: string // Channel ID
   announcePartner?: string // Channel ID
+  commandPrefix?: string // Text command prefix (e.g., '!')
 }
 
 // Request to update channel config (partial update)
@@ -306,6 +308,7 @@ export interface UpdateChannelConfigRequest {
   messageVisibilityEnforced?: boolean | null
   announceInternal?: string | null
   announcePartner?: string | null
+  commandPrefix?: string | null // Text command prefix (e.g., '!')
 }
 
 // Response listing all configured channels
