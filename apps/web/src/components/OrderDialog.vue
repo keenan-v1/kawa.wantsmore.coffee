@@ -196,7 +196,7 @@
                       <v-col cols="8">
                         <v-text-field
                           v-model.number="buyForm.price"
-                          label="Price"
+                          label="Unit Price"
                           type="number"
                           min="0"
                           step="0.01"
@@ -501,7 +501,7 @@
                       <v-col cols="8">
                         <v-text-field
                           v-model.number="sellForm.price"
-                          label="Price"
+                          label="Unit Price"
                           type="number"
                           min="0"
                           step="0.01"
@@ -684,8 +684,22 @@
                 <tr>
                   <th style="width: 28px"></th>
                   <th class="text-left">Location</th>
-                  <th class="text-right">Dist</th>
-                  <th class="text-right">Price</th>
+                  <th class="text-right">
+                    <v-tooltip location="top">
+                      <template #activator="{ props: tooltipProps }">
+                        <span v-bind="tooltipProps" class="cursor-help">Jumps</span>
+                      </template>
+                      Jumps from {{ getLocationDisplay(currentLocation || '') }}
+                    </v-tooltip>
+                  </th>
+                  <th class="text-right">
+                    <v-tooltip location="top">
+                      <template #activator="{ props: tooltipProps }">
+                        <span v-bind="tooltipProps" class="cursor-help">Price</span>
+                      </template>
+                      Unit price per item
+                    </v-tooltip>
+                  </th>
                   <th class="text-right">Avail</th>
                 </tr>
               </thead>
@@ -1711,5 +1725,9 @@ onMounted(() => {
 
 .min-width-0 {
   min-width: 0;
+}
+
+.cursor-help {
+  cursor: help;
 }
 </style>

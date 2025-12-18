@@ -83,7 +83,7 @@
             <v-col cols="8">
               <v-text-field
                 v-model.number="form.price"
-                label="Price"
+                label="Unit Price"
                 type="number"
                 min="0"
                 step="0.01"

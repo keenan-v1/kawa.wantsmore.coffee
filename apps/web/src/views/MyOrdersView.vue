@@ -927,7 +927,7 @@ const activeTab = useUrlTab({
 const sellHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
-  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Unit Price', key: 'price', sortable: true },
   { title: 'Available', key: 'availableQuantity', sortable: true, align: 'end' as const },
   {
     title: 'Reservations',
@@ -942,7 +942,7 @@ const sellHeaders = [
 const buyHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
-  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Unit Price', key: 'price', sortable: true },
   { title: 'Quantity', key: 'quantity', sortable: true, align: 'end' as const },
   {
     title: 'Reservations',
@@ -959,7 +959,7 @@ const reservationHeaders = [
   { title: 'Commodity', key: 'commodityTicker', sortable: true },
   { title: 'Location', key: 'locationId', sortable: true },
   { title: 'With', key: 'counterparty', sortable: true },
-  { title: 'Price/Unit', key: 'price', sortable: true, align: 'end' as const },
+  { title: 'Unit Price', key: 'price', sortable: true, align: 'end' as const },
   { title: 'Qty', key: 'quantity', sortable: true, align: 'end' as const },
   { title: 'Total', key: 'total', sortable: true, align: 'end' as const },
   { title: 'Status', key: 'status', sortable: true },

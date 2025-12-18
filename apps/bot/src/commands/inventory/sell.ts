@@ -22,7 +22,11 @@ import {
 } from '../../services/channelConfig.js'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { isValidCurrency, VALID_CURRENCIES, type ValidCurrency } from '../../utils/validation.js'
-import { parseOrderInput, formatLimitMode, type LimitMode } from '../../utils/orderInputParser.js'
+import {
+  parseSmartOrderInput,
+  formatLimitMode,
+  type LimitMode,
+} from '../../utils/orderInputParser.js'
 import { calculateEffectivePriceWithFallback } from '@kawakawa/services/market'
 import logger from '../../utils/logger.js'
 
@@ -111,25 +115,33 @@ export const sell: Command = {
       | 'partner'
       | null
 
-    // Parse flexible input
-    const parsed = await parseOrderInput(input, { forSell: true })
+    // Parse flexible input (supports both multi-format and single-format)
+    const parsed = await parseSmartOrderInput(input, { forSell: true })
+
+    // Extract tickers and check for errors based on format
+    const isMultiFormat = parsed.isMultiFormat
+    const unresolvedTokens = isMultiFormat
+      ? parsed.multi!.unresolvedTokens
+      : parsed.single!.unresolvedTokens
+    const tickers = isMultiFormat ? parsed.multi!.orders.map(o => o.ticker) : parsed.single!.tickers
 
     // Validate we have at least one ticker
-    if (parsed.tickers.length === 0) {
+    if (tickers.length === 0) {
       const errorMsg =
-        parsed.unresolvedTokens.length > 0
-          ? `Could not find commodities: ${parsed.unresolvedTokens.map(t => `"${t}"`).join(', ')}`
+        unresolvedTokens.length > 0
+          ? `Could not find commodities: ${unresolvedTokens.map(t => `"${t}"`).join(', ')}`
           : 'Please specify at least one commodity ticker.'
 
       await interaction.reply({
-        content: `❌ ${errorMsg}\n\nExample: \`/sell COF,CAF Katoa reserve:1000\``,
+        content: `❌ ${errorMsg}\n\nExample: \`/sell COF,CAF Katoa reserve:1000\` or \`/sell DW 1000 RAT 500 BEN\``,
         flags: MessageFlags.Ephemeral,
       })
       return
     }
 
     // Determine location (override takes precedence)
-    let locationId = locationOverride || parsed.location
+    let locationId =
+      locationOverride || (isMultiFormat ? parsed.multi!.location : parsed.single!.location)
 
     // If location override provided, validate it
     if (locationOverride) {
@@ -194,9 +206,9 @@ export const sell: Command = {
       channelSettings?.visibilityEnforced ?? false
     )
 
-    // Determine limit mode
-    const limitMode: LimitMode = parsed.limitMode
-    const limitQuantity = parsed.limitQuantity
+    // Determine limit mode (for single-format, from parsed input; for multi-format, per-ticker)
+    const sharedLimitMode: LimitMode = isMultiFormat ? 'reserve' : parsed.single!.limitMode
+    const sharedLimitQuantity = isMultiFormat ? null : parsed.single!.limitQuantity
 
     // Determine price list using channel defaults resolution
     const effectivePriceList: string | null = resolveEffectiveValue(
@@ -258,10 +270,28 @@ export const sell: Command = {
       price: number | null
       currency: string
       priceSource: 'fixed' | 'auto' | 'pending'
+      limitMode: LimitMode
+      limitQuantity: number | null
     }> = []
     const errors: string[] = []
 
-    for (const ticker of parsed.tickers) {
+    // Build order items based on format
+    // For multi-format, each ticker has its own reserve quantity
+    // For single-format, all tickers share the same limit mode/quantity
+    const orderItems = isMultiFormat
+      ? parsed.multi!.orders.map(o => ({
+          ticker: o.ticker,
+          limitMode: 'reserve' as LimitMode,
+          limitQuantity: o.quantity,
+        }))
+      : tickers.map(ticker => ({
+          ticker,
+          limitMode: sharedLimitMode,
+          limitQuantity: sharedLimitQuantity,
+        }))
+
+    for (const item of orderItems) {
+      const { ticker, limitMode, limitQuantity } = item
       try {
         let price: number
         let orderPriceListCode: string | null = null
@@ -334,6 +364,8 @@ export const sell: Command = {
               : price > 0
                 ? 'auto'
                 : 'pending',
+          limitMode,
+          limitQuantity,
         })
 
         logger.info(
@@ -358,7 +390,6 @@ export const sell: Command = {
 
     // Build response
     const locationDisplay = await formatLocation(locationId, displaySettings.locationDisplayMode)
-    const limitDisplay = formatLimitMode(limitMode, limitQuantity)
 
     let response = ''
 
@@ -370,6 +401,7 @@ export const sell: Command = {
         order.price !== null
           ? `${order.price.toFixed(2)} ${order.currency}`
           : `-- ${order.currency}`
+      const limitDisplay = formatLimitMode(order.limitMode, order.limitQuantity)
 
       response = `✅ Sell order created/updated!\n\n`
       response += `**${commodityDisplay}** @ **${locationDisplay}**\n`
@@ -396,11 +428,12 @@ export const sell: Command = {
           order.price !== null
             ? `${order.price.toFixed(2)} ${order.currency}`
             : `-- ${order.currency}`
+        const orderLimitDisplay = formatLimitMode(order.limitMode, order.limitQuantity)
 
         response += `• ${commodityDisplay} - ${priceDisplay}`
 
-        if (limitDisplay) {
-          response += ` (${limitDisplay})`
+        if (orderLimitDisplay) {
+          response += ` (${orderLimitDisplay})`
         }
 
         if (order.priceSource === 'pending') {
@@ -419,8 +452,8 @@ export const sell: Command = {
     }
 
     // Add warnings about unresolved tokens
-    if (parsed.unresolvedTokens.length > 0) {
-      response += `\n\n⚠️ Could not resolve: ${parsed.unresolvedTokens.map(t => `"${t}"`).join(', ')}`
+    if (unresolvedTokens.length > 0) {
+      response += `\n\n⚠️ Could not resolve: ${unresolvedTokens.map(t => `"${t}"`).join(', ')}`
     }
 
     // Add warnings about channel-enforced overrides

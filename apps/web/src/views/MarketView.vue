@@ -558,7 +558,7 @@
               <v-col cols="8">
                 <v-text-field
                   v-model.number="editForm.price"
-                  label="Price"
+                  label="Unit Price"
                   type="number"
                   min="0"
                   step="0.01"
@@ -694,7 +694,7 @@ const headers = [
     cellProps: { class: 'd-none d-lg-table-cell' },
     headerProps: { class: 'd-none d-lg-table-cell' },
   },
-  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Unit Price', key: 'price', sortable: true },
   {
     title: 'Pricing',
     key: 'pricingMode',

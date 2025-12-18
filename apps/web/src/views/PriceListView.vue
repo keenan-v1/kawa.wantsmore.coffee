@@ -342,7 +342,7 @@
               <v-col cols="8">
                 <v-text-field
                   v-model.number="priceForm.price"
-                  label="Price"
+                  label="Unit Price"
                   type="number"
                   min="0"
                   step="0.01"
@@ -553,7 +553,7 @@ const headers = computed(() => {
     { title: 'Commodity', key: 'commodityTicker', sortable: true },
     { title: 'Category', key: 'category', sortable: true },
     { title: 'Location', key: 'locationId', sortable: true },
-    { title: 'Price', key: 'price', sortable: true, align: 'end' as const },
+    { title: 'Unit Price', key: 'price', sortable: true, align: 'end' as const },
     { title: 'Source', key: 'source', sortable: true },
     { title: 'Updated', key: 'updatedAt', sortable: true },
   ]

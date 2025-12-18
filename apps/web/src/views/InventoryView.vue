@@ -367,7 +367,14 @@
                     <thead>
                       <tr>
                         <th class="text-left">Currency</th>
-                        <th class="text-right">Price</th>
+                        <th class="text-right">
+                          <v-tooltip location="top">
+                            <template #activator="{ props: tooltipProps }">
+                              <span v-bind="tooltipProps" style="cursor: help">Price</span>
+                            </template>
+                            Unit price per item
+                          </v-tooltip>
+                        </th>
                         <th class="text-right">Available</th>
                         <th class="text-left">Type</th>
                         <th></th>
@@ -445,7 +452,14 @@
                     <thead>
                       <tr>
                         <th class="text-left">Currency</th>
-                        <th class="text-right">Price</th>
+                        <th class="text-right">
+                          <v-tooltip location="top">
+                            <template #activator="{ props: tooltipProps }">
+                              <span v-bind="tooltipProps" style="cursor: help">Price</span>
+                            </template>
+                            Unit price per item
+                          </v-tooltip>
+                        </th>
                         <th class="text-right">Quantity</th>
                         <th class="text-left">Type</th>
                         <th></th>

@@ -21,7 +21,7 @@ import {
 } from '../../services/channelConfig.js'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { isValidCurrency, VALID_CURRENCIES, type ValidCurrency } from '../../utils/validation.js'
-import { parseOrderInput } from '../../utils/orderInputParser.js'
+import { parseSmartOrderInput } from '../../utils/orderInputParser.js'
 import { calculateEffectivePriceWithFallback } from '@kawakawa/services/market'
 import logger from '../../utils/logger.js'
 
@@ -118,25 +118,33 @@ export const buy: Command = {
       | 'partner'
       | null
 
-    // Parse flexible input
-    const parsed = await parseOrderInput(input, { forBuy: true })
+    // Parse flexible input (supports both multi-format and single-format)
+    const parsed = await parseSmartOrderInput(input, { forBuy: true })
+
+    // Extract tickers and check for errors based on format
+    const isMultiFormat = parsed.isMultiFormat
+    const unresolvedTokens = isMultiFormat
+      ? parsed.multi!.unresolvedTokens
+      : parsed.single!.unresolvedTokens
+    const tickers = isMultiFormat ? parsed.multi!.orders.map(o => o.ticker) : parsed.single!.tickers
 
     // Validate we have at least one ticker
-    if (parsed.tickers.length === 0) {
+    if (tickers.length === 0) {
       const errorMsg =
-        parsed.unresolvedTokens.length > 0
-          ? `Could not find commodities: ${parsed.unresolvedTokens.map(t => `"${t}"`).join(', ')}`
+        unresolvedTokens.length > 0
+          ? `Could not find commodities: ${unresolvedTokens.map(t => `"${t}"`).join(', ')}`
           : 'Please specify at least one commodity ticker.'
 
       await interaction.reply({
-        content: `❌ ${errorMsg}\n\nExample: \`/buy COF,CAF Katoa 500\``,
+        content: `❌ ${errorMsg}\n\nExample: \`/buy COF,CAF Katoa 500\` or \`/buy DW 1000 RAT 500 BEN\``,
         flags: MessageFlags.Ephemeral,
       })
       return
     }
 
     // Determine location (override takes precedence)
-    let locationId = locationOverride || parsed.location
+    let locationId =
+      locationOverride || (isMultiFormat ? parsed.multi!.location : parsed.single!.location)
 
     // If location override provided, validate it
     if (locationOverride) {
@@ -161,10 +169,11 @@ export const buy: Command = {
       return
     }
 
-    // Determine quantity (override takes precedence, required for buy orders)
-    const quantity = quantityOverride || parsed.quantity
+    // For multi-format, quantities are per-ticker, not shared
+    // For single-format, determine shared quantity (override takes precedence)
+    const sharedQuantity = isMultiFormat ? null : quantityOverride || parsed.single!.quantity
 
-    if (!quantity || quantity <= 0) {
+    if (!isMultiFormat && (!sharedQuantity || sharedQuantity <= 0)) {
       await interaction.reply({
         content:
           '❌ Please specify a quantity.\n\n' +
@@ -278,7 +287,13 @@ export const buy: Command = {
     }> = []
     const errors: string[] = []
 
-    for (const ticker of parsed.tickers) {
+    // Build order items based on format
+    const orderItems = isMultiFormat
+      ? parsed.multi!.orders.map(o => ({ ticker: o.ticker, quantity: o.quantity }))
+      : tickers.map(ticker => ({ ticker, quantity: sharedQuantity! }))
+
+    for (const item of orderItems) {
+      const { ticker, quantity } = item
       try {
         let price: number
         let orderPriceListCode: string | null = null
@@ -424,8 +439,8 @@ export const buy: Command = {
     }
 
     // Add warnings about unresolved tokens
-    if (parsed.unresolvedTokens.length > 0) {
-      response += `\n\n⚠️ Could not resolve: ${parsed.unresolvedTokens.map(t => `"${t}"`).join(', ')}`
+    if (unresolvedTokens.length > 0) {
+      response += `\n\n⚠️ Could not resolve: ${unresolvedTokens.map(t => `"${t}"`).join(', ')}`
     }
 
     // Add warnings about channel-enforced overrides
