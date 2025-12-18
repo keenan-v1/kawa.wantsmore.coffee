@@ -16,6 +16,7 @@ import { db, userSettings, fioUserStorage } from '@kawakawa/db'
 import { eq, and, desc } from 'drizzle-orm'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { MODAL_TIMEOUT } from '../../utils/interactions.js'
+import { syncUserInventory } from '@kawakawa/services'
 import logger from '../../utils/logger.js'
 
 export const sync: Command = {
@@ -129,6 +130,10 @@ export const sync: Command = {
     if (hasFioCredentials) {
       row.addComponents(
         new ButtonBuilder()
+          .setCustomId('fio:sync-now')
+          .setLabel('🔄 Sync Now')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
           .setCustomId('fio:clear')
           .setLabel('🗑️ Clear Credentials')
           .setStyle(ButtonStyle.Danger)
@@ -149,7 +154,95 @@ export const sync: Command = {
     })
 
     collector.on('collect', async buttonInteraction => {
-      if (buttonInteraction.customId === 'fio:configure') {
+      if (buttonInteraction.customId === 'fio:sync-now') {
+        // Show that we're syncing
+        await buttonInteraction.deferUpdate()
+
+        try {
+          // Get FIO credentials
+          const fioApiKeyValue = fioApiKeyRow?.value
+          let apiKey = ''
+          if (fioApiKeyValue) {
+            try {
+              apiKey = JSON.parse(fioApiKeyValue)
+            } catch {
+              apiKey = fioApiKeyValue
+            }
+          }
+
+          // Get excluded locations
+          const excludedLocationsRow = await db.query.userSettings.findFirst({
+            where: and(
+              eq(userSettings.userId, userId),
+              eq(userSettings.settingKey, 'fio.excludedLocations')
+            ),
+          })
+          let excludedLocations: string[] = []
+          if (excludedLocationsRow?.value) {
+            try {
+              excludedLocations = JSON.parse(excludedLocationsRow.value)
+            } catch {
+              // Ignore parse errors
+            }
+          }
+
+          // Perform sync
+          const syncResult = await syncUserInventory(userId, apiKey, fioUsername, {
+            excludedLocations,
+          })
+
+          logger.info(
+            { userId, fioUsername, syncResult },
+            'FIO sync triggered from Discord command'
+          )
+
+          // Build result message
+          let resultMsg = ''
+          if (syncResult.success) {
+            resultMsg = `✅ **Sync completed!**\n\n`
+            resultMsg += `• **${syncResult.inserted}** inventory items synced\n`
+            resultMsg += `• **${syncResult.storageLocations}** storage locations\n`
+
+            if (syncResult.fioLastSync) {
+              const syncDate = new Date(syncResult.fioLastSync)
+              resultMsg += `• FIO data from: ${syncDate.toLocaleString()}\n`
+            }
+
+            if (syncResult.skippedExcludedLocations > 0) {
+              resultMsg += `\n⏭️ Skipped ${syncResult.skippedExcludedLocations} items from excluded locations`
+            }
+            if (syncResult.skippedUnknownLocations > 0) {
+              resultMsg += `\n⚠️ Skipped ${syncResult.skippedUnknownLocations} items from unknown locations`
+            }
+            if (syncResult.skippedUnknownCommodities > 0) {
+              resultMsg += `\n⚠️ Skipped ${syncResult.skippedUnknownCommodities} unknown commodities`
+            }
+          } else {
+            resultMsg = `❌ **Sync failed**\n\n`
+            resultMsg += syncResult.errors.slice(0, 3).join('\n')
+            if (syncResult.errors.length > 3) {
+              resultMsg += `\n... and ${syncResult.errors.length - 3} more errors`
+            }
+          }
+
+          resultMsg += '\n\nUse `/inventory` to view your synced inventory.'
+
+          await interaction.editReply({
+            content: resultMsg,
+            embeds: [],
+            components: [],
+          })
+        } catch (error) {
+          logger.error({ error, userId }, 'Failed to sync FIO inventory')
+          await interaction.editReply({
+            content:
+              '❌ Failed to sync inventory. Please check your FIO credentials and try again.\n\n' +
+              `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            embeds: [],
+            components: [],
+          })
+        }
+      } else if (buttonInteraction.customId === 'fio:configure') {
         // Show modal for FIO credential configuration
         const modal = new ModalBuilder()
           .setCustomId('fio:credentials-modal')

@@ -40,6 +40,8 @@ describe('orderInputParser', () => {
         Stella: { naturalId: 'OT-580b', name: 'Stella', type: 'planet' },
         'OT-580b': { naturalId: 'OT-580b', name: 'Stella', type: 'planet' },
         Moria: { naturalId: 'UV-351a', name: 'Moria', type: 'planet' },
+        'Promitor Station': { naturalId: 'PRO-STN', name: 'Promitor Station', type: 'station' },
+        'New Tokyo': { naturalId: 'NT-001', name: 'New Tokyo', type: 'planet' },
       }
       return locations[locationId] || null
     })
@@ -73,6 +75,23 @@ describe('orderInputParser', () => {
         expect(result.tickers).toEqual([])
         expect(result.location).toBe('KW-020c')
         expect(result.unresolvedTokens).toContain('INVALID')
+      })
+
+      it('handles multi-word locations', async () => {
+        const result = await parseOrderInput('COF Promitor Station', { forSell: true })
+
+        expect(result.tickers).toEqual(['COF'])
+        expect(result.location).toBe('PRO-STN')
+        expect(result.resolvedLocation?.name).toBe('Promitor Station')
+        expect(result.unresolvedTokens).toHaveLength(0)
+      })
+
+      it('handles multi-word locations with extra unrecognized tokens', async () => {
+        const result = await parseOrderInput('COF New Tokyo extra', { forSell: true })
+
+        expect(result.tickers).toEqual(['COF'])
+        expect(result.location).toBe('NT-001')
+        expect(result.unresolvedTokens).toEqual(['extra'])
       })
     })
 
@@ -298,6 +317,8 @@ describe('orderInputParser', () => {
           Stella: { naturalId: 'OT-580b', name: 'Stella', type: 'planet' },
           BEN: { naturalId: 'BEN', name: 'Benten', type: 'station' },
           Moria: { naturalId: 'UV-351a', name: 'Moria', type: 'planet' },
+          'Promitor Station': { naturalId: 'PRO-STN', name: 'Promitor Station', type: 'station' },
+          'New Tokyo': { naturalId: 'NT-001', name: 'New Tokyo', type: 'planet' },
         }
         return locations[locationId] || null
       })
@@ -358,6 +379,25 @@ describe('orderInputParser', () => {
           type: 'station',
         })
       })
+
+      it('handles multi-word locations', async () => {
+        const result = await parseMultiOrderInput('DW 1000 RAT 500 Promitor Station')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(2)
+        expect(result.location).toBe('PRO-STN')
+        expect(result.resolvedLocation?.name).toBe('Promitor Station')
+        expect(result.unresolvedTokens).toHaveLength(0)
+      })
+
+      it('handles multi-word locations with extra tokens', async () => {
+        const result = await parseMultiOrderInput('COF 100 New Tokyo extra')
+
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(1)
+        expect(result.location).toBe('NT-001')
+        expect(result.unresolvedTokens).toEqual(['extra'])
+      })
     })
 
     describe('not multi-format (fallback scenarios)', () => {
@@ -393,11 +433,15 @@ describe('orderInputParser', () => {
         expect(result.orders).toHaveLength(0)
       })
 
-      it('returns isMultiFormat false when last token is not a location', async () => {
+      it('returns multi-format with unresolved tokens when location cannot be resolved', async () => {
         mockResolveLocation.mockResolvedValue(null)
         const result = await parseMultiOrderInput('COF 100 INVALID')
 
-        expect(result.isMultiFormat).toBe(false)
+        // Still multi-format, but location goes to unresolvedTokens
+        expect(result.isMultiFormat).toBe(true)
+        expect(result.orders).toHaveLength(1)
+        expect(result.location).toBeNull()
+        expect(result.unresolvedTokens).toEqual(['INVALID'])
       })
     })
 

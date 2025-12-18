@@ -133,8 +133,10 @@ function parseBulkSellOrders(
         idx++
         if (idx < rest.length) {
           const qty = parseInt(rest[idx], 10)
-          if (!isNaN(qty) && qty > 0) {
-            limitQuantity = qty
+          if (!isNaN(qty) && qty >= 0) {
+            // qty=0 means no limit (sell all)
+            limitQuantity = qty > 0 ? qty : null
+            if (qty === 0) limitMode = 'none' // 0 = no limit
             idx++
           } else {
             errors.push({ lineNumber, line, error: `Invalid max quantity "${rest[idx]}"` })
@@ -149,8 +151,10 @@ function parseBulkSellOrders(
         idx++
         if (idx < rest.length) {
           const qty = parseInt(rest[idx], 10)
-          if (!isNaN(qty) && qty > 0) {
-            limitQuantity = qty
+          if (!isNaN(qty) && qty >= 0) {
+            // qty=0 means no reserve (sell all)
+            limitQuantity = qty > 0 ? qty : null
+            if (qty === 0) limitMode = 'none' // 0 = no limit
             idx++
           } else {
             errors.push({ lineNumber, line, error: `Invalid reserve quantity "${rest[idx]}"` })
@@ -161,13 +165,15 @@ function parseBulkSellOrders(
           break
         }
       }
-      // Check for price (number)
+      // Check for price (number) - 0 means auto-pricing
       else if (!isNaN(parseFloat(rest[idx]))) {
-        price = parseFloat(rest[idx])
-        if (price <= 0) {
+        const priceVal = parseFloat(rest[idx])
+        if (priceVal < 0) {
           errors.push({ lineNumber, line, error: `Invalid price "${rest[idx]}"` })
           break
         }
+        // 0 = auto-pricing (null), >0 = fixed price
+        price = priceVal > 0 ? priceVal : null
         idx++
       }
       // Check for currency
@@ -187,7 +193,7 @@ function parseBulkSellOrders(
 
     orders.push({
       ticker: ticker.toUpperCase(),
-      location: location.toUpperCase(),
+      location, // Keep location case-sensitive
       limitMode,
       limitQuantity,
       price,

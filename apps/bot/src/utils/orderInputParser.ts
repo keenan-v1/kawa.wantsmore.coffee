@@ -53,23 +53,34 @@ export interface ParseOptions {
 /**
  * Parse a limit modifier token
  * Supports: reserve:X, r:X, max:X, m:X
+ * A value of 0 means "no limit" (sell all)
  */
 function parseLimitModifier(token: string): {
   mode: LimitMode
-  quantity: number
+  quantity: number | null
 } | null {
   const lowerToken = token.toLowerCase()
 
   // Check for reserve:X or r:X
   const reserveMatch = lowerToken.match(/^(?:reserve|r):(\d+)$/)
   if (reserveMatch) {
-    return { mode: 'reserve', quantity: parseInt(reserveMatch[1], 10) }
+    const qty = parseInt(reserveMatch[1], 10)
+    // 0 means no limit
+    if (qty === 0) {
+      return { mode: 'none', quantity: null }
+    }
+    return { mode: 'reserve', quantity: qty }
   }
 
   // Check for max:X or m:X
   const maxMatch = lowerToken.match(/^(?:max|m):(\d+)$/)
   if (maxMatch) {
-    return { mode: 'max_sell', quantity: parseInt(maxMatch[1], 10) }
+    const qty = parseInt(maxMatch[1], 10)
+    // 0 means no limit
+    if (qty === 0) {
+      return { mode: 'none', quantity: null }
+    }
+    return { mode: 'max_sell', quantity: qty }
   }
 
   return null
@@ -143,7 +154,9 @@ export async function parseOrderInput(
     }
   }
 
-  // Process remaining tokens
+  // Process remaining tokens - collect potential location tokens for multi-word resolution
+  const potentialLocationTokens: Array<{ index: number; token: string }> = []
+
   for (let i = 1; i < rawTokens.length; i++) {
     const token = rawTokens[i]
 
@@ -164,26 +177,44 @@ export async function parseOrderInput(
         // For buy orders, bare number is quantity
         result.quantity = numValue
       } else if (options.forSell) {
-        // For sell orders, bare number is reserve
-        result.limitMode = 'reserve'
-        result.limitQuantity = numValue
+        // For sell orders, bare number is reserve (0 = no limit)
+        if (numValue === 0) {
+          result.limitMode = 'none'
+          result.limitQuantity = null
+        } else {
+          result.limitMode = 'reserve'
+          result.limitQuantity = numValue
+        }
       }
       // For delete, ignore bare numbers
       continue
     }
 
-    // Try to resolve as location if we don't have one yet
-    if (!result.location) {
-      const location = await resolveLocation(token)
+    // Collect as potential location token
+    potentialLocationTokens.push({ index: i, token })
+  }
+
+  // Try to resolve location from potential tokens (supports multi-word locations)
+  if (potentialLocationTokens.length > 0) {
+    const tokens = potentialLocationTokens.map(t => t.token)
+
+    // Try progressively longer combinations starting from the first token
+    for (let len = tokens.length; len > 0; len--) {
+      const locationStr = tokens.slice(0, len).join(' ')
+      const location = await resolveLocation(locationStr)
       if (location) {
         result.location = location.naturalId
         result.resolvedLocation = location
-        continue
+        // Remaining tokens are unresolved
+        result.unresolvedTokens.push(...tokens.slice(len))
+        break
       }
     }
 
-    // Token couldn't be resolved
-    result.unresolvedTokens.push(token)
+    // If no location found, all are unresolved
+    if (!result.location) {
+      result.unresolvedTokens.push(...tokens)
+    }
   }
 
   return result
@@ -245,11 +276,12 @@ function isNumericToken(token: string): boolean {
  *
  * Supports the format: TICKER QTY TICKER QTY ... LOCATION
  * Example: "DW 1000 RAT 1000 OVE 500 BEN"
+ * Example with multi-word location: "DW 1000 RAT 500 Promitor Station"
  *
  * Algorithm:
  * 1. Tokenize input
- * 2. Try to detect TICKER NUMBER pairs
- * 3. Last non-number token is treated as location
+ * 2. Parse TICKER NUMBER pairs from the start
+ * 3. Remaining tokens are treated as location (supports multi-word locations)
  *
  * If the input doesn't match this pattern (e.g., comma-separated tickers
  * with shared quantity), returns isMultiFormat: false and callers should
@@ -290,36 +322,13 @@ export async function parseMultiOrderInput(input: string): Promise<ParsedMultiOr
   }
 
   // Try to parse as multi-format
-  // We'll accumulate TICKER NUMBER pairs, and the last non-number token is location
+  // Parse TICKER NUMBER pairs from the start, remaining tokens are location
   const pendingOrders: Array<{ ticker: string; quantity: number; commodityName: string }> = []
-  let lastNonNumberIndex = -1
-
-  // Find the last non-number token (potential location)
-  for (let i = rawTokens.length - 1; i >= 0; i--) {
-    if (!isNumericToken(rawTokens[i])) {
-      lastNonNumberIndex = i
-      break
-    }
-  }
 
   // Process tokens looking for TICKER NUMBER pairs
   let i = 0
   while (i < rawTokens.length) {
     const token = rawTokens[i]
-
-    // If this is the last non-number token, try as location
-    if (i === lastNonNumberIndex && i === rawTokens.length - 1) {
-      const location = await resolveLocation(token)
-      if (location) {
-        result.location = location.naturalId
-        result.resolvedLocation = location
-      } else {
-        // Maybe it's a commodity without quantity at the end - not multi-format
-        return { ...result, isMultiFormat: false }
-      }
-      i++
-      continue
-    }
 
     // Try to resolve as commodity
     const commodity = await resolveCommodity(token)
@@ -340,25 +349,42 @@ export async function parseMultiOrderInput(input: string): Promise<ParsedMultiOr
       }
     }
 
-    // Not a commodity, try as location (if we haven't found one yet)
-    if (!result.location) {
-      const location = await resolveLocation(token)
-      if (location) {
-        result.location = location.naturalId
-        result.resolvedLocation = location
-        i++
-        continue
-      }
-    }
-
-    // Unresolved token
-    result.unresolvedTokens.push(token)
-    i++
+    // Not a commodity - remaining tokens should be location
+    break
   }
 
   // Validate we found at least one order
   if (pendingOrders.length === 0) {
     return { ...result, isMultiFormat: false }
+  }
+
+  // Remaining tokens are the location (may be multi-word)
+  const locationTokens = rawTokens.slice(i)
+
+  if (locationTokens.length === 0) {
+    // No location provided - still valid multi-format, just no location
+    result.orders = pendingOrders
+    result.isMultiFormat = true
+    return result
+  }
+
+  // Try to resolve location - try full string first, then progressively shorter
+  // This handles "Promitor Station" as well as "BEN"
+  for (let len = locationTokens.length; len > 0; len--) {
+    const locationStr = locationTokens.slice(0, len).join(' ')
+    const location = await resolveLocation(locationStr)
+    if (location) {
+      result.location = location.naturalId
+      result.resolvedLocation = location
+      // Any remaining tokens after the location are unresolved
+      result.unresolvedTokens = locationTokens.slice(len)
+      break
+    }
+  }
+
+  // If we couldn't resolve any location, all location tokens are unresolved
+  if (!result.location) {
+    result.unresolvedTokens = locationTokens
   }
 
   // Success - this is multi-format

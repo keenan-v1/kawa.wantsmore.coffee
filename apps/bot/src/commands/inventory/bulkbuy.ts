@@ -133,13 +133,15 @@ function parseBulkBuyOrders(
     for (let idx = 0; idx < rest.length; idx++) {
       const token = rest[idx]
 
-      // Check for price (number)
+      // Check for price (number) - 0 means auto-pricing
       if (!isNaN(parseFloat(token))) {
-        price = parseFloat(token)
-        if (price <= 0) {
+        const priceVal = parseFloat(token)
+        if (priceVal < 0) {
           errors.push({ lineNumber, line, error: `Invalid price "${token}"` })
           break
         }
+        // 0 = auto-pricing (null), >0 = fixed price
+        price = priceVal > 0 ? priceVal : null
       }
       // Check for currency
       else if (isValidCurrency(token.toUpperCase())) {
@@ -157,7 +159,7 @@ function parseBulkBuyOrders(
 
     orders.push({
       ticker: ticker.toUpperCase(),
-      location: location.toUpperCase(),
+      location, // Keep location case-sensitive
       quantity,
       price,
       currency: currency ?? defaultCurrency,
