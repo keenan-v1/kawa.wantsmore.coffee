@@ -372,6 +372,9 @@ export class AdminDiscordController extends Controller {
         case 'announcePartner':
           config.announcePartner = value
           break
+        case 'commandPrefix':
+          config.commandPrefix = value
+          break
       }
     }
 
