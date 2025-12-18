@@ -691,7 +691,7 @@
                       size="small"
                       prepend-icon="mdi-plus"
                       :disabled="!discordSettings?.guildId"
-                      @click="openCreateChannelConfigDialog"
+                      @click="openCreateChannelConfigDialog()"
                     >
                       Add Channel
                     </v-btn>
