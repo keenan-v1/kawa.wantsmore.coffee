@@ -1,23 +1,5 @@
 <template>
   <v-app>
-    <!-- App Update Banner -->
-    <v-banner
-      v-if="showAppUpdateBanner"
-      color="info"
-      icon="mdi-update"
-      lines="one"
-      sticky
-      class="app-update-banner"
-    >
-      <template #text>
-        A new version of the app is available.
-        <a href="#" class="text-info-lighten-3" @click.prevent="refreshApp">Refresh to update</a>
-      </template>
-      <template #actions>
-        <v-btn variant="text" size="small" @click="dismissAppUpdateBanner">Dismiss</v-btn>
-      </template>
-    </v-banner>
-
     <v-app-bar v-if="isAuthenticated" color="primary" density="compact">
       <template #prepend>
         <img src="/navbar-logo.svg" alt="Kawakawa CX" class="navbar-logo ml-3" />
@@ -65,7 +47,7 @@
           </template>
           Account
         </v-tooltip>
-        <NotificationDropdown ref="notificationDropdown" />
+        <NotificationDropdown />
         <v-tooltip v-if="isAdmin" location="bottom">
           <template #activator="{ props }">
             <v-btn v-bind="props" to="/admin" icon size="small" class="mx-1">
@@ -94,6 +76,24 @@
     </v-app-bar>
 
     <v-main>
+      <!-- App Update Banner -->
+      <v-banner
+        v-if="showAppUpdateBanner"
+        color="info"
+        icon="mdi-update"
+        lines="one"
+        sticky
+        class="app-update-banner"
+      >
+        <template #text>
+          A new version of the app is available.
+          <a href="#" class="text-info-lighten-3" @click.prevent="refreshApp">Refresh to update</a>
+        </template>
+        <template #actions>
+          <v-btn variant="text" size="small" @click="dismissAppUpdateBanner">Dismiss</v-btn>
+        </template>
+      </v-banner>
+
       <router-view />
     </v-main>
 
@@ -120,7 +120,6 @@ const router = useRouter()
 const userStore = useUserStore()
 const isAuthenticated = ref(false)
 const pendingApprovalsCount = ref(0)
-const notificationDropdown = ref<InstanceType<typeof NotificationDropdown> | null>(null)
 
 // App update banner state
 const showAppUpdateBanner = ref(false)
@@ -203,7 +202,7 @@ const handleTokenRefreshed = async () => {
     userStore.setUser(user)
     // Refresh counts after token refresh
     fetchPendingApprovalsCount()
-    notificationDropdown.value?.loadUnreadCount()
+    syncService.refreshSyncState()
   } catch (error) {
     console.error('Failed to refresh user profile:', error)
   }
@@ -243,6 +242,8 @@ const dismissAppUpdateBanner = () => {
 }
 
 const refreshApp = () => {
+  // Clear the stored app version so the new version becomes the baseline
+  sessionStorage.removeItem('kawakawa:appVersion')
   window.location.reload()
 }
 
@@ -290,6 +291,23 @@ onUnmounted(() => {
 .navbar-logo {
   height: 32px;
   width: auto;
+}
+
+/* App update banner styling */
+.app-update-banner :deep(.v-banner__content) {
+  color: white;
+}
+
+.app-update-banner :deep(.v-banner__text) {
+  color: white !important;
+}
+
+.app-update-banner :deep(.v-banner__actions .v-btn) {
+  color: white !important;
+}
+
+.app-update-banner :deep(.v-icon) {
+  color: white !important;
 }
 </style>
 

@@ -26,7 +26,6 @@ import type {
   DiscordRegisterResponse,
   GlobalDefaultsResponse,
   UpdateGlobalDefaultsRequest,
-  SyncState,
   ChannelConfigMap,
   UpdateChannelConfigRequest,
 } from '@kawakawa/types'
@@ -2456,33 +2455,6 @@ const realApi = {
     return response.json()
   },
 
-  getSyncState: async (): Promise<SyncState> => {
-    const response = await fetchWithLogging('/api/notifications/unread-count', {
-      method: 'GET',
-      headers: getAuthHeaders(),
-    })
-
-    handleRefreshedToken(response)
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('jwt')
-        localStorage.removeItem('user')
-        window.location.href = '/login'
-        throw new Error('Unauthorized')
-      }
-      throw new Error(`Failed to get sync state: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-
-  // Legacy wrapper for backward compatibility
-  getUnreadNotificationCount: async (): Promise<{ count: number }> => {
-    const syncState = await realApi.getSyncState()
-    return { count: syncState.unreadCount }
-  },
-
   markNotificationAsRead: async (id: number): Promise<void> => {
     const response = await fetchWithLogging(`/api/notifications/${id}/read`, {
       method: 'PUT',
@@ -3879,13 +3851,9 @@ export const api = {
   notifications: {
     list: (limit?: number, offset?: number, unreadOnly?: boolean) =>
       realApi.getNotifications(limit, offset, unreadOnly),
-    getUnreadCount: () => realApi.getUnreadNotificationCount(),
     markAsRead: (id: number) => realApi.markNotificationAsRead(id),
     markAllAsRead: () => realApi.markAllNotificationsAsRead(),
     delete: (id: number) => realApi.deleteNotification(id),
-  },
-  sync: {
-    getSyncState: () => realApi.getSyncState(),
   },
   reservations: {
     list: (role?: 'owner' | 'counterparty' | 'all', status?: ReservationStatus) =>

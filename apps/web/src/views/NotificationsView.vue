@@ -218,11 +218,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useUrlState } from '../composables'
 import { api } from '../services/api'
 import type { Notification, NotificationType } from '../services/api'
 import { formatRelativeDate } from '../utils/dateFormat'
+import { syncService, SYNC_EVENTS } from '../services/syncService'
 import OrderDetailDialog from '../components/OrderDetailDialog.vue'
 
 interface NotificationGroup {
@@ -354,13 +355,10 @@ async function loadNotifications(append = false) {
   }
 }
 
-async function loadUnreadCount() {
-  try {
-    const result = await api.notifications.getUnreadCount()
-    unreadCount.value = result.count
-  } catch (error) {
-    console.error('Failed to load unread count:', error)
-  }
+// Handle unread count changes from syncService
+function handleUnreadCountChanged(event: Event) {
+  const customEvent = event as CustomEvent<{ count: number }>
+  unreadCount.value = customEvent.detail.count
 }
 
 function loadMore() {
@@ -538,7 +536,14 @@ function hasOrderLink(notification: Notification): boolean {
 
 onMounted(() => {
   loadNotifications()
-  loadUnreadCount()
+  // Get initial unread count from syncService
+  unreadCount.value = syncService.getUnreadCount()
+  // Listen for unread count changes
+  window.addEventListener(SYNC_EVENTS.UNREAD_COUNT_CHANGED, handleUnreadCountChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(SYNC_EVENTS.UNREAD_COUNT_CHANGED, handleUnreadCountChanged)
 })
 </script>
 

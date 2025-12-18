@@ -1,6 +1,9 @@
 # Build stage
 FROM node:20-slim AS builder
 
+# Build argument for version tracking (passed from CI/CD)
+ARG COMMIT_SHA=dev
+
 # Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 
@@ -29,6 +32,10 @@ RUN pnpm turbo run build --filter=@kawakawa/api...
 
 # Production stage
 FROM node:20-slim AS production
+
+# Re-declare build arg and set as environment variable
+ARG COMMIT_SHA=dev
+ENV COMMIT_SHA=${COMMIT_SHA}
 
 # Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate

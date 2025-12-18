@@ -7,13 +7,18 @@ import { commodityService } from './commodityService'
 // Polling interval (30 seconds)
 const POLL_INTERVAL = 30 * 1000
 
+// Storage key for initial app version (use sessionStorage so it resets per browser session)
+const APP_VERSION_KEY = 'kawakawa:appVersion'
+
 // Current sync state
 let currentSyncState: SyncState | null = null
 let pollIntervalId: ReturnType<typeof setInterval> | null = null
 let isPolling = false
 
-// Initial app version captured on first sync
-let initialAppVersion: string | null = null
+// Helper to get initial app version from sessionStorage (read fresh each time for easier testing)
+function getStoredAppVersion(): string | null {
+  return sessionStorage.getItem(APP_VERSION_KEY)
+}
 
 // Event names
 export const SYNC_EVENTS = {
@@ -25,7 +30,7 @@ export const SYNC_EVENTS = {
 // Fetch sync state from API
 async function fetchSyncState(): Promise<SyncState | null> {
   try {
-    const response = await fetch('/api/notifications/unread-count', {
+    const response = await fetch('/api/sync/state', {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('jwt')}`,
       },
@@ -63,19 +68,20 @@ async function processSyncState(newState: SyncState): Promise<void> {
     )
   }
 
-  // Capture initial app version on first sync
-  if (!initialAppVersion) {
-    initialAppVersion = newState.appVersion
-  }
+  // Get stored app version (read fresh from sessionStorage for easier testing)
+  const storedAppVersion = getStoredAppVersion()
 
-  // Check for app version changes - compare against initial version, not previous poll
-  // This detects deployments that happened after the page was loaded
-  if (newState.appVersion !== initialAppVersion) {
+  // Capture initial app version on first sync
+  if (!storedAppVersion) {
+    sessionStorage.setItem(APP_VERSION_KEY, newState.appVersion)
+  } else if (newState.appVersion !== storedAppVersion) {
+    // Check for app version changes - compare against stored version
+    // This detects deployments that happened after the page was loaded
     window.dispatchEvent(
       new CustomEvent(SYNC_EVENTS.APP_VERSION_CHANGED, {
         detail: {
           newVersion: newState.appVersion,
-          oldVersion: initialAppVersion,
+          oldVersion: storedAppVersion,
         },
       })
     )
@@ -177,10 +183,11 @@ export function getDataVersions(): DataVersions {
 
 // Check if app has been updated
 export function hasAppUpdate(): boolean {
+  const storedAppVersion = getStoredAppVersion()
   return !!(
     currentSyncState &&
-    initialAppVersion &&
-    currentSyncState.appVersion !== initialAppVersion
+    storedAppVersion &&
+    currentSyncState.appVersion !== storedAppVersion
   )
 }
 
@@ -189,8 +196,8 @@ export async function refreshSyncState(): Promise<SyncState | null> {
   const state = await fetchSyncState()
   if (state) {
     // Capture initial app version if not set
-    if (!initialAppVersion) {
-      initialAppVersion = state.appVersion
+    if (!getStoredAppVersion()) {
+      sessionStorage.setItem(APP_VERSION_KEY, state.appVersion)
     }
     currentSyncState = state
   }

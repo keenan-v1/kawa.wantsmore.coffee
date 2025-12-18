@@ -37,11 +37,7 @@ const httpLoggerOptions: PinoHttpOptions = {
   autoLogging: {
     ignore: req => {
       const url = req.url || ''
-      return (
-        url === '/health' ||
-        url.startsWith('/docs') ||
-        url.startsWith('/notifications/unread-count')
-      )
+      return url === '/health' || url.startsWith('/docs') || url.startsWith('/sync/state')
     },
   },
   // Redact sensitive headers

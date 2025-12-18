@@ -238,7 +238,7 @@ export function installErrorHandlers(): void {
 }
 
 // Endpoints to skip logging (high-frequency polling, etc.)
-const SKIP_LOGGING_ENDPOINTS = ['/api/notifications/unread-count']
+const SKIP_LOGGING_ENDPOINTS = ['/api/sync/state']
 
 /**
  * Check if an endpoint should skip logging

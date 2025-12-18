@@ -125,6 +125,7 @@ import { api } from '../services/api'
 import type { Notification, NotificationType } from '../services/api'
 import { formatRelativeDate } from '../utils/dateFormat'
 import { useUserStore } from '../stores/user'
+import { syncService, SYNC_EVENTS } from '../services/syncService'
 import OrderDetailDialog from './OrderDetailDialog.vue'
 
 interface NotificationGroup {
@@ -144,10 +145,6 @@ const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
 const previousUnreadCount = ref(0)
 const markingAllAsRead = ref(false)
-
-// Polling interval (30 seconds)
-const POLL_INTERVAL = 30000
-let pollIntervalId: ReturnType<typeof setInterval> | null = null
 
 // Order detail dialog
 const orderDetailDialog = ref(false)
@@ -212,13 +209,8 @@ const groupedNotifications = computed<NotificationGroup[]>(() => {
 async function loadNotifications() {
   loading.value = true
   try {
-    // Load recent notifications
-    const [notifs, countResult] = await Promise.all([
-      api.notifications.list(20, 0),
-      api.notifications.getUnreadCount(),
-    ])
-    notifications.value = notifs
-    unreadCount.value = countResult.count
+    // Load recent notifications (count comes from syncService)
+    notifications.value = await api.notifications.list(20, 0)
   } catch (error) {
     console.error('Failed to load notifications:', error)
   } finally {
@@ -226,22 +218,20 @@ async function loadNotifications() {
   }
 }
 
-async function loadUnreadCount() {
-  try {
-    const result = await api.notifications.getUnreadCount()
-    const newCount = result.count
+// Handle unread count changes from syncService
+function handleUnreadCountChanged(event: Event) {
+  const customEvent = event as CustomEvent<{ count: number; previousCount: number }>
+  const { count, previousCount } = customEvent.detail
 
-    // Check if we have new notifications
-    if (newCount > previousUnreadCount.value && previousUnreadCount.value !== 0) {
-      const newNotificationCount = newCount - previousUnreadCount.value
-      showBrowserNotification(newNotificationCount)
-    }
+  unreadCount.value = count
 
-    previousUnreadCount.value = newCount
-    unreadCount.value = newCount
-  } catch (error) {
-    console.error('Failed to load unread count:', error)
+  // Check if we have new notifications (show browser notification)
+  if (count > previousCount && previousCount !== 0) {
+    const newNotificationCount = count - previousCount
+    showBrowserNotification(newNotificationCount)
   }
+
+  previousUnreadCount.value = count
 }
 
 // Show browser notification for new notifications
@@ -270,23 +260,6 @@ function showBrowserNotification(count: number) {
     icon: '/logo.svg',
     tag: 'kawakawa-notifications', // Replaces previous notification
   })
-}
-
-// Start polling for new notifications
-function startPolling() {
-  if (pollIntervalId) return // Already polling
-
-  pollIntervalId = setInterval(() => {
-    loadUnreadCount()
-  }, POLL_INTERVAL)
-}
-
-// Stop polling
-function stopPolling() {
-  if (pollIntervalId) {
-    clearInterval(pollIntervalId)
-    pollIntervalId = null
-  }
 }
 
 async function markGroupAsRead(group: NotificationGroup) {
@@ -424,11 +397,6 @@ function getNotificationColor(type: NotificationType): string {
   }
 }
 
-// Listen for updates from other components
-const handleNotificationsUpdated = () => {
-  loadUnreadCount()
-}
-
 // Load notifications when menu opens
 watch(menuOpen, newValue => {
   if (newValue) {
@@ -437,19 +405,15 @@ watch(menuOpen, newValue => {
 })
 
 onMounted(() => {
-  loadUnreadCount()
-  startPolling()
-  window.addEventListener('notifications-updated', handleNotificationsUpdated)
+  // Get initial unread count from syncService
+  unreadCount.value = syncService.getUnreadCount()
+
+  // Listen for unread count changes from syncService
+  window.addEventListener(SYNC_EVENTS.UNREAD_COUNT_CHANGED, handleUnreadCountChanged)
 })
 
 onUnmounted(() => {
-  stopPolling()
-  window.removeEventListener('notifications-updated', handleNotificationsUpdated)
-})
-
-// Expose for parent component
-defineExpose({
-  loadUnreadCount,
+  window.removeEventListener(SYNC_EVENTS.UNREAD_COUNT_CHANGED, handleUnreadCountChanged)
 })
 </script>
 
