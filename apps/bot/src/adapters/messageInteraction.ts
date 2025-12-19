@@ -6,14 +6,16 @@
  * without modification.
  */
 
-import type {
-  Message,
-  MessageReplyOptions,
-  User,
-  Guild,
-  GuildMember,
-  Client,
-  TextBasedChannel,
+import {
+  MessageFlags,
+  type Message,
+  type MessageReplyOptions,
+  type User,
+  type Guild,
+  type GuildMember,
+  type Client,
+  type TextBasedChannel,
+  type DMChannel,
 } from 'discord.js'
 
 /**
@@ -23,6 +25,8 @@ export class MessageInteractionAdapter {
   private _replied = false
   private _deferred = false
   private _lastReply: Message | null = null
+  private _dmChannel: DMChannel | null = null
+  private _usingDm = false
 
   constructor(
     private message: Message,
@@ -86,7 +90,8 @@ export class MessageInteractionAdapter {
   options = {
     getString: (name: string, required?: boolean): string | null => {
       const value = this.parsedOptions.get(name)
-      if (required && value === null) {
+      // Map.get() returns undefined if key doesn't exist, so check both
+      if (required && (value === null || value === undefined)) {
         throw new Error(`Required option "${name}" not provided`)
       }
       return typeof value === 'string' ? value : null
@@ -94,7 +99,7 @@ export class MessageInteractionAdapter {
 
     getInteger: (name: string, required?: boolean): number | null => {
       const value = this.parsedOptions.get(name)
-      if (required && value === null) {
+      if (required && (value === null || value === undefined)) {
         throw new Error(`Required option "${name}" not provided`)
       }
       if (typeof value === 'number' && Number.isInteger(value)) {
@@ -105,7 +110,7 @@ export class MessageInteractionAdapter {
 
     getNumber: (name: string, required?: boolean): number | null => {
       const value = this.parsedOptions.get(name)
-      if (required && value === null) {
+      if (required && (value === null || value === undefined)) {
         throw new Error(`Required option "${name}" not provided`)
       }
       return typeof value === 'number' ? value : null
@@ -113,7 +118,7 @@ export class MessageInteractionAdapter {
 
     getBoolean: (name: string, required?: boolean): boolean | null => {
       const value = this.parsedOptions.get(name)
-      if (required && value === null) {
+      if (required && (value === null || value === undefined)) {
         throw new Error(`Required option "${name}" not provided`)
       }
       return typeof value === 'boolean' ? value : null
@@ -122,23 +127,53 @@ export class MessageInteractionAdapter {
 
   /**
    * Reply to the message.
-   * Note: Ephemeral flag is ignored for message-based commands since
-   * all replies are visible in the channel.
+   * If ephemeral flag is set, sends a DM instead of replying in the channel.
    */
   async reply(
-    options: string | (MessageReplyOptions & { flags?: number })
+    options: string | (MessageReplyOptions & { flags?: number; ephemeral?: boolean })
   ): Promise<Message | void> {
     this._replied = true
 
     // Convert string to options object
-    const replyOptions: MessageReplyOptions =
-      typeof options === 'string' ? { content: options } : options
+    const replyOptions: MessageReplyOptions & { flags?: number; ephemeral?: boolean } =
+      typeof options === 'string' ? { content: options } : { ...options }
 
-    // Remove ephemeral flag if present (not supported for regular messages)
-    if ('flags' in replyOptions) {
-      delete (replyOptions as { flags?: unknown }).flags
+    // Check if ephemeral is requested (via flag or boolean)
+    const isEphemeral =
+      replyOptions.ephemeral === true ||
+      (typeof replyOptions.flags === 'number' &&
+        (replyOptions.flags & MessageFlags.Ephemeral) === MessageFlags.Ephemeral)
+
+    // Remove ephemeral-related fields (not supported for regular messages)
+    delete replyOptions.flags
+    delete replyOptions.ephemeral
+
+    // If ephemeral requested and we're not already in a DM, send via DM
+    if (isEphemeral && !this.message.channel.isDMBased()) {
+      try {
+        // Create or get DM channel
+        this._dmChannel = await this.message.author.createDM()
+        this._usingDm = true
+
+        // Send the actual response via DM
+        this._lastReply = await this._dmChannel.send(replyOptions)
+
+        // Post a brief notice in the original channel
+        await this.message.reply('📬 Check your DMs!')
+
+        return this._lastReply
+      } catch {
+        // If DM fails (user has DMs disabled), fall back to channel reply
+        this._usingDm = false
+        this._lastReply = await this.message.reply({
+          ...replyOptions,
+          content: `⚠️ *I couldn't DM you. Please enable DMs or use the slash command for private responses.*\n\n${replyOptions.content || ''}`,
+        })
+        return this._lastReply
+      }
     }
 
+    // Regular channel reply
     this._lastReply = await this.message.reply(replyOptions)
     return this._lastReply
   }
@@ -157,14 +192,20 @@ export class MessageInteractionAdapter {
 
   /**
    * Send a follow-up message.
+   * If we're using DMs for this interaction, follow-ups also go to the DM.
    */
   async followUp(options: string | MessageReplyOptions): Promise<Message> {
     const messageOptions: MessageReplyOptions =
-      typeof options === 'string' ? { content: options } : options
+      typeof options === 'string' ? { content: options } : { ...options }
 
     // Remove ephemeral flag if present
     if ('flags' in messageOptions) {
       delete (messageOptions as { flags?: unknown }).flags
+    }
+
+    // If we're in DM mode, send follow-up to DM
+    if (this._usingDm && this._dmChannel) {
+      return this._dmChannel.send(messageOptions)
     }
 
     // Use send if available, otherwise reply to the original message

@@ -9,12 +9,17 @@ function createMockMessage(overrides: Record<string, unknown> = {}): Message {
     edit: vi.fn().mockResolvedValue({}),
   })
 
+  const mockDmChannel = {
+    send: vi.fn().mockResolvedValue({}),
+  }
+
   return {
     author: {
       id: 'user123',
       username: 'testuser',
       bot: false,
-    } as User,
+      createDM: vi.fn().mockResolvedValue(mockDmChannel),
+    } as unknown as User,
     channelId: 'channel123',
     guildId: 'guild123',
     guild: {
@@ -30,6 +35,7 @@ function createMockMessage(overrides: Record<string, unknown> = {}): Message {
     channel: {
       send: vi.fn().mockResolvedValue({}),
       sendTyping: vi.fn().mockResolvedValue(undefined),
+      isDMBased: () => false,
     } as unknown as TextBasedChannel,
     reply: mockReply,
     ...overrides,
@@ -137,13 +143,13 @@ describe('MessageInteractionAdapter', () => {
       expect(adapter.options.getString('input')).toBeNull()
     })
 
-    it('getString returns null when required but key not in map', () => {
-      // Note: The adapter throws only when value is explicitly null in the map
-      // If the key doesn't exist, it returns null (matching Discord.js behavior for optional parsing)
+    it('getString throws when required and key not in map', () => {
       const message = createMockMessage()
       const adapter = new MessageInteractionAdapter(message, 'buy', new Map())
 
-      expect(adapter.options.getString('input', true)).toBeNull()
+      expect(() => adapter.options.getString('input', true)).toThrow(
+        'Required option "input" not provided'
+      )
     })
 
     it('getString throws when required and value is null', () => {
@@ -187,11 +193,13 @@ describe('MessageInteractionAdapter', () => {
       expect(adapter.options.getInteger('count')).toBeNull()
     })
 
-    it('getInteger returns null when required but key not in map', () => {
+    it('getInteger throws when required and key not in map', () => {
       const message = createMockMessage()
       const adapter = new MessageInteractionAdapter(message, 'buy', new Map())
 
-      expect(adapter.options.getInteger('count', true)).toBeNull()
+      expect(() => adapter.options.getInteger('count', true)).toThrow(
+        'Required option "count" not provided'
+      )
     })
 
     it('getInteger throws when required and value is null', () => {
@@ -219,11 +227,13 @@ describe('MessageInteractionAdapter', () => {
       expect(adapter.options.getNumber('price')).toBeNull()
     })
 
-    it('getNumber returns null when required but key not in map', () => {
+    it('getNumber throws when required and key not in map', () => {
       const message = createMockMessage()
       const adapter = new MessageInteractionAdapter(message, 'buy', new Map())
 
-      expect(adapter.options.getNumber('price', true)).toBeNull()
+      expect(() => adapter.options.getNumber('price', true)).toThrow(
+        'Required option "price" not provided'
+      )
     })
 
     it('getNumber throws when required and value is null', () => {
@@ -251,11 +261,13 @@ describe('MessageInteractionAdapter', () => {
       expect(adapter.options.getBoolean('public')).toBeNull()
     })
 
-    it('getBoolean returns null when required but key not in map', () => {
+    it('getBoolean throws when required and key not in map', () => {
       const message = createMockMessage()
       const adapter = new MessageInteractionAdapter(message, 'query', new Map())
 
-      expect(adapter.options.getBoolean('public', true)).toBeNull()
+      expect(() => adapter.options.getBoolean('public', true)).toThrow(
+        'Required option "public" not provided'
+      )
     })
 
     it('getBoolean throws when required and value is null', () => {
@@ -290,12 +302,39 @@ describe('MessageInteractionAdapter', () => {
       expect(adapter.replied).toBe(true)
     })
 
-    it('strips ephemeral flag from options', async () => {
-      const message = createMockMessage()
+    it('sends ephemeral reply via DM when in guild channel', async () => {
+      const mockDmSend = vi.fn().mockResolvedValue({})
+      const message = createMockMessage({
+        author: {
+          id: 'user123',
+          username: 'testuser',
+          bot: false,
+          createDM: vi.fn().mockResolvedValue({ send: mockDmSend }),
+        },
+      })
       const adapter = new MessageInteractionAdapter(message, 'help', new Map())
 
       await adapter.reply({ content: 'Hello!', flags: 64 } as never) // 64 is ephemeral flag
 
+      // Should send DM with content
+      expect(mockDmSend).toHaveBeenCalledWith({ content: 'Hello!' })
+      // Should post notice in channel
+      expect(message.reply).toHaveBeenCalledWith('📬 Check your DMs!')
+    })
+
+    it('sends directly in channel when already in DM', async () => {
+      const message = createMockMessage({
+        channel: {
+          send: vi.fn().mockResolvedValue({}),
+          sendTyping: vi.fn().mockResolvedValue(undefined),
+          isDMBased: () => true, // Already in DM
+        },
+      })
+      const adapter = new MessageInteractionAdapter(message, 'help', new Map())
+
+      await adapter.reply({ content: 'Hello!', flags: 64 } as never) // 64 is ephemeral flag
+
+      // Should reply in the DM channel directly (no need to create new DM)
       expect(message.reply).toHaveBeenCalledWith({ content: 'Hello!' })
     })
   })

@@ -315,5 +315,40 @@ describe('messageCommands', () => {
 
       expect(helpCommand.execute).not.toHaveBeenCalled()
     })
+
+    it('ignores commands with prefixEnabled: false', async () => {
+      mockGetChannelConfig.mockResolvedValue({
+        commandPrefix: '!',
+      })
+
+      const message = createMockMessage({
+        content: '!password',
+      })
+      const passwordCommand = createMockCommand('password')
+      passwordCommand.prefixEnabled = false
+      const client = createMockClient(new Map([['password', passwordCommand]]))
+
+      await handleMessageCommand(message, client)
+
+      // Command should not be executed because prefixEnabled is false
+      expect(passwordCommand.execute).not.toHaveBeenCalled()
+    })
+
+    it('executes commands without prefixEnabled set (defaults to enabled)', async () => {
+      mockGetChannelConfig.mockResolvedValue({
+        commandPrefix: '!',
+      })
+
+      const message = createMockMessage({
+        content: '!query',
+      })
+      const queryCommand = createMockCommand('query')
+      // prefixEnabled not set, defaults to enabled
+      const client = createMockClient(new Map([['query', queryCommand]]))
+
+      await handleMessageCommand(message, client)
+
+      expect(queryCommand.execute).toHaveBeenCalled()
+    })
   })
 })

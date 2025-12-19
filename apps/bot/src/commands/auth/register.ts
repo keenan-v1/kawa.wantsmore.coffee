@@ -26,6 +26,9 @@ export const register: Command = {
         .setMaxLength(100)
     ) as SlashCommandBuilder,
 
+  // Disabled for prefix commands - requires named options and contains sensitive account info
+  prefixEnabled: false,
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const discordId = interaction.user.id
     const discordUsername = interaction.user.username

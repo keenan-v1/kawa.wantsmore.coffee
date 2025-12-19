@@ -20,6 +20,9 @@ export interface Command {
   }
   execute(interaction: ChatInputCommandInteraction): Promise<void>
   autocomplete?(interaction: AutocompleteInteraction): Promise<void>
+  /** Whether this command can be invoked via prefix (text) commands. Defaults to true.
+   * Set to false for commands that require ephemeral responses or have sensitive data. */
+  prefixEnabled?: boolean
 }
 
 export interface BotClient extends Client {

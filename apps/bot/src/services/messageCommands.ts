@@ -137,6 +137,13 @@ export async function handleMessageCommand(message: Message, client: BotClient):
     return
   }
 
+  // Check if command allows prefix invocation
+  if (command.prefixEnabled === false) {
+    // Command explicitly disabled for prefix - ignore silently
+    // User must use slash command for this
+    return
+  }
+
   // Create adapter to make message look like an interaction
   const adapter = new MessageInteractionAdapter(message, commandName, options)
 

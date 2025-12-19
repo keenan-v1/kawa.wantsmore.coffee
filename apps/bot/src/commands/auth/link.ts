@@ -17,6 +17,9 @@ export const link: Command = {
       option.setName('password').setDescription('Your Kawakawa password').setRequired(true)
     ) as SlashCommandBuilder,
 
+  // Disabled for prefix commands - requires password input which should never be visible
+  prefixEnabled: false,
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const discordId = interaction.user.id
     const discordUsername = interaction.user.username
