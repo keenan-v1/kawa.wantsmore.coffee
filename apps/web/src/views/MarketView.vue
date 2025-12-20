@@ -26,20 +26,10 @@
     <v-card class="mb-4">
       <v-card-text class="py-2">
         <!-- Active Filters Display - always visible when filters active -->
-        <div v-if="hasActiveFilters || isXitActive" class="d-flex flex-wrap ga-2 mb-3">
-          <!-- XIT indicator chip -->
+        <div v-if="hasActiveFilters || hasSearchChips" class="d-flex flex-wrap ga-2 mb-3">
+          <!-- Note: XIT and search-based filters are shown in the TokenSearchInput above -->
           <v-chip
-            v-if="isXitActive"
-            closable
-            size="small"
-            color="purple"
-            prepend-icon="mdi-cube-scan"
-            @click:close="clearFiltersWithXit"
-          >
-            XIT{{ xitName ? `: ${xitName}` : '' }}
-          </v-chip>
-          <v-chip
-            v-if="filters.itemType"
+            v-if="filters.itemType && !hasSearchChips"
             closable
             size="small"
             :color="filters.itemType === 'sell' ? 'success' : 'warning'"
@@ -47,16 +37,19 @@
           >
             {{ filters.itemType === 'sell' ? 'Sell' : 'Buy' }}
           </v-chip>
-          <v-chip
-            v-for="ticker in filters.commodity"
-            :key="`commodity-${ticker}`"
-            closable
-            size="small"
-            color="primary"
-            @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
-          >
-            {{ getCommodityDisplay(ticker) }}
-          </v-chip>
+          <!-- Commodity chips (only show if not from search input) -->
+          <template v-if="!hasSearchChips">
+            <v-chip
+              v-for="ticker in filters.commodity"
+              :key="`commodity-${ticker}`"
+              closable
+              size="small"
+              color="primary"
+              @click:close="filters.commodity = filters.commodity.filter(t => t !== ticker)"
+            >
+              {{ getCommodityDisplay(ticker) }}
+            </v-chip>
+          </template>
           <v-chip
             v-if="filters.category"
             closable
@@ -66,18 +59,22 @@
           >
             Category: {{ localizeMaterialCategory(filters.category as CommodityCategory) }}
           </v-chip>
+          <!-- Location chips (only show if not from search input) -->
+          <template v-if="!hasSearchChips">
+            <v-chip
+              v-for="locId in filters.location"
+              :key="`location-${locId}`"
+              closable
+              size="small"
+              color="info"
+              @click:close="filters.location = filters.location.filter(l => l !== locId)"
+            >
+              {{ getLocationDisplay(locId) }}
+            </v-chip>
+          </template>
+          <!-- User chip (only show if not from search input) -->
           <v-chip
-            v-for="locId in filters.location"
-            :key="`location-${locId}`"
-            closable
-            size="small"
-            color="info"
-            @click:close="filters.location = filters.location.filter(l => l !== locId)"
-          >
-            {{ getLocationDisplay(locId) }}
-          </v-chip>
-          <v-chip
-            v-if="filters.userName"
+            v-if="filters.userName && !hasSearchChips"
             closable
             size="small"
             color="default"
@@ -208,7 +205,7 @@
               {{ filtersExpanded ? 'Hide Filters' : 'Filters' }}
             </v-btn>
             <v-btn
-              v-if="hasActiveFilters || isXitActive"
+              v-if="hasActiveFilters || hasSearchChips"
               variant="text"
               color="primary"
               size="small"
@@ -245,15 +242,16 @@
     <!-- Market Listings Table -->
     <v-card>
       <v-card-title class="d-flex align-center">
-        <v-text-field
-          v-model="search"
-          prepend-icon="mdi-magnify"
-          label="Search market..."
-          single-line
-          hide-details
-          clearable
-          density="compact"
-          style="max-width: 400px"
+        <kbd class="search-shortcut mr-2" title="Press / to focus search">/</kbd>
+        <TokenSearchInput
+          ref="tokenSearchRef"
+          :available-user-names="userOptions"
+          :get-commodity-display="getCommodityDisplay"
+          :get-location-display="getLocationDisplay"
+          :get-commodity-name="getCommodityName"
+          placeholder="Search: COF, BEN, Buy, Sell..."
+          class="flex-grow-1"
+          @update:chips="onChipsUpdate"
         />
         <v-menu location="bottom" :close-on-content-click="false" max-width="360">
           <template #activator="{ props }">
@@ -270,8 +268,8 @@
             <v-card-title class="text-subtitle-1 pb-1">Search Syntax</v-card-title>
             <v-card-text class="pt-0">
               <p class="text-body-2 mb-2">
-                Type commodity tickers, location IDs, or usernames to filter. Multiple tokens are
-                combined with AND logic.
+                Type and press space to create filter chips. Multiple chips are combined with AND
+                logic.
               </p>
               <v-table density="compact" class="text-body-2">
                 <tbody>
@@ -284,8 +282,8 @@
                     <td>Filter by location</td>
                   </tr>
                   <tr>
-                    <td class="font-weight-medium">COF BEN</td>
-                    <td>COF at Benten Station</td>
+                    <td class="font-weight-medium">Buy / Sell</td>
+                    <td>Filter by order type</td>
                   </tr>
                   <tr>
                     <td class="font-weight-medium">commodity:RAT</td>
@@ -319,6 +317,7 @@
         :loading="loading"
         :items-per-page="25"
         :row-props="getRowProps"
+        :item-value="item => `${item.itemType}-${item.id}`"
         :class="['elevation-0', 'clickable-rows', { 'icon-rows': hasIcons }]"
         @click:row="onRowClick"
       >
@@ -507,7 +506,7 @@
             <v-icon size="64" color="grey-lighten-1">mdi-storefront-outline</v-icon>
             <p class="text-h6 mt-4">No orders available</p>
             <p class="text-body-2 text-medium-emphasis">
-              <template v-if="hasActiveFilters || isXitActive">
+              <template v-if="hasActiveFilters || hasSearchChips">
                 No orders match your filters.
                 <a href="#" @click.prevent="clearFiltersWithXit">Clear filters</a>
               </template>
@@ -675,7 +674,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
 import type { XitMaterials } from '@kawakawa/types/xit'
 import { api, type EffectivePrice } from '../services/api'
@@ -687,10 +686,8 @@ import {
   useFormatters,
   useOrderDeepLink,
   useUrlFilters,
-  useUrlState,
   useDialogBehavior,
   useMarketData,
-  useQueryParser,
   getDisplayPrice,
   type MarketItem,
   type MarketItemType,
@@ -705,6 +702,7 @@ import FioAgeChip from '../components/FioAgeChip.vue'
 import OrderTypeChip from '../components/OrderTypeChip.vue'
 import PricingModeChip from '../components/PricingModeChip.vue'
 import CommodityDisplay from '../components/CommodityDisplay.vue'
+import TokenSearchInput, { type SearchChip } from '../components/TokenSearchInput.vue'
 import { localizeMaterialCategory } from '../utils/materials'
 import { locationService } from '../services/locationService'
 import type { CommodityCategory } from '@kawakawa/types'
@@ -789,12 +787,9 @@ const headers = [
   { title: '', key: 'actions', sortable: false, width: 50 },
 ]
 
-// Search with URL deep linking
-const search = useUrlState<string | null>({
-  param: 'search',
-  defaultValue: null,
-  debounce: 150,
-})
+// Token search input ref and state
+const tokenSearchRef = ref<InstanceType<typeof TokenSearchInput> | null>(null)
+const searchChips = ref<SearchChip[]>([])
 
 const orderDialog = ref(false)
 const orderDialogTab = ref<'buy' | 'sell'>('buy')
@@ -975,62 +970,63 @@ const xitQuantities = ref<XitMaterials | null>(null)
 const xitName = ref<string | undefined>(undefined)
 const isXitActive = computed(() => xitQuantities.value !== null)
 
-// Track whether filters were set by the parser (vs manually)
-const parserControlledFilters = ref({
-  commodity: false,
-  location: false,
-  userName: false,
-  itemType: false,
-})
+// Whether the TokenSearchInput has any chips
+const hasSearchChips = computed(() => searchChips.value.length > 0)
 
-// Query parser for smart search (token parsing + XIT JSON detection)
-const { parseResult } = useQueryParser({
-  search,
-  availableUserNames: userOptions,
-  onFiltersChange: result => {
-    // Update commodity filter - replace with parsed results
-    if (result.commodities.length > 0 || parserControlledFilters.value.commodity) {
-      filters.value.commodity = result.commodities
-      parserControlledFilters.value.commodity = result.commodities.length > 0
+// Handle chip updates from TokenSearchInput
+const onChipsUpdate = (chips: SearchChip[]) => {
+  searchChips.value = chips
+
+  // Extract filter values from chips
+  const commodities: string[] = []
+  const locations: string[] = []
+  let userName: string | null = null
+  let itemType: MarketItemType | null = null
+  let xitData: { materials: Record<string, number>; name?: string } | null = null
+
+  for (const chip of chips) {
+    switch (chip.type) {
+      case 'commodity':
+        commodities.push(chip.value)
+        break
+      case 'location':
+        locations.push(chip.value)
+        break
+      case 'user':
+        userName = chip.value
+        break
+      case 'itemType':
+        itemType = chip.value as MarketItemType
+        break
+      case 'xit':
+        if (chip.xitData) {
+          xitData = chip.xitData
+          // Add XIT commodities to filter
+          commodities.push(...Object.keys(chip.xitData.materials))
+          // XIT always forces sell-only
+          itemType = 'sell'
+        }
+        break
     }
+  }
 
-    // Update location filter - replace with parsed results
-    if (result.locations.length > 0 || parserControlledFilters.value.location) {
-      filters.value.location = result.locations
-      parserControlledFilters.value.location = result.locations.length > 0
-    }
+  // Update filters
+  filters.value.commodity = commodities
+  filters.value.location = locations
+  filters.value.userName = userName
+  filters.value.itemType = itemType
 
-    // Update userName filter - replace with parsed result
-    if (result.userNames.length > 0 || parserControlledFilters.value.userName) {
-      filters.value.userName = result.userNames[0] ?? null
-      parserControlledFilters.value.userName = result.userNames.length > 0
-    }
-
-    // Update itemType filter - only when XIT forces it
-    if (result.forcedItemType || parserControlledFilters.value.itemType) {
-      filters.value.itemType = result.forcedItemType
-      parserControlledFilters.value.itemType = result.forcedItemType !== null
-    }
-
-    // Store XIT quantities for highlighting
-    xitQuantities.value = result.xitQuantities
-    xitName.value = result.xitName
-  },
-})
+  // Update XIT state
+  xitQuantities.value = xitData?.materials ?? null
+  xitName.value = xitData?.name
+}
 
 // Clear XIT state when filters are cleared
 const clearFiltersWithXit = () => {
   clearFilters()
-  search.value = null
+  tokenSearchRef.value?.clear()
   xitQuantities.value = null
   xitName.value = undefined
-  // Reset parser control tracking
-  parserControlledFilters.value = {
-    commodity: false,
-    location: false,
-    userName: false,
-    itemType: false,
-  }
 }
 
 const visibilityOptions = [
@@ -1083,23 +1079,8 @@ const filteredItems = computed(() => {
     result = result.filter(l => filters.value.location.includes(l.locationId))
   }
 
-  // Apply text search for unresolved tokens or when nothing was parsed
-  // Only searches commodity ticker and name (not location/user/category)
-  const unresolved = parseResult.value.unresolved
-  if (search.value && (!parseResult.value.parsed || unresolved.length > 0)) {
-    // If we have unresolved tokens, search for those; otherwise search for the whole input
-    const searchTerms = unresolved.length > 0 ? unresolved : [search.value]
-    result = result.filter(item =>
-      searchTerms.some(term => {
-        const termLower = term.toLowerCase()
-        const commodityName = getCommodityName(item.commodityTicker)?.toLowerCase() ?? ''
-        return (
-          item.commodityTicker.toLowerCase().includes(termLower) ||
-          commodityName.includes(termLower)
-        )
-      })
-    )
-  }
+  // Note: Free text filtering removed - autocomplete shows suggestions,
+  // filtering only happens when user selects a chip
 
   return result
 })
@@ -1267,12 +1248,48 @@ const confirmDelete = async () => {
   }
 }
 
+// Keyboard shortcut: / to focus search
+const handleGlobalKeydown = (event: globalThis.KeyboardEvent) => {
+  // Ignore if already in an input/textarea/contenteditable
+  const target = event.target as globalThis.HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return
+  }
+
+  if (event.key === '/') {
+    event.preventDefault()
+    tokenSearchRef.value?.focus()
+  }
+}
+
 onMounted(() => {
   loadMarketItems()
+  document.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
 <style scoped>
+.search-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  border-radius: 4px;
+  cursor: default;
+}
+
 .filter-link {
   color: inherit;
   text-decoration: none;

@@ -48,6 +48,7 @@ export default tseslint.config(
         clearInterval: 'readonly',
         // DOM types
         HTMLInputElement: 'readonly',
+        HTMLElement: 'readonly',
         File: 'readonly',
         Event: 'readonly',
         DragEvent: 'readonly',
