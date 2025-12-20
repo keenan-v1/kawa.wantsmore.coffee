@@ -103,6 +103,77 @@ async function parseToken(token: string): Promise<{
   return { type: null }
 }
 
+/**
+ * Parse XIT origin string to find a matching location.
+ * Strips common suffixes like " Warehouse" and matches against known locations.
+ */
+async function parseXitOrigin(origin: string): Promise<{
+  naturalId: string
+  name: string
+  type: string
+} | null> {
+  if (!origin) return null
+
+  const allLocations = await db.query.fioLocations.findMany()
+
+  // Try exact match first
+  const exactMatch = allLocations.find(
+    (l: { name: string }) => l.name.toLowerCase() === origin.toLowerCase()
+  )
+  if (exactMatch) {
+    return { naturalId: exactMatch.naturalId, name: exactMatch.name, type: exactMatch.type }
+  }
+
+  // Strip common suffixes and try again
+  const suffixes = [' Warehouse', ' Storage', ' Base']
+  for (const suffix of suffixes) {
+    if (origin.toLowerCase().endsWith(suffix.toLowerCase())) {
+      const stripped = origin.slice(0, -suffix.length)
+      const match = allLocations.find(
+        (l: { name: string }) => l.name.toLowerCase() === stripped.toLowerCase()
+      )
+      if (match) {
+        return { naturalId: match.naturalId, name: match.name, type: match.type }
+      }
+    }
+  }
+
+  // Try partial match (location name is prefix of origin)
+  const partialMatch = allLocations.find((l: { name: string }) =>
+    origin.toLowerCase().startsWith(l.name.toLowerCase())
+  )
+  if (partialMatch) {
+    return { naturalId: partialMatch.naturalId, name: partialMatch.name, type: partialMatch.type }
+  }
+
+  return null
+}
+
+/**
+ * Extract origin location from XIT JSON actions array.
+ * Returns the first valid origin found.
+ */
+async function extractXitOrigin(
+  jsonString: string
+): Promise<{ naturalId: string; name: string; type: string } | null> {
+  try {
+    const parsed = JSON.parse(jsonString)
+    if (parsed.actions && Array.isArray(parsed.actions)) {
+      for (const action of parsed.actions) {
+        if (action.origin && typeof action.origin === 'string') {
+          const location = await parseXitOrigin(action.origin)
+          if (location) {
+            return location
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore JSON parse errors
+  }
+  return null
+}
+
 export const query: Command = {
   data: new SlashCommandBuilder()
     .setName('query')
@@ -152,6 +223,7 @@ export const query: Command = {
     let xitQuantities: XitMaterials | undefined
     let xitName: string | undefined
     let xitCommodities: string[] = []
+    let xitOriginLocation: { naturalId: string; name: string; type: string } | null = null
 
     if (queryInput?.trim().startsWith('{')) {
       const xitResult = parseXitJson(queryInput)
@@ -161,6 +233,8 @@ export const query: Command = {
         xitCommodities = Object.keys(xitResult.materials)
         // Force sell orders when using XIT (XIT is always a buying context)
         orderType = 'sell'
+        // Extract origin location from actions
+        xitOriginLocation = await extractXitOrigin(queryInput)
       }
     }
     const visibilityOption = interaction.options.getString('visibility') as
@@ -200,13 +274,17 @@ export const query: Command = {
     const resolvedUserIds: number[] = []
     const resolvedDisplayNames: string[] = []
 
-    // If XIT JSON was parsed, resolve XIT commodities instead of normal tokens
+    // If XIT JSON was parsed, resolve XIT commodities and origin location
     if (xitCommodities.length > 0) {
       for (const ticker of xitCommodities) {
         const commodity = await resolveCommodity(ticker)
         if (commodity) {
           resolvedCommodities.push(commodity)
         }
+      }
+      // Add origin location from XIT actions if found
+      if (xitOriginLocation) {
+        resolvedLocations.push(xitOriginLocation)
       }
     } else if (queryInput) {
       // Normal token parsing
