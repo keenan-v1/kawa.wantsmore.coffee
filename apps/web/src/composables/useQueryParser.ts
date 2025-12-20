@@ -3,6 +3,8 @@
  *
  * Parses search input similar to the bot's /query command:
  * - Detects XIT ACT JSON format and extracts material requirements
+ * - XIT JSON is treated as a token, allowing additional tokens after it
+ *   (e.g., "{...json...} BEN" filters XIT commodities at BEN location)
  * - Supports token prefixes: commodity:, location:, user:
  * - Auto-resolves bare tokens (tries commodity → location → user)
  */
@@ -64,6 +66,59 @@ function createEmptyResult(): QueryParseResult {
     unresolved: [],
     parsed: false,
   }
+}
+
+/**
+ * Extract a JSON object from the start of a string.
+ * Returns the JSON string and the remainder, or null if not valid JSON structure.
+ */
+function extractJsonToken(input: string): { json: string; remainder: string } | null {
+  if (!input.startsWith('{')) {
+    return null
+  }
+
+  let depth = 0
+  let inString = false
+  let escapeNext = false
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) {
+      continue
+    }
+
+    if (char === '{') {
+      depth++
+    } else if (char === '}') {
+      depth--
+      if (depth === 0) {
+        // Found the end of the JSON object
+        return {
+          json: input.slice(0, i + 1),
+          remainder: input.slice(i + 1).trim(),
+        }
+      }
+    }
+  }
+
+  // Unbalanced braces - return the whole thing as JSON attempt
+  return { json: input, remainder: '' }
 }
 
 /**
@@ -143,26 +198,29 @@ export function useQueryParser(options: UseQueryParserOptions): UseQueryParserRe
 
     const trimmed = input.trim()
 
-    // Check for XIT JSON first
+    let xitQuantities: XitMaterials | null = null
+    let xitName: string | undefined = undefined
+    let isXitActive = false
+    let xitCommodities: string[] = []
+    let remainingInput = trimmed
+
+    // Check for XIT JSON first - extract it as a token and continue parsing the rest
     if (trimmed.startsWith('{')) {
-      const xitResult = parseXitJson(trimmed)
-      if (xitResult.success) {
-        return {
-          commodities: Object.keys(xitResult.materials),
-          locations: [],
-          userNames: [],
-          xitQuantities: xitResult.materials,
-          xitName: xitResult.name,
-          isXitActive: true,
-          forcedItemType: 'sell', // XIT is always a buying context
-          unresolved: [],
-          parsed: true,
+      const extracted = extractJsonToken(trimmed)
+      if (extracted) {
+        const xitResult = parseXitJson(extracted.json)
+        if (xitResult.success) {
+          xitQuantities = xitResult.materials
+          xitName = xitResult.name
+          isXitActive = true
+          xitCommodities = Object.keys(xitResult.materials)
+          remainingInput = extracted.remainder
         }
       }
     }
 
     // Normal token parsing - split by comma or whitespace
-    const tokens = trimmed.split(/[,\s]+/).filter(Boolean)
+    const tokens = remainingInput.split(/[,\s]+/).filter(Boolean)
 
     const commodities: string[] = []
     const locations: string[] = []
@@ -189,16 +247,25 @@ export function useQueryParser(options: UseQueryParserOptions): UseQueryParserRe
       }
     }
 
-    const parsed = commodities.length > 0 || locations.length > 0 || userNames.length > 0
+    // Combine XIT commodities with any additional parsed commodities
+    const allCommodities = [...xitCommodities]
+    for (const c of commodities) {
+      if (!allCommodities.includes(c)) {
+        allCommodities.push(c)
+      }
+    }
+
+    const parsed =
+      isXitActive || allCommodities.length > 0 || locations.length > 0 || userNames.length > 0
 
     return {
-      commodities,
+      commodities: allCommodities,
       locations,
       userNames,
-      xitQuantities: null,
-      xitName: undefined,
-      isXitActive: false,
-      forcedItemType: null,
+      xitQuantities,
+      xitName,
+      isXitActive,
+      forcedItemType: isXitActive ? 'sell' : null, // XIT is always a buying context
       unresolved,
       parsed,
     }
