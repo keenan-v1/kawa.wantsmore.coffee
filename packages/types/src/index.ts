@@ -595,4 +595,4 @@ export interface UpdateGlobalDefaultsRequest {
 
 // ==================== XIT ACT JSON ====================
 
-export * from './xit'
+export * from './xit.js'
