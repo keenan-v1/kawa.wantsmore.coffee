@@ -1,13 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Create hoisted mock functions
-const { mockGetChannelConfig } = vi.hoisted(() => ({
+const { mockGetChannelConfig, mockDbSelect } = vi.hoisted(() => ({
   mockGetChannelConfig: vi.fn(),
+  mockDbSelect: vi.fn(),
 }))
 
 // Mock the channelConfig module
 vi.mock('./channelConfig.js', () => ({
   getChannelConfig: mockGetChannelConfig,
+}))
+
+// Mock the database module
+vi.mock('@kawakawa/db', () => ({
+  db: {
+    select: mockDbSelect,
+  },
+  channelConfig: {
+    key: 'key',
+    value: 'value',
+  },
+}))
+
+// Mock drizzle-orm eq function
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn(),
 }))
 
 // Mock the MessageInteractionAdapter
@@ -32,10 +49,24 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 // Import after mocks
-import { getEffectivePrefix, handleMessageCommand } from './messageCommands.js'
+import {
+  getEffectivePrefix,
+  handleMessageCommand,
+  getAllPrefixes,
+  findMatchingPrefix,
+  clearPrefixCache,
+} from './messageCommands.js'
 import type { Message } from 'discord.js'
 import type { BotClient, Command } from '../client.js'
 import { Collection } from 'discord.js'
+
+// Helper to set up db mock chain
+function setupDbMock(prefixes: string[]) {
+  const mockWhere = vi.fn().mockResolvedValue(prefixes.map(p => ({ value: p })))
+  const mockFrom = vi.fn().mockReturnValue({ where: mockWhere })
+  mockDbSelect.mockReturnValue({ from: mockFrom })
+  return { mockWhere, mockFrom }
+}
 
 // Helper to create mock message
 // Using Record<string, unknown> instead of Partial<Message> to avoid valueOf() type conflicts
@@ -71,6 +102,7 @@ function createMockCommand(name: string): Command {
 describe('messageCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearPrefixCache() // Clear cache between tests
   })
 
   describe('getEffectivePrefix', () => {
@@ -266,7 +298,8 @@ describe('messageCommands', () => {
     })
 
     it('handles DM messages with default prefix', async () => {
-      mockGetChannelConfig.mockResolvedValue(null)
+      // No prefixes configured in database, so it should use default '!'
+      setupDbMock([])
 
       const message = createMockMessage({
         content: '!help',
@@ -349,6 +382,146 @@ describe('messageCommands', () => {
       await handleMessageCommand(message, client)
 
       expect(queryCommand.execute).toHaveBeenCalled()
+    })
+
+    describe('DM multi-prefix matching', () => {
+      it('matches any configured prefix in DMs', async () => {
+        // Set up database to return multiple prefixes
+        setupDbMock(['!', '?', '.'])
+
+        const message = createMockMessage({
+          content: '?help',
+          guildId: null,
+          channel: {
+            isDMBased: () => true,
+          } as Message['channel'],
+        })
+        const helpCommand = createMockCommand('help')
+        const client = createMockClient(new Map([['help', helpCommand]]))
+
+        await handleMessageCommand(message, client)
+
+        expect(helpCommand.execute).toHaveBeenCalled()
+      })
+
+      it('matches different prefixes in DMs', async () => {
+        setupDbMock(['!', '?', '.'])
+
+        const message = createMockMessage({
+          content: '.query COF',
+          guildId: null,
+          channel: {
+            isDMBased: () => true,
+          } as Message['channel'],
+        })
+        const queryCommand = createMockCommand('query')
+        const client = createMockClient(new Map([['query', queryCommand]]))
+
+        await handleMessageCommand(message, client)
+
+        expect(queryCommand.execute).toHaveBeenCalled()
+      })
+
+      it('falls back to default prefix when no prefixes configured in DMs', async () => {
+        setupDbMock([])
+
+        const message = createMockMessage({
+          content: '!help',
+          guildId: null,
+          channel: {
+            isDMBased: () => true,
+          } as Message['channel'],
+        })
+        const helpCommand = createMockCommand('help')
+        const client = createMockClient(new Map([['help', helpCommand]]))
+
+        await handleMessageCommand(message, client)
+
+        expect(helpCommand.execute).toHaveBeenCalled()
+      })
+
+      it('ignores messages with no matching prefix in DMs', async () => {
+        setupDbMock(['!', '?'])
+
+        const message = createMockMessage({
+          content: '.help',
+          guildId: null,
+          channel: {
+            isDMBased: () => true,
+          } as Message['channel'],
+        })
+        const helpCommand = createMockCommand('help')
+        const client = createMockClient(new Map([['help', helpCommand]]))
+
+        await handleMessageCommand(message, client)
+
+        expect(helpCommand.execute).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('findMatchingPrefix', () => {
+    it('returns matching prefix', () => {
+      const result = findMatchingPrefix('!help', ['!', '?', '.'])
+      expect(result).toBe('!')
+    })
+
+    it('returns null when no prefix matches', () => {
+      const result = findMatchingPrefix('hello', ['!', '?', '.'])
+      expect(result).toBeNull()
+    })
+
+    it('matches longer prefixes first', () => {
+      // If content is '!!help', and both '!' and '!!' are valid prefixes,
+      // it should match '!!' not '!'
+      const result = findMatchingPrefix('!!help', ['!', '!!'])
+      expect(result).toBe('!!')
+    })
+
+    it('handles empty prefix list', () => {
+      const result = findMatchingPrefix('!help', [])
+      expect(result).toBeNull()
+    })
+
+    it('handles multi-character prefixes', () => {
+      const result = findMatchingPrefix('kawa help', ['kawa ', '!'])
+      expect(result).toBe('kawa ')
+    })
+  })
+
+  describe('getAllPrefixes', () => {
+    it('returns unique prefixes from database', async () => {
+      setupDbMock(['!', '?', '!', '.']) // Duplicates should be removed
+
+      const result = await getAllPrefixes()
+
+      expect(result).toHaveLength(3)
+      expect(result).toContain('!')
+      expect(result).toContain('?')
+      expect(result).toContain('.')
+    })
+
+    it('caches results', async () => {
+      setupDbMock(['!', '?'])
+
+      // First call
+      const result1 = await getAllPrefixes()
+      expect(result1).toHaveLength(2)
+
+      // Second call should use cache
+      const result2 = await getAllPrefixes()
+      expect(result2).toHaveLength(2)
+
+      // Database should only be queried once
+      expect(mockDbSelect).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns empty array when no prefixes configured', async () => {
+      setupDbMock([])
+
+      const result = await getAllPrefixes()
+
+      expect(result).toEqual([])
     })
   })
 })

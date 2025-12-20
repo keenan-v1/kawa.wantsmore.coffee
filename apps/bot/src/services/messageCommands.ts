@@ -7,18 +7,84 @@
  * Prefix resolution order:
  * 1. Channel-specific commandPrefix
  * 2. Default commandPrefix (channelId = '0')
- * 3. DM default: '!' (if not configured)
+ * 3. DM: matches any configured prefix (cached for performance)
  * 4. No prefix configured for guild channels: ignore messages
  */
 
 import type { Message } from 'discord.js'
 import type { BotClient, Command } from '../client.js'
 import { getChannelConfig } from './channelConfig.js'
+import { db, channelConfig } from '@kawakawa/db'
+import { eq } from 'drizzle-orm'
 import { MessageInteractionAdapter } from '../adapters/messageInteraction.js'
 import logger from '../utils/logger.js'
 
-/** Default prefix for DMs when not configured */
+/** Default prefix for DMs when no prefixes are configured anywhere */
 const DM_DEFAULT_PREFIX = '!'
+
+/** Cache TTL in milliseconds (5 minutes) */
+const PREFIX_CACHE_TTL = 5 * 60 * 1000
+
+/** Cached list of all configured command prefixes */
+let cachedPrefixes: string[] | null = null
+let cacheTimestamp = 0
+
+/**
+ * Get all unique command prefixes from the database.
+ * Results are cached for performance.
+ */
+export async function getAllPrefixes(): Promise<string[]> {
+  const now = Date.now()
+
+  // Return cached value if still valid
+  if (cachedPrefixes !== null && now - cacheTimestamp < PREFIX_CACHE_TTL) {
+    return cachedPrefixes
+  }
+
+  // Fetch all commandPrefix values from database
+  const rows = await db
+    .select({ value: channelConfig.value })
+    .from(channelConfig)
+    .where(eq(channelConfig.key, 'commandPrefix'))
+
+  // Extract unique non-empty prefixes
+  const prefixes = [...new Set(rows.map(r => r.value).filter(Boolean))]
+
+  // Update cache
+  cachedPrefixes = prefixes
+  cacheTimestamp = now
+
+  logger.debug({ prefixCount: prefixes.length }, 'Refreshed command prefix cache')
+
+  return prefixes
+}
+
+/**
+ * Clear the prefix cache. Useful for testing or when config changes.
+ */
+export function clearPrefixCache(): void {
+  cachedPrefixes = null
+  cacheTimestamp = 0
+}
+
+/**
+ * Find a matching prefix from a list of prefixes.
+ * Returns the matching prefix or null if none match.
+ * Checks longer prefixes first to handle overlapping prefixes correctly.
+ */
+export function findMatchingPrefix(content: string, prefixes: string[]): string | null {
+  // Sort by length descending to match longer prefixes first
+  // e.g., '!!' should match before '!' for a message starting with '!!'
+  const sorted = [...prefixes].sort((a, b) => b.length - a.length)
+
+  for (const prefix of sorted) {
+    if (content.startsWith(prefix)) {
+      return prefix
+    }
+  }
+
+  return null
+}
 
 /**
  * Get the effective command prefix for a channel.
@@ -105,16 +171,26 @@ export async function handleMessageCommand(message: Message, client: BotClient):
   // Determine if this is a DM
   const isDM = message.channel.isDMBased()
 
-  // Get effective prefix
-  const prefix = await getEffectivePrefix(message.channelId, isDM)
+  let prefix: string | null
 
-  // No prefix configured - ignore message
-  if (!prefix) {
-    return
+  if (isDM) {
+    // For DMs, match against any configured prefix
+    // This allows users to continue using the same prefix they use in channels
+    const allPrefixes = await getAllPrefixes()
+
+    if (allPrefixes.length > 0) {
+      prefix = findMatchingPrefix(message.content, allPrefixes)
+    } else {
+      // No prefixes configured anywhere, use default
+      prefix = message.content.startsWith(DM_DEFAULT_PREFIX) ? DM_DEFAULT_PREFIX : null
+    }
+  } else {
+    // For guild channels, use channel-specific prefix
+    prefix = await getEffectivePrefix(message.channelId, isDM)
   }
 
-  // Check if message starts with prefix
-  if (!message.content.startsWith(prefix)) {
+  // No prefix matched - ignore message
+  if (!prefix) {
     return
   }
 

@@ -733,8 +733,24 @@
                     </td>
                     <td class="text-right">
                       <span class="font-weight-medium">
-                        {{ order.price.toFixed(2) }}
+                        {{ getOrderDisplayPrice(order).toFixed(2) }}
                       </span>
+                      <v-tooltip v-if="order.pricingMode === 'dynamic'" location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon
+                            v-bind="tooltipProps"
+                            size="x-small"
+                            class="ml-1"
+                            :color="order.isFallback ? 'warning' : 'info'"
+                          >
+                            mdi-tag-outline
+                          </v-icon>
+                        </template>
+                        <span v-if="order.isFallback">
+                          Price from {{ order.priceListCode?.toUpperCase() }} (fallback location)
+                        </span>
+                        <span v-else>Price from {{ order.priceListCode?.toUpperCase() }}</span>
+                      </v-tooltip>
                     </td>
                     <td class="text-right">
                       {{ order.remainingQuantity.toLocaleString() }}
@@ -1110,6 +1126,14 @@ const filteredMatchingOrders = computed(() => {
   if (!currentCurrency.value) return matchingOrders.value
   return matchingOrders.value.filter(o => o.currency === currentCurrency.value)
 })
+
+// Get display price for an order (uses effectivePrice for dynamic pricing)
+const getOrderDisplayPrice = (order: MatchingOrder): number => {
+  if (order.pricingMode === 'dynamic' && order.effectivePrice !== null) {
+    return order.effectivePrice
+  }
+  return order.price
+}
 
 // Show the matching orders column when commodity and location are set
 const shouldShowMatchingColumn = computed(() => {

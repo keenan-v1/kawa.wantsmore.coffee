@@ -6,6 +6,7 @@ import {
   REST,
   Routes,
   MessageFlags,
+  Partials,
 } from 'discord.js'
 import type { ChatInputCommandInteraction, AutocompleteInteraction } from 'discord.js'
 import { getConfig } from './config.js'
@@ -41,6 +42,8 @@ export function createClient(): BotClient {
       GatewayIntentBits.GuildMessages, // Required for prefix commands in guilds
       GatewayIntentBits.MessageContent, // Required to read message content for prefix commands
     ],
+    // Partials are required to receive events for uncached DM channels
+    partials: [Partials.Channel, Partials.Message],
   }) as BotClient
 
   client.commands = new Collection()
