@@ -31,8 +31,14 @@ export class MessageInteractionAdapter {
   constructor(
     private message: Message,
     private _commandName: string,
-    private parsedOptions: Map<string, string | number | boolean | null>
+    private parsedOptions: Map<string, string | number | boolean | null>,
+    private _prefix: string = '!'
   ) {}
+
+  /** The command prefix that was used to invoke this command */
+  get prefix(): string {
+    return this._prefix
+  }
 
   /** The user who sent the message */
   get user(): User {
@@ -249,4 +255,15 @@ export class MessageInteractionAdapter {
  */
 export function isMessageInteractionAdapter(obj: unknown): obj is MessageInteractionAdapter {
   return obj instanceof MessageInteractionAdapter
+}
+
+/**
+ * Get the command prefix used to invoke a command.
+ * Returns the prefix for message commands, or '/' for slash commands.
+ */
+export function getCommandPrefix(interaction: unknown): string {
+  if (isMessageInteractionAdapter(interaction)) {
+    return interaction.prefix
+  }
+  return '/'
 }

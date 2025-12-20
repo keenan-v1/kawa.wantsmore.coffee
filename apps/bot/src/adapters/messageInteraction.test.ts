@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { MessageInteractionAdapter, isMessageInteractionAdapter } from './messageInteraction.js'
+import {
+  MessageInteractionAdapter,
+  isMessageInteractionAdapter,
+  getCommandPrefix,
+} from './messageInteraction.js'
 import type { Message, User, Guild, GuildMember, Client, TextBasedChannel } from 'discord.js'
 
 // Helper to create a mock message
@@ -110,6 +114,20 @@ describe('MessageInteractionAdapter', () => {
       const adapter = new MessageInteractionAdapter(message, 'buy', new Map())
 
       expect(adapter.commandName).toBe('buy')
+    })
+
+    it('exposes prefix when provided', () => {
+      const message = createMockMessage()
+      const adapter = new MessageInteractionAdapter(message, 'help', new Map(), '?')
+
+      expect(adapter.prefix).toBe('?')
+    })
+
+    it('defaults prefix to "!" when not provided', () => {
+      const message = createMockMessage()
+      const adapter = new MessageInteractionAdapter(message, 'help', new Map())
+
+      expect(adapter.prefix).toBe('!')
     })
 
     it('initially has replied = false', () => {
@@ -491,5 +509,29 @@ describe('isMessageInteractionAdapter', () => {
 
   it('returns false for string', () => {
     expect(isMessageInteractionAdapter('not an adapter')).toBe(false)
+  })
+})
+
+describe('getCommandPrefix', () => {
+  it('returns prefix from MessageInteractionAdapter', () => {
+    const message = createMockMessage()
+    const adapter = new MessageInteractionAdapter(message, 'help', new Map(), '?')
+
+    expect(getCommandPrefix(adapter)).toBe('?')
+  })
+
+  it('returns "/" for non-MessageInteractionAdapter objects', () => {
+    // Mock a regular ChatInputCommandInteraction-like object
+    const mockInteraction = { commandName: 'help', user: { id: 'user123' } }
+
+    expect(getCommandPrefix(mockInteraction)).toBe('/')
+  })
+
+  it('returns "/" for null', () => {
+    expect(getCommandPrefix(null)).toBe('/')
+  })
+
+  it('returns "/" for undefined', () => {
+    expect(getCommandPrefix(undefined)).toBe('/')
   })
 })

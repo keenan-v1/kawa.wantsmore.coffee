@@ -221,7 +221,7 @@ export async function handleMessageCommand(message: Message, client: BotClient):
   }
 
   // Create adapter to make message look like an interaction
-  const adapter = new MessageInteractionAdapter(message, commandName, options)
+  const adapter = new MessageInteractionAdapter(message, commandName, options, prefix)
 
   // Log command invocation
   const startTime = Date.now()
