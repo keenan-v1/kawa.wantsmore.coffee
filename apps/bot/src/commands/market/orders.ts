@@ -19,7 +19,7 @@ import type {
 import type { Command } from '../../client.js'
 import type { MessageVisibility } from '@kawakawa/types'
 import { db, sellOrders, buyOrders, users, userDiscordProfiles } from '@kawakawa/db'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, or, isNull } from 'drizzle-orm'
 import { searchCommodities, searchLocations, searchUsers } from '../../autocomplete/index.js'
 import {
   resolveCommodity,
@@ -161,6 +161,12 @@ export const orders: Command = {
       'all' as const
     )
 
+    // Build price list filter condition
+    // When enforced: only show orders with that price list
+    // When not enforced: show orders with that price list OR custom prices (null)
+    const channelPriceList = channelSettings?.priceList
+    const priceListEnforced = channelSettings?.priceListEnforced ?? false
+
     // Check if user has a linked account (for default behavior and manage button)
     const discordProfile = await db.query.userDiscordProfiles.findFirst({
       where: eq(userDiscordProfiles.discordId, interaction.user.id),
@@ -234,6 +240,13 @@ export const orders: Command = {
       { visibilityEnforced: channelSettings?.visibilityEnforced ?? false }
     )
 
+    // Build price list filter for sell orders
+    const sellPriceListFilter = channelPriceList
+      ? priceListEnforced
+        ? eq(sellOrders.priceListCode, channelPriceList)
+        : or(eq(sellOrders.priceListCode, channelPriceList), isNull(sellOrders.priceListCode))
+      : undefined
+
     // Fetch sell orders
     const sellOrdersData =
       orderType === 'buy'
@@ -245,7 +258,8 @@ export const orders: Command = {
                 : undefined,
               resolvedLocation ? eq(sellOrders.locationId, resolvedLocation.naturalId) : undefined,
               resolvedUserId ? eq(sellOrders.userId, resolvedUserId) : undefined,
-              visibility && visibility !== 'all' ? eq(sellOrders.orderType, visibility) : undefined
+              visibility && visibility !== 'all' ? eq(sellOrders.orderType, visibility) : undefined,
+              sellPriceListFilter
             ),
             with: {
               user: true,
@@ -254,6 +268,13 @@ export const orders: Command = {
             },
             orderBy: [desc(sellOrders.updatedAt)],
           })
+
+    // Build price list filter for buy orders
+    const buyPriceListFilter = channelPriceList
+      ? priceListEnforced
+        ? eq(buyOrders.priceListCode, channelPriceList)
+        : or(eq(buyOrders.priceListCode, channelPriceList), isNull(buyOrders.priceListCode))
+      : undefined
 
     // Fetch buy orders
     const buyOrdersData =
@@ -266,7 +287,8 @@ export const orders: Command = {
                 : undefined,
               resolvedLocation ? eq(buyOrders.locationId, resolvedLocation.naturalId) : undefined,
               resolvedUserId ? eq(buyOrders.userId, resolvedUserId) : undefined,
-              visibility && visibility !== 'all' ? eq(buyOrders.orderType, visibility) : undefined
+              visibility && visibility !== 'all' ? eq(buyOrders.orderType, visibility) : undefined,
+              buyPriceListFilter
             ),
             with: {
               user: true,

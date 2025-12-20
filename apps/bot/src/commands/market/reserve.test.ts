@@ -279,7 +279,7 @@ describe('/reserve command', () => {
 
       await reserve.execute(interaction as never)
 
-      expect(mockGetAvailableSellOrders).toHaveBeenCalledWith('COF', 'BEN', 1, 'all')
+      expect(mockGetAvailableSellOrders).toHaveBeenCalledWith('COF', 'BEN', 1, 'all', null)
     })
   })
 

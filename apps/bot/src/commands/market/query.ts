@@ -4,7 +4,7 @@ import type { Command } from '../../client.js'
 import type { MessageVisibility } from '@kawakawa/types'
 import { parseXitJson, type XitMaterials } from '@kawakawa/types/xit'
 import { db, sellOrders, buyOrders, users } from '@kawakawa/db'
-import { eq, and, desc, inArray } from 'drizzle-orm'
+import { eq, and, desc, inArray, or, isNull } from 'drizzle-orm'
 import { searchUsers } from '../../autocomplete/index.js'
 import {
   resolveCommodity,
@@ -268,6 +268,12 @@ export const query: Command = {
       'internal' as const
     )
 
+    // Build price list filter condition
+    // When enforced: only show orders with that price list
+    // When not enforced: show orders with that price list OR custom prices (null)
+    const channelPriceList = channelSettings?.priceList
+    const priceListEnforced = channelSettings?.priceListEnforced ?? false
+
     // Parse all tokens from query input - collect multiple values for each type
     const resolvedCommodities: { ticker: string; name: string }[] = []
     const resolvedLocations: { naturalId: string; name: string; type: string }[] = []
@@ -352,6 +358,15 @@ export const query: Command = {
       filterDesc = `🧊 ${xitLabel}\n${filterDesc}`
     }
 
+    // Build price list filter for sell orders
+    // When enforced: only show orders with that price list
+    // When not enforced: show orders with that price list OR custom prices (null)
+    const sellPriceListFilter = channelPriceList
+      ? priceListEnforced
+        ? eq(sellOrders.priceListCode, channelPriceList)
+        : or(eq(sellOrders.priceListCode, channelPriceList), isNull(sellOrders.priceListCode))
+      : undefined
+
     // Fetch sell orders (no limit - we paginate client-side)
     const sellOrdersData =
       orderType === 'buy'
@@ -371,7 +386,8 @@ export const query: Command = {
                   )
                 : undefined,
               resolvedUserIds.length > 0 ? inArray(sellOrders.userId, resolvedUserIds) : undefined,
-              visibility && visibility !== 'all' ? eq(sellOrders.orderType, visibility) : undefined
+              visibility && visibility !== 'all' ? eq(sellOrders.orderType, visibility) : undefined,
+              sellPriceListFilter
             ),
             with: {
               user: true,
@@ -380,6 +396,13 @@ export const query: Command = {
             },
             orderBy: [desc(sellOrders.updatedAt)],
           })
+
+    // Build price list filter for buy orders
+    const buyPriceListFilter = channelPriceList
+      ? priceListEnforced
+        ? eq(buyOrders.priceListCode, channelPriceList)
+        : or(eq(buyOrders.priceListCode, channelPriceList), isNull(buyOrders.priceListCode))
+      : undefined
 
     // Fetch buy orders
     const buyOrdersData =
@@ -400,7 +423,8 @@ export const query: Command = {
                   )
                 : undefined,
               resolvedUserIds.length > 0 ? inArray(buyOrders.userId, resolvedUserIds) : undefined,
-              visibility && visibility !== 'all' ? eq(buyOrders.orderType, visibility) : undefined
+              visibility && visibility !== 'all' ? eq(buyOrders.orderType, visibility) : undefined,
+              buyPriceListFilter
             ),
             with: {
               user: true,

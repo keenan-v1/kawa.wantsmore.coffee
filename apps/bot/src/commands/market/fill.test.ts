@@ -279,7 +279,7 @@ describe('/fill command', () => {
 
       await fill.execute(interaction as never)
 
-      expect(mockGetAvailableBuyOrders).toHaveBeenCalledWith('COF', 'BEN', 1, 'all')
+      expect(mockGetAvailableBuyOrders).toHaveBeenCalledWith('COF', 'BEN', 1, 'all', null)
     })
   })
 

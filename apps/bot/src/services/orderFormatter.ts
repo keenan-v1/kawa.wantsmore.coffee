@@ -514,7 +514,8 @@ export async function formatGroupedOrdersMulti(
     })
     const displayPrice = priceInfo ? formatPrice(priceInfo.price) : '??'
     const currencySymbol = formatCurrencySymbol(priceInfo?.currency ?? order.currency)
-    const plDisplay = order.priceListCode?.toUpperCase() || 'Custom'
+    // Only show price list code if it exists, empty for custom prices
+    const plDisplay = order.priceListCode?.toUpperCase() ?? ''
 
     const userName = order.user.fioUsername ?? order.user.displayName
     const nameOrLocation = groupBy === 'location' ? userName : locationDisplay
@@ -563,7 +564,8 @@ export async function formatGroupedOrdersMulti(
     })
     const displayPrice = priceInfo ? formatPrice(priceInfo.price) : '??'
     const currencySymbol = formatCurrencySymbol(priceInfo?.currency ?? order.currency)
-    const plDisplay = order.priceListCode?.toUpperCase() || 'Custom'
+    // Only show price list code if it exists, empty for custom prices
+    const plDisplay = order.priceListCode?.toUpperCase() ?? ''
 
     const userName = order.user.fioUsername ?? order.user.displayName
     const nameOrLocation = groupBy === 'location' ? userName : locationDisplay
@@ -604,9 +606,10 @@ export async function formatGroupedOrdersMulti(
     const tickerPad = p.ticker.padEnd(maxTickerLen)
     const namePad = p.nameOrLocation.padEnd(maxNameLen)
     const pricePad = p.displayPrice.padStart(maxPriceLen)
-    const plPad = p.plDisplay.padEnd(maxPlLen)
+    // Only show price list in parentheses if there's a price list code
+    const plPart = p.plDisplay ? ` (${p.plDisplay.padEnd(maxPlLen)})` : ''
 
-    let line = `${p.typeIcon}\`${qtyPad} ${tickerPad} ${fromOrOn} ${namePad} @ ${p.currencySymbol}${pricePad} (${plPad})\``
+    let line = `${p.typeIcon}\`${qtyPad} ${tickerPad} ${fromOrOn} ${namePad} @ ${p.currencySymbol}${pricePad}${plPart}\``
     line += p.visIcon
     if (p.fioAge) line += ` - *${p.fioAge}*`
 

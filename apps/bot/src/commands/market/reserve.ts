@@ -22,6 +22,7 @@ import {
   getAvailableSellOrders,
   formatOrderForSelect,
   createReservation,
+  type PriceListFilter,
 } from '../../services/reservationService.js'
 import { requireLinkedUser } from '../../utils/auth.js'
 import { awaitModal, COMPONENT_TIMEOUT } from '../../utils/interactions.js'
@@ -122,6 +123,14 @@ export const reserve: Command = {
       'all' as const
     )
 
+    // Build price list filter
+    const priceListFilter: PriceListFilter | null = channelSettings?.priceList
+      ? {
+          priceList: channelSettings.priceList,
+          enforced: channelSettings.priceListEnforced ?? false,
+        }
+      : null
+
     // Validate commodity
     const resolvedCommodity = await resolveCommodity(commodityInput)
     if (!resolvedCommodity) {
@@ -154,7 +163,8 @@ export const reserve: Command = {
       resolvedCommodity.ticker,
       resolvedLocation?.naturalId ?? null,
       userId,
-      visibilityFilter
+      visibilityFilter,
+      priceListFilter
     )
 
     if (availableOrders.length === 0) {

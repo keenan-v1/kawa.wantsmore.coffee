@@ -3,7 +3,7 @@
  * Shared logic for /reserve and /fill commands
  */
 import { db, sellOrders, buyOrders, orderReservations, users } from '@kawakawa/db'
-import { eq, and, ne, desc, sql, inArray } from 'drizzle-orm'
+import { eq, and, ne, desc, sql, inArray, or, isNull } from 'drizzle-orm'
 import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
 import { formatLocation } from './locationService.js'
 import { getFioUsernames } from './userSettings.js'
@@ -40,6 +40,14 @@ export interface SelectableOrder {
 }
 
 /**
+ * Price list filter options for order queries
+ */
+export interface PriceListFilter {
+  priceList: string
+  enforced: boolean
+}
+
+/**
  * Get available sell orders for a commodity (excluding user's own orders)
  * Returns orders with remaining quantity > 0
  */
@@ -47,8 +55,21 @@ export async function getAvailableSellOrders(
   commodityTicker: string,
   locationId: string | null,
   excludeUserId: number,
-  visibilityFilter?: 'internal' | 'partner' | 'all' | null
+  visibilityFilter?: 'internal' | 'partner' | 'all' | null,
+  priceListFilter?: PriceListFilter | null
 ): Promise<SelectableOrder[]> {
+  // Build price list filter condition
+  // When enforced: only show orders with that price list
+  // When not enforced: show orders with that price list OR custom prices (null)
+  const priceListCondition = priceListFilter
+    ? priceListFilter.enforced
+      ? eq(sellOrders.priceListCode, priceListFilter.priceList)
+      : or(
+          eq(sellOrders.priceListCode, priceListFilter.priceList),
+          isNull(sellOrders.priceListCode)
+        )
+    : undefined
+
   // Query sell orders matching filters
   const ordersData = await db.query.sellOrders.findMany({
     where: and(
@@ -57,7 +78,8 @@ export async function getAvailableSellOrders(
       ne(sellOrders.userId, excludeUserId),
       visibilityFilter && visibilityFilter !== 'all'
         ? eq(sellOrders.orderType, visibilityFilter)
-        : undefined
+        : undefined,
+      priceListCondition
     ),
     with: {
       user: true,
@@ -158,8 +180,16 @@ export async function getAvailableBuyOrders(
   commodityTicker: string,
   locationId: string | null,
   excludeUserId: number,
-  visibilityFilter?: 'internal' | 'partner' | 'all' | null
+  visibilityFilter?: 'internal' | 'partner' | 'all' | null,
+  priceListFilter?: PriceListFilter | null
 ): Promise<SelectableOrder[]> {
+  // Build price list filter condition
+  const priceListCondition = priceListFilter
+    ? priceListFilter.enforced
+      ? eq(buyOrders.priceListCode, priceListFilter.priceList)
+      : or(eq(buyOrders.priceListCode, priceListFilter.priceList), isNull(buyOrders.priceListCode))
+    : undefined
+
   // Query buy orders matching filters
   const ordersData = await db.query.buyOrders.findMany({
     where: and(
@@ -168,7 +198,8 @@ export async function getAvailableBuyOrders(
       ne(buyOrders.userId, excludeUserId),
       visibilityFilter && visibilityFilter !== 'all'
         ? eq(buyOrders.orderType, visibilityFilter)
-        : undefined
+        : undefined,
+      priceListCondition
     ),
     with: {
       user: true,
