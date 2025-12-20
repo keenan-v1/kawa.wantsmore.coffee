@@ -26,6 +26,8 @@ export const useUserStore = () => {
     const stored = localStorage.getItem('user')
     if (stored) {
       currentUser.value = JSON.parse(stored)
+      // Also load settings from cache to ensure they're available immediately
+      settingsStore.loadFromCache()
       return currentUser.value
     }
     return null

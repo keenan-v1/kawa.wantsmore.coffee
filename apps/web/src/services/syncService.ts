@@ -7,18 +7,15 @@ import { commodityService } from './commodityService'
 // Polling interval (30 seconds)
 const POLL_INTERVAL = 30 * 1000
 
-// Storage key for initial app version (use sessionStorage so it resets per browser session)
-const APP_VERSION_KEY = 'kawakawa:appVersion'
+// App version baked in at build time (commit SHA)
+// This allows reliable version comparison without storage
+const BUILD_VERSION = __APP_VERSION__
 
 // Current sync state
 let currentSyncState: SyncState | null = null
 let pollIntervalId: ReturnType<typeof setInterval> | null = null
 let isPolling = false
-
-// Helper to get initial app version from sessionStorage (read fresh each time for easier testing)
-function getStoredAppVersion(): string | null {
-  return sessionStorage.getItem(APP_VERSION_KEY)
-}
+let versionMismatchNotified = false
 
 // Event names
 export const SYNC_EVENTS = {
@@ -68,20 +65,19 @@ async function processSyncState(newState: SyncState): Promise<void> {
     )
   }
 
-  // Get stored app version (read fresh from sessionStorage for easier testing)
-  const storedAppVersion = getStoredAppVersion()
-
-  // Capture initial app version on first sync
-  if (!storedAppVersion) {
-    sessionStorage.setItem(APP_VERSION_KEY, newState.appVersion)
-  } else if (newState.appVersion !== storedAppVersion) {
-    // Check for app version changes - compare against stored version
-    // This detects deployments that happened after the page was loaded
+  // Check for app version mismatch - compare API version against build version
+  // In dev mode, BUILD_VERSION is 'dev' so we skip the check
+  if (
+    BUILD_VERSION !== 'dev' &&
+    newState.appVersion !== BUILD_VERSION &&
+    !versionMismatchNotified
+  ) {
+    versionMismatchNotified = true
     window.dispatchEvent(
       new CustomEvent(SYNC_EVENTS.APP_VERSION_CHANGED, {
         detail: {
           newVersion: newState.appVersion,
-          oldVersion: storedAppVersion,
+          oldVersion: BUILD_VERSION,
         },
       })
     )
@@ -183,22 +179,18 @@ export function getDataVersions(): DataVersions {
 
 // Check if app has been updated
 export function hasAppUpdate(): boolean {
-  const storedAppVersion = getStoredAppVersion()
-  return !!(
-    currentSyncState &&
-    storedAppVersion &&
-    currentSyncState.appVersion !== storedAppVersion
-  )
+  return BUILD_VERSION !== 'dev' && currentSyncState?.appVersion !== BUILD_VERSION
+}
+
+// Get the build version
+export function getBuildVersion(): string {
+  return BUILD_VERSION
 }
 
 // Force refresh sync state (useful after login)
 export async function refreshSyncState(): Promise<SyncState | null> {
   const state = await fetchSyncState()
   if (state) {
-    // Capture initial app version if not set
-    if (!getStoredAppVersion()) {
-      sessionStorage.setItem(APP_VERSION_KEY, state.appVersion)
-    }
     currentSyncState = state
   }
   return state
@@ -211,6 +203,7 @@ export const syncService = {
   getUnreadCount,
   getDataVersions,
   hasAppUpdate,
+  getBuildVersion,
   refreshSyncState,
   EVENTS: SYNC_EVENTS,
 }

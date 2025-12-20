@@ -403,24 +403,24 @@ describe('orderFormatter', () => {
       expect(result).toBe('📤 Sell | 👤 Internal')
     })
 
-    it('includes commodity filter', () => {
+    it('includes commodity filter after mode', () => {
       const result = buildFilterDescription(['COF'], [], [], 'sell', 'internal')
-      expect(result).toBe('🏷️ COF | 📤 Sell | 👤 Internal')
+      expect(result).toBe('📤 Sell | 👤 Internal | 🏷️ COF')
     })
 
     it('includes multiple commodities', () => {
       const result = buildFilterDescription(['COF', 'RAT', 'DW'], [], [], 'sell', 'internal')
-      expect(result).toBe('🏷️ COF, RAT, DW | 📤 Sell | 👤 Internal')
+      expect(result).toBe('📤 Sell | 👤 Internal | 🏷️ COF, RAT, DW')
     })
 
-    it('includes location filter', () => {
+    it('includes location filter after mode', () => {
       const result = buildFilterDescription([], ['Benten (BEN)'], [], 'sell', 'internal')
-      expect(result).toBe('📍 Benten (BEN) | 📤 Sell | 👤 Internal')
+      expect(result).toBe('📤 Sell | 👤 Internal | 📍 Benten (BEN)')
     })
 
-    it('includes username filter', () => {
+    it('includes username filter after mode', () => {
       const result = buildFilterDescription([], [], ['Alice'], 'sell', 'internal')
-      expect(result).toBe('🧑 Alice | 📤 Sell | 👤 Internal')
+      expect(result).toBe('📤 Sell | 👤 Internal | 🧑 Alice')
     })
 
     it('formats buy order type', () => {
@@ -443,7 +443,7 @@ describe('orderFormatter', () => {
       expect(result).toBe('📤 Sell | 👤 Internal & 👥 Partner')
     })
 
-    it('splits to newlines when line exceeds 72 characters', () => {
+    it('splits filters to second line when total exceeds 72 characters', () => {
       // Create a long filter description
       const result = buildFilterDescription(
         ['COF', 'RAT', 'DW', 'OVE'],
@@ -452,9 +452,10 @@ describe('orderFormatter', () => {
         'all',
         'all'
       )
-      // Should contain newlines instead of pipes
+      // Should have mode line first, then filters on second line
       expect(result).toContain('\n')
-      expect(result).not.toContain(' | ')
+      // Mode line should still use pipes
+      expect(result).toMatch(/^📥 Buy & 📤 Sell \| 👤 Internal & 👥 Partner\n/)
     })
 
     it('uses pipes when line is under 72 characters', () => {

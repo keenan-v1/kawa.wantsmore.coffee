@@ -119,11 +119,13 @@ export interface FilterDescriptionOptions {
 /**
  * Build a formatted filter description with emojis.
  *
+ * Format: Mode line first (order type + visibility), then filter details.
+ *
  * Examples:
- * - 🏷️ COF, DW, RAT | 📤 Sell | 👤 Internal
- * - 🏷️ ALO | 📥 Buy & 📤 Sell | 👤 Internal & 👥 Partner
- * - 🏷️ COF | 📍 Benten, Moria | 🧑 Alice, Bob | 📤 Sell | 👤 Internal
- * - 🏷️ COF | 📤 Sell | 🔒 👤 Internal (when enforced)
+ * - 📤 Sell | 👤 Internal
+ * - 📤 Sell | 👤 Internal | 🏷️ COF, DW
+ * - 📤 Sell | 🔒 👤 Internal
+ *   🏷️ COF | 📍 Benten, Moria | 🧑 Alice
  *
  * @param commodities - Array of commodity tickers (formatted)
  * @param locations - Array of location display strings
@@ -140,46 +142,60 @@ export function buildFilterDescription(
   visibility: 'all' | 'internal' | 'partner',
   options?: FilterDescriptionOptions
 ): string {
-  const parts: string[] = []
-
-  // Commodities
-  if (commodities.length > 0) {
-    parts.push(`🏷️ ${commodities.join(', ')}`)
-  }
-
-  // Locations
-  if (locations.length > 0) {
-    parts.push(`📍 ${locations.join(', ')}`)
-  }
-
-  // Display names (using person emoji since this is "by user")
-  if (displayNames.length > 0) {
-    parts.push(`🧑 ${displayNames.join(', ')}`)
-  }
+  // Build mode line (order type + visibility) - always first
+  const modeParts: string[] = []
 
   // Order type
   if (orderType === 'all') {
-    parts.push('📥 Buy & 📤 Sell')
+    modeParts.push('📥 Buy & 📤 Sell')
   } else if (orderType === 'buy') {
-    parts.push('📥 Buy')
+    modeParts.push('📥 Buy')
   } else {
-    parts.push('📤 Sell')
+    modeParts.push('📤 Sell')
   }
 
   // Visibility (with optional lock icon when enforced by channel)
   const lockIcon = options?.visibilityEnforced ? '🔒 ' : ''
   if (visibility === 'all') {
-    parts.push(`${lockIcon}👤 Internal & 👥 Partner`)
+    modeParts.push(`${lockIcon}👤 Internal & 👥 Partner`)
   } else if (visibility === 'partner') {
-    parts.push(`${lockIcon}👥 Partner`)
+    modeParts.push(`${lockIcon}👥 Partner`)
   } else {
-    parts.push(`${lockIcon}👤 Internal`)
+    modeParts.push(`${lockIcon}👤 Internal`)
   }
 
-  if (parts.join(' | ').length > 72) {
-    return parts.join('\n')
+  const modeLine = modeParts.join(' | ')
+
+  // Build filter parts (commodities, locations, users)
+  const filterParts: string[] = []
+
+  if (commodities.length > 0) {
+    filterParts.push(`🏷️ ${commodities.join(', ')}`)
   }
-  return parts.join(' | ')
+
+  if (locations.length > 0) {
+    filterParts.push(`📍 ${locations.join(', ')}`)
+  }
+
+  if (displayNames.length > 0) {
+    filterParts.push(`🧑 ${displayNames.join(', ')}`)
+  }
+
+  // If no filters, just return mode line
+  if (filterParts.length === 0) {
+    return modeLine
+  }
+
+  // Try to fit everything on one line
+  const filterLine = filterParts.join(' | ')
+  const singleLine = `${modeLine} | ${filterLine}`
+
+  if (singleLine.length <= 72) {
+    return singleLine
+  }
+
+  // Otherwise, mode line first, then filters on second line
+  return `${modeLine}\n${filterLine}`
 }
 
 /**

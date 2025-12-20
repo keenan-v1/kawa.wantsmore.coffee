@@ -242,8 +242,6 @@ const dismissAppUpdateBanner = () => {
 }
 
 const refreshApp = () => {
-  // Clear the stored app version so the new version becomes the baseline
-  sessionStorage.removeItem('kawakawa:appVersion')
   window.location.reload()
 }
 
