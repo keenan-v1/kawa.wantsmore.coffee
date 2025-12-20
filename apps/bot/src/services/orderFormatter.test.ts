@@ -584,7 +584,7 @@ describe('orderFormatter', () => {
         displayNames: [],
       }
       const result = await formatGroupedOrdersMulti([], [], new Map(), filters, 'both')
-      expect(result).toEqual([])
+      expect(result.items).toEqual([])
     })
 
     it('groups sell orders with multi-commodity filter', async () => {
@@ -623,7 +623,7 @@ describe('orderFormatter', () => {
         'both'
       )
 
-      expect(result.length).toBeGreaterThanOrEqual(1)
+      expect(result.items.length).toBeGreaterThanOrEqual(1)
     })
 
     it('combines sell and buy orders in groups', async () => {
@@ -661,7 +661,7 @@ describe('orderFormatter', () => {
         'all'
       )
 
-      expect(result.length).toBeGreaterThanOrEqual(1)
+      expect(result.items.length).toBeGreaterThanOrEqual(1)
     })
 
     it('shows type icons when orderType is all', async () => {
@@ -700,7 +700,7 @@ describe('orderFormatter', () => {
       )
 
       // Results should contain type icons when showing mixed orders
-      expect(result.length).toBeGreaterThanOrEqual(1)
+      expect(result.items.length).toBeGreaterThanOrEqual(1)
     })
 
     it('hides type icons when orderType is specific', async () => {
@@ -738,7 +738,7 @@ describe('orderFormatter', () => {
         'internal'
       )
 
-      expect(result.length).toBeGreaterThanOrEqual(1)
+      expect(result.items.length).toBeGreaterThanOrEqual(1)
     })
 
     it('uses FIO username when available', async () => {
@@ -778,9 +778,9 @@ describe('orderFormatter', () => {
         'both'
       )
 
-      expect(result.length).toBeGreaterThanOrEqual(1)
+      expect(result.items.length).toBeGreaterThanOrEqual(1)
       // The FIO username should be used in the output
-      expect(result[0].value).toContain('FioPlayer')
+      expect(result.items[0].value).toContain('FioPlayer')
     })
   })
 })

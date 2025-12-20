@@ -147,8 +147,8 @@ describe('orders command (strict)', () => {
     mockGetFioUsernames.mockResolvedValue(new Map())
     // Default mock for enrichSellOrdersWithQuantities - returns empty map
     mockEnrichSellOrdersWithQuantities.mockResolvedValue(new Map())
-    // Default mock for formatGroupedOrdersMulti - returns empty array
-    mockFormatGroupedOrdersMulti.mockResolvedValue([])
+    // Default mock for formatGroupedOrdersMulti - returns empty result
+    mockFormatGroupedOrdersMulti.mockResolvedValue({ items: [] })
     // Default mock for buildFilterDescription - returns a simple description
     mockBuildFilterDescription.mockReturnValue('📤Sell | 👤 Internal')
     // Default mock for userDiscordProfiles - not linked
@@ -678,7 +678,9 @@ describe('orders command (strict)', () => {
       mockEnrichSellOrdersWithQuantities.mockResolvedValueOnce(
         new Map([[1, { available: 100, reserved: 50 }]])
       )
-      mockFormatGroupedOrdersMulti.mockResolvedValueOnce([{ name: 'Test', value: 'test value' }])
+      mockFormatGroupedOrdersMulti.mockResolvedValueOnce({
+        items: [{ name: 'Test', value: 'test value' }],
+      })
 
       const { interaction } = createMockInteraction({
         stringOptions: {},

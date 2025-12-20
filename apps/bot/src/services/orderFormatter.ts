@@ -458,6 +458,15 @@ interface PreprocessedOrder {
 }
 
 /**
+ * Result of formatting grouped orders with XIT context
+ */
+export interface FormattedOrdersResult {
+  items: PaginatedItem[]
+  /** XIT materials that were requested but had no matching orders */
+  missingXitMaterials?: string[]
+}
+
+/**
  * Format orders into grouped paginated items (for multi-filter queries).
  * Uses two-pass approach for aligned/padded output.
  *
@@ -468,7 +477,8 @@ interface PreprocessedOrder {
  * @param locationDisplayMode - User's location display preference
  * @param orderType - Filter type to hide redundant icons
  * @param visibility - Filter visibility to hide redundant icons
- * @returns Array of PaginatedItem for display
+ * @param xitQuantities - Optional XIT materials for quantity display and tracking
+ * @returns FormattedOrdersResult with items and optionally missing XIT materials
  */
 export async function formatGroupedOrdersMulti(
   sellOrders: SellOrderData[],
@@ -479,13 +489,16 @@ export async function formatGroupedOrdersMulti(
   orderType: 'all' | 'sell' | 'buy' = 'all',
   visibility: 'all' | 'internal' | 'partner' = 'all',
   xitQuantities?: XitMaterials
-): Promise<PaginatedItem[]> {
+): Promise<FormattedOrdersResult> {
   const groupBy = determineGroupingMulti(filters)
 
   // Only show type icon if viewing mixed types
   const showTypeIcon = orderType === 'all'
   // Only show visibility icon if viewing mixed visibility
   const showVisIcon = visibility === 'all'
+
+  // Track which XIT materials have matching orders
+  const foundXitMaterials = new Set<string>()
 
   // === PASS 1: Preprocess all orders and collect values ===
   const preprocessed: PreprocessedOrder[] = []
@@ -500,10 +513,25 @@ export async function formatGroupedOrdersMulti(
   // Process sell orders
   for (const order of sellOrders) {
     const quantityInfo = sellQuantities.get(order.id)
-    const qty = String(quantityInfo?.remainingQuantity ?? 0)
+    const availableQty = quantityInfo?.remainingQuantity ?? 0
     const fioAge = formatFioAge(quantityInfo?.fioUploadedAt ?? null)
     const ticker = formatCommodity(order.commodity.ticker)
     const locationDisplay = await formatLocation(order.location.naturalId, locationDisplayMode)
+
+    // Track XIT material as found
+    if (xitQuantities && order.commodityTicker in xitQuantities) {
+      foundXitMaterials.add(order.commodityTicker)
+    }
+
+    // For XIT queries, show "requested (available)" format
+    // e.g., "15 (1200)" means 15 requested, 1200 available
+    let qty: string
+    if (xitQuantities && order.commodityTicker in xitQuantities) {
+      const requested = xitQuantities[order.commodityTicker]
+      qty = `${requested} (${availableQty})`
+    } else {
+      qty = String(availableQty)
+    }
 
     const priceInfo = await getOrderDisplayPrice({
       price: order.price,
@@ -529,14 +557,12 @@ export async function formatGroupedOrdersMulti(
     maxPriceLen = Math.max(maxPriceLen, displayPrice.length)
     maxPlLen = Math.max(maxPlLen, plDisplay.length)
 
-    const qtyNum = quantityInfo?.remainingQuantity ?? 0
-
     preprocessed.push({
       type: 'sell',
       groupKey,
       groupName,
       qty,
-      qtyNum,
+      qtyNum: availableQty,
       ticker,
       commodityTicker: order.commodityTicker,
       nameOrLocation,
@@ -627,5 +653,17 @@ export async function formatGroupedOrdersMulti(
     groups.get(p.groupKey)!.lines.push(line)
   }
 
-  return convertGroupsToPaginatedItems(groups)
+  const items = convertGroupsToPaginatedItems(groups)
+
+  // Determine which XIT materials are missing (requested but no orders found)
+  let missingXitMaterials: string[] | undefined
+  if (xitQuantities) {
+    const requestedMaterials = Object.keys(xitQuantities)
+    const missing = requestedMaterials.filter(ticker => !foundXitMaterials.has(ticker))
+    if (missing.length > 0) {
+      missingXitMaterials = missing
+    }
+  }
+
+  return { items, missingXitMaterials }
 }

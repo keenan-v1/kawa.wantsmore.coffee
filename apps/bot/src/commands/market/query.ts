@@ -10,6 +10,7 @@ import {
   resolveCommodity,
   resolveLocation,
   formatCommodity,
+  formatCommodityWithMode,
   formatLocation,
 } from '../../services/display.js'
 import { getDisplaySettings } from '../../services/userSettings.js'
@@ -24,6 +25,7 @@ import {
   formatGroupedOrdersMulti,
   buildFilterDescription,
   type MultiResolvedFilters,
+  type FormattedOrdersResult,
 } from '../../services/orderFormatter.js'
 
 const ORDERS_PER_PAGE = 10
@@ -466,7 +468,7 @@ export const query: Command = {
     }
 
     // Format orders as grouped paginated items
-    const allItems = await formatGroupedOrdersMulti(
+    const { items: allItems, missingXitMaterials } = await formatGroupedOrdersMulti(
       sellOrdersData,
       buyOrdersData,
       sellQuantities,
@@ -477,11 +479,22 @@ export const query: Command = {
       xitQuantities
     )
 
+    // Add missing XIT materials notice to description
+    let fullDescription = filterDesc
+    if (missingXitMaterials && missingXitMaterials.length > 0) {
+      const missingFormatted = await Promise.all(
+        missingXitMaterials.map(t =>
+          formatCommodityWithMode(t, displaySettings.commodityDisplayMode)
+        )
+      )
+      fullDescription += `\n\n⚠️ **Not found:** ${missingFormatted.join(', ')}`
+    }
+
     // Build base embed
     const embed = new EmbedBuilder()
       .setTitle('📦 Market Orders')
       .setColor(0x5865f2)
-      .setDescription(filterDesc)
+      .setDescription(fullDescription)
       .setTimestamp()
 
     // Send announcement to configured channel if enabled

@@ -350,7 +350,7 @@ export const orders: Command = {
     }
 
     // Format orders as grouped paginated items
-    const allItems = await formatGroupedOrdersMulti(
+    const { items: allItems } = await formatGroupedOrdersMulti(
       enrichedSellOrders,
       enrichedBuyOrders,
       sellQuantities,
