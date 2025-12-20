@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js'
 import type { ChatInputCommandInteraction } from 'discord.js'
 import type { Command } from '../../client.js'
 import type { MessageVisibility } from '@kawakawa/types'
+import { parseXitJson, type XitMaterials } from '@kawakawa/types/xit'
 import { db, sellOrders, buyOrders, users } from '@kawakawa/db'
 import { eq, and, desc, inArray } from 'drizzle-orm'
 import { searchUsers } from '../../autocomplete/index.js'
@@ -144,8 +145,24 @@ export const query: Command = {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const queryInput = interaction.options.getString('query')
-    const orderType =
+    let orderType: 'all' | 'sell' | 'buy' =
       (interaction.options.getString('type') as 'all' | 'sell' | 'buy' | null) || 'sell'
+
+    // Check for XIT JSON input
+    let xitQuantities: XitMaterials | undefined
+    let xitName: string | undefined
+    let xitCommodities: string[] = []
+
+    if (queryInput?.trim().startsWith('{')) {
+      const xitResult = parseXitJson(queryInput)
+      if (xitResult.success) {
+        xitQuantities = xitResult.materials
+        xitName = xitResult.name
+        xitCommodities = Object.keys(xitResult.materials)
+        // Force sell orders when using XIT (XIT is always a buying context)
+        orderType = 'sell'
+      }
+    }
     const visibilityOption = interaction.options.getString('visibility') as
       | 'all'
       | 'internal'
@@ -183,7 +200,16 @@ export const query: Command = {
     const resolvedUserIds: number[] = []
     const resolvedDisplayNames: string[] = []
 
-    if (queryInput) {
+    // If XIT JSON was parsed, resolve XIT commodities instead of normal tokens
+    if (xitCommodities.length > 0) {
+      for (const ticker of xitCommodities) {
+        const commodity = await resolveCommodity(ticker)
+        if (commodity) {
+          resolvedCommodities.push(commodity)
+        }
+      }
+    } else if (queryInput) {
+      // Normal token parsing
       // Split by comma or whitespace, filter empty tokens
       const tokens = queryInput.split(/[,\s]+/).filter(Boolean)
       const unresolvedTokens: string[] = []
@@ -233,7 +259,7 @@ export const query: Command = {
     const locationDisplayStrings = await Promise.all(
       resolvedLocations.map(l => formatLocation(l.naturalId, displaySettings.locationDisplayMode))
     )
-    const filterDesc = buildFilterDescription(
+    let filterDesc = buildFilterDescription(
       resolvedCommodities.map(c => formatCommodity(c.ticker)),
       locationDisplayStrings,
       resolvedDisplayNames.filter(Boolean),
@@ -241,6 +267,12 @@ export const query: Command = {
       visibility,
       { visibilityEnforced: channelSettings?.visibilityEnforced ?? false }
     )
+
+    // Add XIT indicator to description if active
+    if (xitQuantities) {
+      const xitLabel = xitName ? `XIT: ${xitName}` : 'XIT Mode'
+      filterDesc = `🧊 ${xitLabel}\n${filterDesc}`
+    }
 
     // Fetch sell orders (no limit - we paginate client-side)
     const sellOrdersData =
@@ -339,7 +371,8 @@ export const query: Command = {
       resolvedFilters,
       displaySettings.locationDisplayMode,
       orderType,
-      visibility
+      visibility,
+      xitQuantities
     )
 
     // Build base embed

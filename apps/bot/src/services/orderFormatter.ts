@@ -2,6 +2,7 @@ import { formatCommodity, formatLocation } from './display.js'
 import { getOrderDisplayPrice, type SellOrderQuantityInfo } from '@kawakawa/services/market'
 import type { PaginatedItem } from '../components/pagination.js'
 import { formatCurrencySymbol, type Currency } from '@kawakawa/types'
+import type { XitMaterials } from '@kawakawa/types/xit'
 
 /**
  * Filters that were resolved from user input (single values)
@@ -444,7 +445,9 @@ interface PreprocessedOrder {
   groupKey: string
   groupName: string
   qty: string
+  qtyNum: number // Numeric quantity for XIT comparison
   ticker: string
+  commodityTicker: string // Original ticker for XIT lookup
   nameOrLocation: string // displayName when groupBy=location, locationDisplay when groupBy=user
   currencySymbol: string
   displayPrice: string
@@ -474,7 +477,8 @@ export async function formatGroupedOrdersMulti(
   filters: MultiResolvedFilters,
   locationDisplayMode: 'names-only' | 'natural-ids-only' | 'both',
   orderType: 'all' | 'sell' | 'buy' = 'all',
-  visibility: 'all' | 'internal' | 'partner' = 'all'
+  visibility: 'all' | 'internal' | 'partner' = 'all',
+  xitQuantities?: XitMaterials
 ): Promise<PaginatedItem[]> {
   const groupBy = determineGroupingMulti(filters)
 
@@ -524,12 +528,16 @@ export async function formatGroupedOrdersMulti(
     maxPriceLen = Math.max(maxPriceLen, displayPrice.length)
     maxPlLen = Math.max(maxPlLen, plDisplay.length)
 
+    const qtyNum = quantityInfo?.remainingQuantity ?? 0
+
     preprocessed.push({
       type: 'sell',
       groupKey,
       groupName,
       qty,
+      qtyNum,
       ticker,
+      commodityTicker: order.commodityTicker,
       nameOrLocation,
       currencySymbol,
       displayPrice,
@@ -574,7 +582,9 @@ export async function formatGroupedOrdersMulti(
       groupKey,
       groupName,
       qty,
+      qtyNum: order.quantity,
       ticker,
+      commodityTicker: order.commodityTicker,
       nameOrLocation,
       currencySymbol,
       displayPrice,
@@ -599,6 +609,14 @@ export async function formatGroupedOrdersMulti(
     let line = `${p.typeIcon}\`${qtyPad} ${tickerPad} ${fromOrOn} ${namePad} @ ${p.currencySymbol}${pricePad} (${plPad})\``
     line += p.visIcon
     if (p.fioAge) line += ` - *${p.fioAge}*`
+
+    // Add XIT quantity indicator for sell orders
+    if (xitQuantities && p.type === 'sell') {
+      const required = xitQuantities[p.commodityTicker]
+      if (required !== undefined) {
+        line += p.qtyNum >= required ? ' ✅' : ' ⚠️'
+      }
+    }
 
     if (!groups.has(p.groupKey)) {
       groups.set(p.groupKey, { name: p.groupName, lines: [] })

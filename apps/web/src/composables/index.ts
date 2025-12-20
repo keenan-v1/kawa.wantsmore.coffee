@@ -31,3 +31,9 @@ export {
   type MarketItem,
   type MarketItemType,
 } from './useMarketData'
+export {
+  useQueryParser,
+  type QueryParseResult,
+  type UseQueryParserOptions,
+  type UseQueryParserReturn,
+} from './useQueryParser'

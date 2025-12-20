@@ -375,7 +375,8 @@ describe('query command', () => {
         expect.any(Object),
         expect.any(String),
         'sell', // orderType defaults to 'sell'
-        'internal' // visibility defaults to 'internal'
+        'internal', // visibility defaults to 'internal'
+        undefined // xitQuantities - not used in this test
       )
       // buyOrders should not have been queried
       expect(mockDbQuery.buyOrders.findMany).not.toHaveBeenCalled()

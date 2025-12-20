@@ -592,3 +592,7 @@ export interface GlobalDefaultsResponse {
 export interface UpdateGlobalDefaultsRequest {
   settings: Record<string, unknown>
 }
+
+// ==================== XIT ACT JSON ====================
+
+export * from './xit'

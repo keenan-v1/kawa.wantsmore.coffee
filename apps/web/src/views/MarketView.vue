@@ -26,7 +26,18 @@
     <v-card class="mb-4">
       <v-card-text class="py-2">
         <!-- Active Filters Display - always visible when filters active -->
-        <div v-if="hasActiveFilters" class="d-flex flex-wrap ga-2 mb-3">
+        <div v-if="hasActiveFilters || isXitActive" class="d-flex flex-wrap ga-2 mb-3">
+          <!-- XIT indicator chip -->
+          <v-chip
+            v-if="isXitActive"
+            closable
+            size="small"
+            color="purple"
+            prepend-icon="mdi-cube-scan"
+            @click:close="clearFiltersWithXit"
+          >
+            XIT{{ xitName ? `: ${xitName}` : '' }}
+          </v-chip>
           <v-chip
             v-if="filters.itemType"
             closable
@@ -197,11 +208,11 @@
               {{ filtersExpanded ? 'Hide Filters' : 'Filters' }}
             </v-btn>
             <v-btn
-              v-if="hasActiveFilters"
+              v-if="hasActiveFilters || isXitActive"
               variant="text"
               color="primary"
               size="small"
-              @click="clearFilters"
+              @click="clearFiltersWithXit"
             >
               Clear Filters
             </v-btn>
@@ -233,7 +244,7 @@
 
     <!-- Market Listings Table -->
     <v-card>
-      <v-card-title>
+      <v-card-title class="d-flex align-center">
         <v-text-field
           v-model="search"
           prepend-icon="mdi-magnify"
@@ -244,6 +255,62 @@
           density="compact"
           style="max-width: 400px"
         />
+        <v-menu location="bottom" :close-on-content-click="false" max-width="360">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon="mdi-help-circle-outline"
+              variant="text"
+              size="small"
+              color="grey"
+              class="ml-1"
+            />
+          </template>
+          <v-card>
+            <v-card-title class="text-subtitle-1 pb-1">Search Syntax</v-card-title>
+            <v-card-text class="pt-0">
+              <p class="text-body-2 mb-2">
+                Type commodity tickers, location IDs, or usernames to filter. Multiple tokens are
+                combined with AND logic.
+              </p>
+              <v-table density="compact" class="text-body-2">
+                <tbody>
+                  <tr>
+                    <td class="font-weight-medium">COF</td>
+                    <td>Filter by commodity</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium">BEN</td>
+                    <td>Filter by location</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium">COF BEN</td>
+                    <td>COF at Benten Station</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium">commodity:RAT</td>
+                    <td>Explicit commodity</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium">location:ANT</td>
+                    <td>Explicit location</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium">user:Alice</td>
+                    <td>Filter by seller</td>
+                  </tr>
+                  <tr>
+                    <td class="font-weight-medium text-purple">XIT JSON</td>
+                    <td>Paste PRUNplanner JSON</td>
+                  </tr>
+                </tbody>
+              </v-table>
+              <p class="text-body-2 text-medium-emphasis mt-2 mb-0">
+                Unrecognized text searches commodity names.
+              </p>
+            </v-card-text>
+          </v-card>
+        </v-menu>
       </v-card-title>
 
       <v-data-table
@@ -440,9 +507,9 @@
             <v-icon size="64" color="grey-lighten-1">mdi-storefront-outline</v-icon>
             <p class="text-h6 mt-4">No orders available</p>
             <p class="text-body-2 text-medium-emphasis">
-              <template v-if="hasActiveFilters">
+              <template v-if="hasActiveFilters || isXitActive">
                 No orders match your filters.
-                <a href="#" @click.prevent="clearFilters">Clear filters</a>
+                <a href="#" @click.prevent="clearFiltersWithXit">Clear filters</a>
               </template>
               <template v-else> No orders yet. Check back later! </template>
             </p>
@@ -610,6 +677,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { PERMISSIONS, type Currency, type OrderType } from '@kawakawa/types'
+import type { XitMaterials } from '@kawakawa/types/xit'
 import { api, type EffectivePrice } from '../services/api'
 import { useUserStore } from '../stores/user'
 import { useSettingsStore } from '../stores/settings'
@@ -622,6 +690,7 @@ import {
   useUrlState,
   useDialogBehavior,
   useMarketData,
+  useQueryParser,
   getDisplayPrice,
   type MarketItem,
   type MarketItemType,
@@ -833,7 +902,7 @@ const getFioBorderClass = (fioUploadedAt: string | null): string => {
   return `fio-border-${color}`
 }
 
-// Row highlighting for own orders and alternating colors
+// Row highlighting for own orders, alternating colors, and XIT quantity matching
 const getRowProps = ({ item, index }: { item: MarketItem; index: number }) => {
   const classes: string[] = []
   if (item.isOwn) classes.push('own-listing-row')
@@ -841,6 +910,19 @@ const getRowProps = ({ item, index }: { item: MarketItem; index: number }) => {
   // Add border classes for responsive view
   classes.push(item.itemType === 'sell' ? 'type-border-sell' : 'type-border-buy')
   classes.push(getFioBorderClass(item.fioUploadedAt))
+
+  // XIT quantity highlighting (only for sell orders in XIT mode)
+  if (isXitActive.value && item.itemType === 'sell' && xitQuantities.value) {
+    const required = xitQuantities.value[item.commodityTicker]
+    if (required !== undefined) {
+      if (item.remainingQuantity >= required) {
+        classes.push('xit-row-success')
+      } else {
+        classes.push('xit-row-warning')
+      }
+    }
+  }
+
   return { class: classes.join(' ') }
 }
 
@@ -887,6 +969,69 @@ const userOptions = computed(() => {
   const users = new Set(marketItems.value.map(l => l.userName))
   return Array.from(users).sort()
 })
+
+// XIT state for quantity requirements highlighting
+const xitQuantities = ref<XitMaterials | null>(null)
+const xitName = ref<string | undefined>(undefined)
+const isXitActive = computed(() => xitQuantities.value !== null)
+
+// Track whether filters were set by the parser (vs manually)
+const parserControlledFilters = ref({
+  commodity: false,
+  location: false,
+  userName: false,
+  itemType: false,
+})
+
+// Query parser for smart search (token parsing + XIT JSON detection)
+const { parseResult } = useQueryParser({
+  search,
+  availableUserNames: userOptions,
+  onFiltersChange: result => {
+    // Update commodity filter - replace with parsed results
+    if (result.commodities.length > 0 || parserControlledFilters.value.commodity) {
+      filters.value.commodity = result.commodities
+      parserControlledFilters.value.commodity = result.commodities.length > 0
+    }
+
+    // Update location filter - replace with parsed results
+    if (result.locations.length > 0 || parserControlledFilters.value.location) {
+      filters.value.location = result.locations
+      parserControlledFilters.value.location = result.locations.length > 0
+    }
+
+    // Update userName filter - replace with parsed result
+    if (result.userNames.length > 0 || parserControlledFilters.value.userName) {
+      filters.value.userName = result.userNames[0] ?? null
+      parserControlledFilters.value.userName = result.userNames.length > 0
+    }
+
+    // Update itemType filter - only when XIT forces it
+    if (result.forcedItemType || parserControlledFilters.value.itemType) {
+      filters.value.itemType = result.forcedItemType
+      parserControlledFilters.value.itemType = result.forcedItemType !== null
+    }
+
+    // Store XIT quantities for highlighting
+    xitQuantities.value = result.xitQuantities
+    xitName.value = result.xitName
+  },
+})
+
+// Clear XIT state when filters are cleared
+const clearFiltersWithXit = () => {
+  clearFilters()
+  search.value = null
+  xitQuantities.value = null
+  xitName.value = undefined
+  // Reset parser control tracking
+  parserControlledFilters.value = {
+    commodity: false,
+    location: false,
+    userName: false,
+    itemType: false,
+  }
+}
 
 const visibilityOptions = [
   { title: 'Internal', value: 'internal' as OrderType },
@@ -938,15 +1083,21 @@ const filteredItems = computed(() => {
     result = result.filter(l => filters.value.location.includes(l.locationId))
   }
 
-  // Apply search
-  if (search.value) {
-    const searchLower = search.value.toLowerCase()
-    result = result.filter(
-      item =>
-        item.commodityTicker.toLowerCase().includes(searchLower) ||
-        item.locationId.toLowerCase().includes(searchLower) ||
-        item.userName.toLowerCase().includes(searchLower) ||
-        (getCommodityCategory(item.commodityTicker)?.toLowerCase().includes(searchLower) ?? false)
+  // Apply text search for unresolved tokens or when nothing was parsed
+  // Only searches commodity ticker and name (not location/user/category)
+  const unresolved = parseResult.value.unresolved
+  if (search.value && (!parseResult.value.parsed || unresolved.length > 0)) {
+    // If we have unresolved tokens, search for those; otherwise search for the whole input
+    const searchTerms = unresolved.length > 0 ? unresolved : [search.value]
+    result = result.filter(item =>
+      searchTerms.some(term => {
+        const termLower = term.toLowerCase()
+        const commodityName = getCommodityName(item.commodityTicker)?.toLowerCase() ?? ''
+        return (
+          item.commodityTicker.toLowerCase().includes(termLower) ||
+          commodityName.includes(termLower)
+        )
+      })
     )
   }
 
@@ -1182,6 +1333,26 @@ onMounted(() => {
 /* Ensure own-listing-row takes precedence over alt-row */
 .own-listing-row.alt-row {
   background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
+
+/* XIT quantity highlighting */
+.xit-row-success {
+  background-color: rgba(var(--v-theme-success), 0.15) !important;
+}
+
+.xit-row-warning {
+  background-color: rgba(var(--v-theme-warning), 0.15) !important;
+}
+
+/* Ensure XIT highlighting takes precedence */
+.xit-row-success.alt-row,
+.xit-row-success.own-listing-row {
+  background-color: rgba(var(--v-theme-success), 0.15) !important;
+}
+
+.xit-row-warning.alt-row,
+.xit-row-warning.own-listing-row {
+  background-color: rgba(var(--v-theme-warning), 0.15) !important;
 }
 
 /* Responsive borders for smaller screens (below lg breakpoint) */

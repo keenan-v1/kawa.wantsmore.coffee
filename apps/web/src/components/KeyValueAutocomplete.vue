@@ -466,6 +466,7 @@ defineExpose({ focus })
 }
 
 .warehouse-icon:empty {
+  opacity: 0;
   /* Reserve space even when empty for alignment */
 }
 
