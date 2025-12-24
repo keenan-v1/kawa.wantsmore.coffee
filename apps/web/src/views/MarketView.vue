@@ -311,6 +311,18 @@
         </v-menu>
       </v-card-title>
 
+      <!-- Not Found Banner -->
+      <v-alert
+        v-if="notFoundCommodities.length > 0"
+        type="info"
+        variant="tonal"
+        density="compact"
+        class="mx-4 mb-2"
+      >
+        <span class="font-weight-medium">Not found:</span>
+        {{ notFoundCommodities.map(ticker => getCommodityDisplay(ticker)).join(', ') }}
+      </v-alert>
+
       <v-data-table
         :headers="headers"
         :items="filteredItems"
@@ -1083,6 +1095,17 @@ const filteredItems = computed(() => {
   // filtering only happens when user selects a chip
 
   return result
+})
+
+// Compute which filtered commodities have no matching orders
+const notFoundCommodities = computed(() => {
+  if (filters.value.commodity.length === 0) return []
+
+  // Get all commodity tickers that appear in the filtered results
+  const foundTickers = new Set(filteredItems.value.map(item => item.commodityTicker))
+
+  // Return filtered commodities that have no matching orders
+  return filters.value.commodity.filter(ticker => !foundTickers.has(ticker))
 })
 
 const openOrderDialog = () => {
