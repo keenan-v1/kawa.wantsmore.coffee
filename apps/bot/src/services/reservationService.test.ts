@@ -17,6 +17,7 @@ const {
   mockDbSelect,
   mockEnrichSellOrders,
   mockGetOrderDisplayPrice,
+  mockGetReservationStatsForBuyOrders,
   mockFormatLocation,
   mockGetFioUsernames,
 } = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ const {
   mockDbSelect: vi.fn(),
   mockEnrichSellOrders: vi.fn(),
   mockGetOrderDisplayPrice: vi.fn(),
+  mockGetReservationStatsForBuyOrders: vi.fn(),
   mockFormatLocation: vi.fn(),
   mockGetFioUsernames: vi.fn(),
 }))
@@ -92,6 +94,7 @@ vi.mock('@kawakawa/db', () => {
 vi.mock('@kawakawa/services/market', () => ({
   enrichSellOrdersWithQuantities: mockEnrichSellOrders,
   getOrderDisplayPrice: mockGetOrderDisplayPrice,
+  getReservationStatsForBuyOrders: mockGetReservationStatsForBuyOrders,
 }))
 
 vi.mock('./locationService.js', () => ({
@@ -125,6 +128,7 @@ describe('reservationService', () => {
     mockUsersFindMany.mockResolvedValue([])
     mockEnrichSellOrders.mockResolvedValue(new Map())
     mockGetOrderDisplayPrice.mockResolvedValue(null)
+    mockGetReservationStatsForBuyOrders.mockResolvedValue(new Map())
     mockFormatLocation.mockResolvedValue('Test Location')
     mockGetFioUsernames.mockResolvedValue(new Map())
   })
@@ -270,14 +274,8 @@ describe('reservationService', () => {
         user: { username: 'buyer', displayName: 'Buyer User' },
       }
       mockBuyOrdersFindMany.mockResolvedValue([mockOrder])
-      // Mock the reservation stats query (returns empty = no reservations)
-      mockDbSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            groupBy: vi.fn().mockResolvedValue([]),
-          }),
-        }),
-      })
+      // Mock the centralized reservation stats function (returns empty = no reservations)
+      mockGetReservationStatsForBuyOrders.mockResolvedValue(new Map())
       mockGetFioUsernames.mockResolvedValue(new Map([[2, 'FioBuyer']]))
 
       const result = await getAvailableBuyOrders('COF', null, 1)
@@ -309,13 +307,7 @@ describe('reservationService', () => {
       }
       mockBuyOrdersFindMany.mockResolvedValue([mockOrder])
       // Mock empty reservation stats (no reservations)
-      mockDbSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            groupBy: vi.fn().mockResolvedValue([]),
-          }),
-        }),
-      })
+      mockGetReservationStatsForBuyOrders.mockResolvedValue(new Map())
 
       const result = await getAvailableBuyOrders('COF', null, 1)
 

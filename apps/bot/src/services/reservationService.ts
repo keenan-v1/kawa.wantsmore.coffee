@@ -3,8 +3,12 @@
  * Shared logic for /reserve and /fill commands
  */
 import { db, sellOrders, buyOrders, orderReservations, users } from '@kawakawa/db'
-import { eq, and, ne, desc, sql, inArray, or, isNull } from 'drizzle-orm'
-import { enrichSellOrdersWithQuantities, getOrderDisplayPrice } from '@kawakawa/services/market'
+import { eq, and, ne, desc, inArray, or, isNull } from 'drizzle-orm'
+import {
+  enrichSellOrdersWithQuantities,
+  getOrderDisplayPrice,
+  getReservationStatsForBuyOrders,
+} from '@kawakawa/services/market'
 import { formatLocation } from './locationService.js'
 import { getFioUsernames } from './userSettings.js'
 import type { LocationDisplayMode, Currency } from '@kawakawa/types'
@@ -137,42 +141,6 @@ export async function getAvailableSellOrders(
 }
 
 /**
- * Get reservation stats for buy orders
- * Returns count and total quantity of active (pending/confirmed) reservations
- */
-async function getBuyOrderReservationStats(
-  buyOrderIds: number[]
-): Promise<Map<number, { count: number; quantity: number; fulfilledQuantity: number }>> {
-  if (buyOrderIds.length === 0) {
-    return new Map()
-  }
-
-  const stats = await db
-    .select({
-      buyOrderId: orderReservations.buyOrderId,
-      count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-      quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-      fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
-    })
-    .from(orderReservations)
-    .where(inArray(orderReservations.buyOrderId, buyOrderIds))
-    .groupBy(orderReservations.buyOrderId)
-
-  const result = new Map<number, { count: number; quantity: number; fulfilledQuantity: number }>()
-  for (const stat of stats) {
-    if (stat.buyOrderId !== null) {
-      result.set(stat.buyOrderId, {
-        count: stat.count,
-        quantity: stat.quantity,
-        fulfilledQuantity: stat.fulfilledQuantity,
-      })
-    }
-  }
-
-  return result
-}
-
-/**
  * Get available buy orders for a commodity (excluding user's own orders)
  * Returns orders with unfilled quantity > 0
  */
@@ -215,7 +183,7 @@ export async function getAvailableBuyOrders(
 
   // Get reservation stats for these orders
   const orderIds = ordersData.map(o => o.id)
-  const reservationStats = await getBuyOrderReservationStats(orderIds)
+  const reservationStats = await getReservationStatsForBuyOrders(orderIds)
 
   // Get FIO usernames for all order owners
   const userIds = [...new Set(ordersData.map(o => o.userId))]

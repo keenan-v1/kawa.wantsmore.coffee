@@ -3,6 +3,38 @@ import { AdminController } from './AdminController.js'
 import { db } from '../db/index.js'
 import * as userSettingsService from '../services/userSettingsService.js'
 
+/**
+ * Create a chainable mock that supports subquery patterns.
+ * This handles complex query chains like:
+ *   db.select().from().innerJoin().groupBy().as() -> subquery
+ *   db.select().from().leftJoin(subquery).where().orderBy()... -> results
+ */
+function createSubqueryMock(aliasFields: Record<string, string>) {
+  return {
+    ...aliasFields,
+    // Make it usable as a subquery reference
+    _isSubquery: true,
+  }
+}
+
+function createQueryChain(finalResult: unknown, subqueryFields?: Record<string, string>) {
+  const chain: Record<string, unknown> = {
+    from: vi.fn().mockReturnThis(),
+    innerJoin: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockImplementation(() => finalResult),
+    as: vi.fn().mockImplementation((alias: string) => createSubqueryMock(subqueryFields || { [alias]: alias })),
+    then: vi.fn().mockImplementation(cb => Promise.resolve(finalResult).then(cb)),
+  }
+  // Make it thenable for await
+  Object.defineProperty(chain, Symbol.toStringTag, { value: 'Promise' })
+  return chain
+}
+
 vi.mock('../db/index.js', () => ({
   db: {
     select: vi.fn(),
@@ -61,6 +93,11 @@ vi.mock('../db/index.js', () => ({
     discordUsername: 'discordUsername',
     connectedAt: 'connectedAt',
   },
+  userSettings: {
+    userId: 'userId',
+    settingKey: 'settingKey',
+    value: 'value',
+  },
 }))
 
 vi.mock('../utils/permissionService.js', () => ({
@@ -88,7 +125,8 @@ describe('AdminController', () => {
 
   describe('listUsers', () => {
     it('should return paginated list of users with FIO sync info', async () => {
-      const mockUsers = [
+      // Results from main query with JOINs
+      const mockUsersWithDetails = [
         {
           id: 1,
           username: 'user1',
@@ -96,6 +134,12 @@ describe('AdminController', () => {
           displayName: 'User 1',
           isActive: true,
           createdAt: new Date(),
+          rolesJson: JSON.stringify([{ id: 'member', name: 'Member', color: 'blue' }]),
+          lastSyncedAt: new Date(),
+          fioUsernameRaw: '"fiouser"',
+          discordId: null,
+          discordUsername: null,
+          discordConnectedAt: null,
         },
         {
           id: 2,
@@ -104,47 +148,38 @@ describe('AdminController', () => {
           displayName: 'User 2',
           isActive: false,
           createdAt: new Date(),
+          rolesJson: JSON.stringify([{ id: 'member', name: 'Member', color: 'blue' }]),
+          lastSyncedAt: null,
+          fioUsernameRaw: null,
+          discordId: null,
+          discordUsername: null,
+          discordConnectedAt: null,
         },
       ]
 
-      // Mock FIO credentials from userSettingsService
-      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValue({
-        fioUsername: 'fiouser',
-        fioApiKey: null,
-      })
-
-      // Setup mock chain for count query
+      // Count query mock
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 2 }]) }
-      // Setup mock chain for users query
-      const usersMock = {
-        where: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        offset: vi.fn().mockResolvedValue(mockUsers),
-      }
-      // Setup mock for other queries (roles, lastSync, discord)
-      const genericMock = {
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockImplementation(() => {
-          // Return a combined mock that works for any query type
-          return Promise.resolve([
-            {
-              roleId: 'member',
-              roleName: 'Member',
-              roleColor: 'blue',
-              lastSyncedAt: new Date(),
-            },
-          ])
-        }),
-      }
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi
-          .fn()
-          .mockReturnValueOnce(countMock)
-          .mockReturnValueOnce(usersMock)
-          .mockReturnValue(genericMock),
-      } as any)
+      // Subquery mocks (for roles, fio sync, fio username)
+      const subqueryMock = createQueryChain([], { userId: 'userId', rolesJson: 'rolesJson' })
+
+      // Main query mock with all JOINs
+      const mainQueryMock = createQueryChain(mockUsersWithDetails)
+
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount === 1) {
+          // Count query
+          return { from: vi.fn().mockReturnValue(countMock) } as any
+        } else if (selectCallCount <= 4) {
+          // Subqueries (roles, fio sync, fio username)
+          return subqueryMock as any
+        } else {
+          // Main query with JOINs
+          return mainQueryMock as any
+        }
+      })
 
       const result = await controller.listUsers(1, 20)
 
@@ -156,7 +191,7 @@ describe('AdminController', () => {
     })
 
     it('should support search filtering', async () => {
-      const mockUsers = [
+      const mockUsersWithDetails = [
         {
           id: 1,
           username: 'searchuser',
@@ -164,41 +199,30 @@ describe('AdminController', () => {
           displayName: 'Search User',
           isActive: true,
           createdAt: new Date(),
+          rolesJson: JSON.stringify([{ id: 'member', name: 'Member', color: 'blue' }]),
+          lastSyncedAt: null,
+          fioUsernameRaw: null,
+          discordId: null,
+          discordUsername: null,
+          discordConnectedAt: null,
         },
       ]
-      const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const mockLastSync = [{ lastSyncedAt: null }]
-      const mockDiscordProfile: unknown[] = [] // No Discord connected
-
-      // Mock FIO credentials from userSettingsService
-      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValue({
-        fioUsername: null,
-        fioApiKey: null,
-      })
 
       const countMock = { where: vi.fn().mockResolvedValue([{ count: 1 }]) }
-      const usersMock = {
-        where: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        offset: vi.fn().mockResolvedValue(mockUsers),
-      }
-      const genericMock = {
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi
-          .fn()
-          .mockResolvedValueOnce(mockRoles)
-          .mockResolvedValueOnce(mockLastSync)
-          .mockResolvedValueOnce(mockDiscordProfile),
-      }
+      const subqueryMock = createQueryChain([], { userId: 'userId' })
+      const mainQueryMock = createQueryChain(mockUsersWithDetails)
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi
-          .fn()
-          .mockReturnValueOnce(countMock)
-          .mockReturnValueOnce(usersMock)
-          .mockReturnValue(genericMock),
-      } as any)
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount === 1) {
+          return { from: vi.fn().mockReturnValue(countMock) } as any
+        } else if (selectCallCount <= 4) {
+          return subqueryMock as any
+        } else {
+          return mainQueryMock as any
+        }
+      })
 
       const result = await controller.listUsers(1, 20, 'search')
 
@@ -209,39 +233,39 @@ describe('AdminController', () => {
 
   describe('getUser', () => {
     it('should return a specific user with FIO sync info', async () => {
-      const mockUser = {
+      const mockUserWithDetails = {
         id: 5,
         username: 'testuser',
         email: 'test@test.com',
         displayName: 'Test User',
         isActive: true,
         createdAt: new Date(),
+        rolesJson: JSON.stringify([
+          { id: 'member', name: 'Member', color: 'blue' },
+          { id: 'lead', name: 'Lead', color: 'green' },
+        ]),
+        lastSyncedAt: new Date(),
+        fioUsernameRaw: '"fiouser"',
+        discordId: null,
+        discordUsername: null,
+        discordConnectedAt: null,
       }
-      const mockRoles = [
-        { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
-        { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
-      ]
-      const mockLastSync = [{ lastSyncedAt: new Date() }]
-      const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // Mock FIO credentials from userSettingsService
-      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
-        fioUsername: 'fiouser',
-        fioApiKey: null,
+      // getUser uses subqueries and a single main query with JOINs
+      const subqueryMock = createQueryChain([], { userId: 'userId' })
+      const mainQueryMock = createQueryChain([mockUserWithDetails])
+
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount <= 3) {
+          // Subqueries (roles, fio sync, fio username)
+          return subqueryMock as any
+        } else {
+          // Main query with JOINs
+          return mainQueryMock as any
+        }
       })
-
-      // getUser makes 4 queries: user, roles, lastSync, discord (settings via service)
-      const selectMock = {
-        from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi
-          .fn()
-          .mockResolvedValueOnce([mockUser]) // user query
-          .mockResolvedValueOnce(mockRoles) // roles query
-          .mockResolvedValueOnce(mockLastSync) // lastSync query
-          .mockResolvedValueOnce(mockDiscordProfile), // discord query
-      }
-      vi.mocked(db.select).mockReturnValue(selectMock as any)
 
       const result = await controller.getUser(5)
 
@@ -253,11 +277,18 @@ describe('AdminController', () => {
     })
 
     it('should return 404 when user not found', async () => {
-      const selectMock = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([]),
-      }
-      vi.mocked(db.select).mockReturnValue(selectMock as any)
+      const subqueryMock = createQueryChain([], { userId: 'userId' })
+      const mainQueryMock = createQueryChain([]) // Empty - no user found
+
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount <= 3) {
+          return subqueryMock as any
+        } else {
+          return mainQueryMock as any
+        }
+      })
 
       await expect(controller.getUser(999)).rejects.toThrow('User not found')
       expect(setStatusSpy).toHaveBeenCalledWith(404)
@@ -266,37 +297,45 @@ describe('AdminController', () => {
 
   describe('updateUser', () => {
     it('should update user isActive status', async () => {
-      const mockUser = {
+      const mockUserWithDetails = {
         id: 5,
         username: 'testuser',
         email: null,
         displayName: 'Test',
         isActive: false,
         createdAt: new Date(),
+        rolesJson: JSON.stringify([{ id: 'member', name: 'Member', color: 'blue' }]),
+        lastSyncedAt: null,
+        fioUsernameRaw: null,
+        discordId: null,
+        discordUsername: null,
+        discordConnectedAt: null,
       }
-      const mockRoles = [{ roleId: 'member', roleName: 'Member', roleColor: 'blue' }]
-      const mockLastSync = [{ lastSyncedAt: null }]
-      const mockDiscordProfile: unknown[] = [] // No Discord connected
 
-      // Mock FIO credentials from userSettingsService
-      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
-        fioUsername: null,
-        fioApiKey: null,
-      })
-
-      // updateUser: existence check, then getUser (user, roles, lastSync, discord)
-      const selectMock = {
+      // Existence check mock
+      const existenceCheckMock = {
         from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi
-          .fn()
-          .mockResolvedValueOnce([{ id: 5 }]) // existence check
-          .mockResolvedValueOnce([mockUser]) // getUser - user
-          .mockResolvedValueOnce(mockRoles) // getUser - roles
-          .mockResolvedValueOnce(mockLastSync) // getUser - lastSync
-          .mockResolvedValueOnce(mockDiscordProfile), // getUser - discord
+        where: vi.fn().mockResolvedValue([{ id: 5 }]),
       }
-      vi.mocked(db.select).mockReturnValue(selectMock as any)
+
+      // Subquery and main query mocks for getUser
+      const subqueryMock = createQueryChain([], { userId: 'userId' })
+      const mainQueryMock = createQueryChain([mockUserWithDetails])
+
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount === 1) {
+          // Existence check
+          return existenceCheckMock as any
+        } else if (selectCallCount <= 4) {
+          // Subqueries for getUser
+          return subqueryMock as any
+        } else {
+          // Main query for getUser
+          return mainQueryMock as any
+        }
+      })
 
       const updateMock = {
         set: vi.fn().mockReturnThis(),
@@ -315,20 +354,23 @@ describe('AdminController', () => {
     })
 
     it('should update user roles', async () => {
-      const mockUser = {
+      const mockUserWithDetails = {
         id: 5,
         username: 'testuser',
         email: null,
         displayName: 'Test',
         isActive: true,
         createdAt: new Date(),
+        rolesJson: JSON.stringify([
+          { id: 'member', name: 'Member', color: 'blue' },
+          { id: 'lead', name: 'Lead', color: 'green' },
+        ]),
+        lastSyncedAt: null,
+        fioUsernameRaw: null,
+        discordId: null,
+        discordUsername: null,
+        discordConnectedAt: null,
       }
-      const mockRoles = [
-        { roleId: 'member', roleName: 'Member', roleColor: 'blue' },
-        { roleId: 'lead', roleName: 'Lead', roleColor: 'green' },
-      ]
-      const mockLastSync = [{ lastSyncedAt: null }]
-      const mockDiscordProfile: unknown[] = [] // No Discord connected
       const validRoles = [
         { id: 'applicant' },
         { id: 'member' },
@@ -336,13 +378,7 @@ describe('AdminController', () => {
         { id: 'administrator' },
       ]
 
-      // Mock FIO credentials from userSettingsService
-      vi.mocked(userSettingsService.getFioCredentials).mockResolvedValueOnce({
-        fioUsername: null,
-        fioApiKey: null,
-      })
-
-      // Existence check
+      // Existence check mock
       const existenceCheckMock = {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockResolvedValue([{ id: 5 }]),
@@ -351,22 +387,27 @@ describe('AdminController', () => {
       const validRolesMock = {
         from: vi.fn().mockResolvedValue(validRoles),
       }
-      // getUser queries (user, roles, lastSync, discord)
-      const getUserMock = {
-        from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi
-          .fn()
-          .mockResolvedValueOnce([mockUser])
-          .mockResolvedValueOnce(mockRoles)
-          .mockResolvedValueOnce(mockLastSync)
-          .mockResolvedValueOnce(mockDiscordProfile),
-      }
+      // Subquery and main query mocks for getUser
+      const subqueryMock = createQueryChain([], { userId: 'userId' })
+      const mainQueryMock = createQueryChain([mockUserWithDetails])
 
-      vi.mocked(db.select)
-        .mockReturnValueOnce(existenceCheckMock as any)
-        .mockReturnValueOnce(validRolesMock as any)
-        .mockReturnValue(getUserMock as any)
+      let selectCallCount = 0
+      vi.mocked(db.select).mockImplementation(() => {
+        selectCallCount++
+        if (selectCallCount === 1) {
+          // Existence check
+          return existenceCheckMock as any
+        } else if (selectCallCount === 2) {
+          // Valid roles check
+          return validRolesMock as any
+        } else if (selectCallCount <= 5) {
+          // Subqueries for getUser
+          return subqueryMock as any
+        } else {
+          // Main query for getUser
+          return mainQueryMock as any
+        }
+      })
 
       const deleteMock = { where: vi.fn().mockResolvedValue(undefined) }
       vi.mocked(db.delete).mockReturnValue(deleteMock as any)

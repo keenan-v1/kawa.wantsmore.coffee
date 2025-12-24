@@ -150,7 +150,29 @@ export class MarketController extends Controller {
       return []
     }
 
-    // Get all sell orders (including user's own)
+    // Build reservation stats subquery - aggregates in single pass with the main query
+    // Use SQL now() instead of JavaScript Date to avoid serialization issues
+    const reservationStats = db
+      .select({
+        sellOrderId: orderReservations.sellOrderId,
+        activeCount:
+          sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))`.as(
+            'active_count'
+          ),
+        activeQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'active_quantity'
+          ),
+        fulfilledQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'fulfilled_quantity'
+          ),
+      })
+      .from(orderReservations)
+      .groupBy(orderReservations.sellOrderId)
+      .as('reservation_stats')
+
+    // Get all sell orders (including user's own) with reservation stats in a single query
     const orders = await db
       .select({
         id: sellOrders.id,
@@ -164,9 +186,13 @@ export class MarketController extends Controller {
         limitMode: sellOrders.limitMode,
         limitQuantity: sellOrders.limitQuantity,
         sellerName: users.displayName,
+        activeReservationCount: reservationStats.activeCount,
+        reservedQuantity: reservationStats.activeQuantity,
+        fulfilledQuantity: reservationStats.fulfilledQuantity,
       })
       .from(sellOrders)
       .innerJoin(users, eq(sellOrders.userId, users.id))
+      .leftJoin(reservationStats, eq(sellOrders.id, reservationStats.sellOrderId))
 
     // Get inventory for all sellers to calculate available quantities
     const sellerIds = [...new Set(orders.map(o => o.userId))]
@@ -207,7 +233,11 @@ export class MarketController extends Controller {
     }
 
     // Process orders and filter by permissions and availability
-    const filteredOrders: FilteredSellOrder[] = []
+    const filteredOrders: (FilteredSellOrder & {
+      activeReservationCount: number
+      reservedQuantity: number
+      fulfilledQuantity: number
+    })[] = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -276,6 +306,9 @@ export class MarketController extends Controller {
           isFallback,
           priceLocationId,
           pricingMode,
+          activeReservationCount: order.activeReservationCount ?? 0,
+          reservedQuantity: order.reservedQuantity ?? 0,
+          fulfilledQuantity: order.fulfilledQuantity ?? 0,
         })
       }
     }
@@ -292,47 +325,12 @@ export class MarketController extends Controller {
       )
     }
 
-    // Get reservation counts for all sell orders (including fulfilled)
-    const sellOrderIds = filteredOrders.map(o => o.id)
-    const reservationMap = new Map<
-      number,
-      { count: number; quantity: number; fulfilledQuantity: number }
-    >()
-
-    if (sellOrderIds.length > 0) {
-      const reservationStats = await db
-        .select({
-          sellOrderId: orderReservations.sellOrderId,
-          count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-          fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
-        })
-        .from(orderReservations)
-        .where(inArray(orderReservations.sellOrderId, sellOrderIds))
-        .groupBy(orderReservations.sellOrderId)
-
-      for (const stat of reservationStats) {
-        if (stat.sellOrderId !== null) {
-          reservationMap.set(stat.sellOrderId, {
-            count: stat.count,
-            quantity: stat.quantity,
-            fulfilledQuantity: stat.fulfilledQuantity,
-          })
-        }
-      }
-    }
-
-    // Build final listings
+    // Build final listings - reservation stats already included from query
     const listings: MarketListing[] = filteredOrders.map(order => {
-      const reservationData = reservationMap.get(order.id) ?? {
-        count: 0,
-        quantity: 0,
-        fulfilledQuantity: 0,
-      }
       // Subtract both active reservations AND fulfilled from remaining quantity
       const remainingQuantity = Math.max(
         0,
-        order.availableQuantity - reservationData.quantity - reservationData.fulfilledQuantity
+        order.availableQuantity - order.reservedQuantity - order.fulfilledQuantity
       )
 
       return {
@@ -351,8 +349,8 @@ export class MarketController extends Controller {
         availableQuantity: order.availableQuantity,
         isOwn: order.isOwn,
         jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
-        activeReservationCount: reservationData.count,
-        reservedQuantity: reservationData.quantity,
+        activeReservationCount: order.activeReservationCount,
+        reservedQuantity: order.reservedQuantity,
         remainingQuantity,
         fioUploadedAt: order.fioUploadedAt?.toISOString() ?? null,
       }
@@ -405,7 +403,29 @@ export class MarketController extends Controller {
       return []
     }
 
-    // Get all buy orders
+    // Build reservation stats subquery - aggregates in single pass with the main query
+    // Use SQL now() instead of JavaScript Date to avoid serialization issues
+    const reservationStats = db
+      .select({
+        buyOrderId: orderReservations.buyOrderId,
+        activeCount:
+          sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))`.as(
+            'active_count'
+          ),
+        activeQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'active_quantity'
+          ),
+        fulfilledQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'fulfilled_quantity'
+          ),
+      })
+      .from(orderReservations)
+      .groupBy(orderReservations.buyOrderId)
+      .as('reservation_stats')
+
+    // Get all buy orders with reservation stats in a single query
     const orders = await db
       .select({
         id: buyOrders.id,
@@ -418,12 +438,20 @@ export class MarketController extends Controller {
         priceListCode: buyOrders.priceListCode,
         orderType: buyOrders.orderType,
         buyerName: users.displayName,
+        activeReservationCount: reservationStats.activeCount,
+        reservedQuantity: reservationStats.activeQuantity,
+        fulfilledQuantity: reservationStats.fulfilledQuantity,
       })
       .from(buyOrders)
       .innerJoin(users, eq(buyOrders.userId, users.id))
+      .leftJoin(reservationStats, eq(buyOrders.id, reservationStats.buyOrderId))
 
     // Process orders and filter by permissions
-    const filteredBuyOrders: FilteredBuyOrder[] = []
+    const filteredBuyOrders: (FilteredBuyOrder & {
+      activeReservationCount: number
+      reservedQuantity: number
+      fulfilledQuantity: number
+    })[] = []
 
     for (const order of orders) {
       const isOwn = order.userId === userId
@@ -476,6 +504,9 @@ export class MarketController extends Controller {
         isFallback,
         priceLocationId,
         pricingMode,
+        activeReservationCount: order.activeReservationCount ?? 0,
+        reservedQuantity: order.reservedQuantity ?? 0,
+        fulfilledQuantity: order.fulfilledQuantity ?? 0,
       })
     }
 
@@ -491,47 +522,12 @@ export class MarketController extends Controller {
       )
     }
 
-    // Get reservation counts for all buy orders (including fulfilled)
-    const buyOrderIds = filteredBuyOrders.map(o => o.id)
-    const buyReservationMap = new Map<
-      number,
-      { count: number; quantity: number; fulfilledQuantity: number }
-    >()
-
-    if (buyOrderIds.length > 0) {
-      const reservationStats = await db
-        .select({
-          buyOrderId: orderReservations.buyOrderId,
-          count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-          fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
-        })
-        .from(orderReservations)
-        .where(inArray(orderReservations.buyOrderId, buyOrderIds))
-        .groupBy(orderReservations.buyOrderId)
-
-      for (const stat of reservationStats) {
-        if (stat.buyOrderId !== null) {
-          buyReservationMap.set(stat.buyOrderId, {
-            count: stat.count,
-            quantity: stat.quantity,
-            fulfilledQuantity: stat.fulfilledQuantity,
-          })
-        }
-      }
-    }
-
-    // Build final requests
+    // Build final requests - reservation stats already included from query
     const requests: MarketBuyRequest[] = filteredBuyOrders.map(order => {
-      const reservationData = buyReservationMap.get(order.id) ?? {
-        count: 0,
-        quantity: 0,
-        fulfilledQuantity: 0,
-      }
       // Subtract both active reservations AND fulfilled from remaining quantity
       const remainingQuantity = Math.max(
         0,
-        order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
+        order.quantity - order.reservedQuantity - order.fulfilledQuantity
       )
 
       return {
@@ -550,8 +546,8 @@ export class MarketController extends Controller {
         orderType: order.orderType,
         isOwn: order.isOwn,
         jumpCount: destination ? (jumpCountMap.get(order.locationId) ?? null) : null,
-        activeReservationCount: reservationData.count,
-        reservedQuantity: reservationData.quantity,
+        activeReservationCount: order.activeReservationCount,
+        reservedQuantity: order.reservedQuantity,
         remainingQuantity,
         fioUploadedAt: null, // Not applicable for buy orders
       }

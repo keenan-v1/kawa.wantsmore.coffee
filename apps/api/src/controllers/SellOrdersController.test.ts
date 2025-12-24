@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SellOrdersController } from './SellOrdersController.js'
 import { db } from '../db/index.js'
 import * as permissionService from '../utils/permissionService.js'
+import * as marketService from '@kawakawa/services/market'
 
 vi.mock('../db/index.js', () => ({
   db: {
@@ -51,6 +52,22 @@ vi.mock('../utils/permissionService.js', () => ({
   hasPermission: vi.fn(),
 }))
 
+vi.mock('@kawakawa/services/market', () => ({
+  enrichSellOrdersWithQuantities: vi.fn(),
+  calculateAvailableQuantity: vi.fn((fioQty, mode, limit) => {
+    switch (mode) {
+      case 'none':
+        return fioQty
+      case 'max_sell':
+        return Math.min(fioQty, limit ?? 0)
+      case 'reserve':
+        return Math.max(0, fioQty - (limit ?? 0))
+      default:
+        return fioQty
+    }
+  }),
+}))
+
 describe('SellOrdersController', () => {
   let controller: SellOrdersController
   let mockSelect: any
@@ -58,17 +75,6 @@ describe('SellOrdersController', () => {
   let mockUpdate: any
   let mockDelete: any
   const mockRequest = { user: { userId: 1, username: 'testuser', roles: ['member'] } }
-
-  // Helper to create a chainable mock for where() that supports .groupBy()
-  const createWhereChainWithGroupBy = (groupByResult: any[]) => {
-    const chain: any = {
-      groupBy: vi.fn().mockResolvedValue(groupByResult),
-    }
-    // Make the chain thenable in case it's awaited without groupBy
-    chain.then = (resolve: any) => Promise.resolve([]).then(resolve)
-    chain.catch = (reject: any) => Promise.resolve([]).catch(reject)
-    return chain
-  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -105,10 +111,13 @@ describe('SellOrdersController', () => {
 
   describe('getSellOrders', () => {
     it('should return sell orders with calculated availability', async () => {
-      // First query returns orders
+      const fioUploadDate = new Date('2024-01-15T10:00:00Z')
+
+      // Mock orders from db
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'H2O',
           locationId: 'BEN',
           price: '100.00',
@@ -120,6 +129,7 @@ describe('SellOrdersController', () => {
         },
         {
           id: 2,
+          userId: 1,
           commodityTicker: 'RAT',
           locationId: 'BEN',
           price: '50.00',
@@ -130,35 +140,39 @@ describe('SellOrdersController', () => {
           priceListCode: null,
         },
       ]
-      // Second query returns inventory with location from storage (now includes lastSyncedAt and fioUploadedAt)
-      const fioUploadDate = new Date('2024-01-15T10:00:00Z')
-      const mockInventory = [
-        {
-          commodityTicker: 'H2O',
-          quantity: 1000,
-          locationId: 'BEN',
-          lastSyncedAt: new Date(),
-          fioUploadedAt: fioUploadDate,
-        },
-        {
-          commodityTicker: 'RAT',
-          quantity: 500,
-          locationId: 'BEN',
-          lastSyncedAt: new Date(),
-          fioUploadedAt: fioUploadDate,
-        },
-      ]
 
-      // Query sequence:
-      // 1. Orders query
-      // 2. Inventory query
-      // 3. Reservation stats query (uses .groupBy())
-      // 4. Fulfilled reservations query
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats with groupBy
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      // Mock db.select().from().where() to return orders
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      // Mock enrichSellOrdersWithQuantities to return quantity info
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 1000,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1000,
+              activeReservationCount: 0,
+              fioUploadedAt: fioUploadDate,
+            },
+          ],
+          [
+            2,
+            {
+              fioQuantity: 500,
+              availableQuantity: 200, // max_sell mode: min(500, 200)
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 200,
+              activeReservationCount: 0,
+              fioUploadedAt: fioUploadDate,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -213,6 +227,7 @@ describe('SellOrdersController', () => {
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'CAF',
           locationId: 'BEN',
           price: '75.00',
@@ -220,17 +235,28 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'reserve',
           limitQuantity: 500,
+          priceListCode: null,
         },
       ]
-      const mockInventory = [
-        { commodityTicker: 'CAF', quantity: 2000, locationId: 'BEN', lastSyncedAt: new Date() },
-      ]
 
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 2000,
+              availableQuantity: 1500, // reserve mode: max(0, 2000 - 500)
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1500,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -241,6 +267,7 @@ describe('SellOrdersController', () => {
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'H2O',
           locationId: 'BEN',
           price: '100.00',
@@ -248,16 +275,28 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'none',
           limitQuantity: null,
+          priceListCode: null,
         },
       ]
-      // No inventory for this location/commodity
-      const mockInventory: any[] = []
 
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 0,
+              availableQuantity: 0,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -267,7 +306,6 @@ describe('SellOrdersController', () => {
 
     it('should return empty array when no orders exist', async () => {
       mockSelect.where.mockResolvedValueOnce([]) // No orders
-      mockSelect.where.mockResolvedValueOnce([]) // No inventory (still queried)
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -278,6 +316,7 @@ describe('SellOrdersController', () => {
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'H2O',
           locationId: 'BEN',
           price: '100.00',
@@ -285,17 +324,28 @@ describe('SellOrdersController', () => {
           orderType: 'partner',
           limitMode: 'none',
           limitQuantity: null,
+          priceListCode: null,
         },
       ]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
-      ]
 
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 1000,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1000,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -308,6 +358,7 @@ describe('SellOrdersController', () => {
     it('should return a specific sell order', async () => {
       const mockOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -315,15 +366,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
       // First query: get order
       mockSelect.where.mockResolvedValueOnce([mockOrder])
-      // Second query: getInventoryWithSyncTime
-      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000, lastSyncedAt: new Date() }])
-      // Third query: getReservationCounts - active stats
-      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }])
-      // Fourth query: getReservationCounts - fulfilled reservations (for FIO-backed 'none' mode)
-      mockSelect.where.mockResolvedValueOnce([])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 1000,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1000,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrder(1, mockRequest)
 
@@ -353,10 +416,10 @@ describe('SellOrdersController', () => {
         .mockResolvedValueOnce([{ ticker: 'H2O' }]) // commodity exists
         .mockResolvedValueOnce([{ id: 'BEN' }]) // location exists
         .mockResolvedValueOnce([]) // no duplicate
-        .mockResolvedValueOnce([]) // no FIO inventory
 
       const newOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -364,9 +427,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockInsert.returning.mockResolvedValueOnce([newOrder])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 0,
+              availableQuantity: 0,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const setStatusSpy = vi.spyOn(controller, 'setStatus')
 
@@ -396,10 +477,10 @@ describe('SellOrdersController', () => {
         .mockResolvedValueOnce([{ ticker: 'H2O' }]) // commodity exists
         .mockResolvedValueOnce([{ id: 'BEN' }]) // location exists
         .mockResolvedValueOnce([]) // no duplicate
-        .mockResolvedValueOnce([]) // no FIO inventory
 
       const newOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -407,9 +488,27 @@ describe('SellOrdersController', () => {
         orderType: 'partner',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockInsert.returning.mockResolvedValueOnce([newOrder])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 0,
+              availableQuantity: 0,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.createSellOrder(
         {
@@ -559,10 +658,10 @@ describe('SellOrdersController', () => {
         .mockResolvedValueOnce([{ ticker: 'H2O' }]) // commodity exists
         .mockResolvedValueOnce([{ id: 'BEN' }]) // location exists
         .mockResolvedValueOnce([]) // no duplicate (different orderType)
-        .mockResolvedValueOnce([{ quantity: 1000 }]) // FIO inventory
 
       const newOrder = {
         id: 2,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -570,9 +669,27 @@ describe('SellOrdersController', () => {
         orderType: 'partner',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockInsert.returning.mockResolvedValueOnce([newOrder])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            2,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 1000,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1000,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.createSellOrder(
         {
@@ -594,10 +711,10 @@ describe('SellOrdersController', () => {
         .mockResolvedValueOnce([{ ticker: 'H2O' }]) // commodity exists
         .mockResolvedValueOnce([{ id: 'BEN' }]) // location exists
         .mockResolvedValueOnce([]) // no duplicate (different currency)
-        .mockResolvedValueOnce([{ quantity: 1000 }]) // FIO inventory
 
       const newOrder = {
         id: 2,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -605,9 +722,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockInsert.returning.mockResolvedValueOnce([newOrder])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            2,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 1000,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1000,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.createSellOrder(
         {
@@ -628,10 +763,10 @@ describe('SellOrdersController', () => {
         .mockResolvedValueOnce([{ ticker: 'CAF' }])
         .mockResolvedValueOnce([{ id: 'BEN' }])
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ quantity: 2000 }]) // FIO inventory
 
       const newOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'CAF',
         locationId: 'BEN',
         price: '75.00',
@@ -639,9 +774,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'reserve',
         limitQuantity: 500,
+        priceListCode: null,
       }
 
       mockInsert.returning.mockResolvedValueOnce([newOrder])
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 2000,
+              availableQuantity: 1500, // reserve: 2000 - 500
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 1500,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.createSellOrder(
         {
@@ -668,6 +821,7 @@ describe('SellOrdersController', () => {
 
       const updatedOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '150.00',
@@ -675,12 +829,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory (with sync time)
-      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
-      mockSelect.where.mockResolvedValueOnce([]) // fulfilled reservations
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 0,
+              availableQuantity: 0,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.updateSellOrder(1, { price: 150 }, mockRequest)
 
@@ -693,6 +862,7 @@ describe('SellOrdersController', () => {
 
       const updatedOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -700,12 +870,27 @@ describe('SellOrdersController', () => {
         orderType: 'partner',
         limitMode: 'none',
         limitQuantity: null,
+        priceListCode: null,
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([]) // no FIO inventory (with sync time)
-      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
-      mockSelect.where.mockResolvedValueOnce([]) // fulfilled reservations
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 0,
+              availableQuantity: 0,
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.updateSellOrder(1, { orderType: 'partner' }, mockRequest)
 
@@ -733,6 +918,7 @@ describe('SellOrdersController', () => {
 
       const updatedOrder = {
         id: 1,
+        userId: 1,
         commodityTicker: 'H2O',
         locationId: 'BEN',
         price: '100.00',
@@ -740,12 +926,27 @@ describe('SellOrdersController', () => {
         orderType: 'internal',
         limitMode: 'max_sell',
         limitQuantity: 300,
+        priceListCode: null,
       }
 
       mockUpdate.returning.mockResolvedValueOnce([updatedOrder])
-      mockSelect.where.mockResolvedValueOnce([{ quantity: 1000, lastSyncedAt: new Date() }])
-      mockSelect.where.mockResolvedValueOnce([{ count: 0, quantity: 0 }]) // reservation stats
-      mockSelect.where.mockResolvedValueOnce([{ total: 0 }]) // fulfilled total (max_sell uses sum query)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 300, // min(1000, 300)
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 300,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.updateSellOrder(
         1,
@@ -799,6 +1000,7 @@ describe('SellOrdersController', () => {
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'H2O',
           locationId: 'BEN',
           price: '100.00',
@@ -806,17 +1008,28 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'reserve',
           limitQuantity: 1500, // Reserve more than we have
+          priceListCode: null,
         },
       ]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 1000, locationId: 'BEN', lastSyncedAt: new Date() },
-      ]
 
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 1000,
+              availableQuantity: 0, // max(0, 1000 - 1500) = 0
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 0,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 
@@ -828,6 +1041,7 @@ describe('SellOrdersController', () => {
       const mockOrders = [
         {
           id: 1,
+          userId: 1,
           commodityTicker: 'H2O',
           locationId: 'BEN',
           price: '100.00',
@@ -835,17 +1049,28 @@ describe('SellOrdersController', () => {
           orderType: 'internal',
           limitMode: 'max_sell',
           limitQuantity: 2000, // Want to sell more than we have
+          priceListCode: null,
         },
       ]
-      const mockInventory = [
-        { commodityTicker: 'H2O', quantity: 500, locationId: 'BEN', lastSyncedAt: new Date() },
-      ]
 
-      mockSelect.where
-        .mockResolvedValueOnce(mockOrders)
-        .mockResolvedValueOnce(mockInventory)
-        .mockReturnValueOnce(createWhereChainWithGroupBy([])) // reservation stats
-        .mockResolvedValueOnce([]) // fulfilled reservations
+      mockSelect.where.mockResolvedValueOnce(mockOrders)
+
+      vi.mocked(marketService.enrichSellOrdersWithQuantities).mockResolvedValueOnce(
+        new Map([
+          [
+            1,
+            {
+              fioQuantity: 500,
+              availableQuantity: 500, // min(500, 2000) = 500
+              reservedQuantity: 0,
+              fulfilledQuantity: 0,
+              remainingQuantity: 500,
+              activeReservationCount: 0,
+              fioUploadedAt: null,
+            },
+          ],
+        ])
+      )
 
       const result = await controller.getSellOrders(mockRequest)
 

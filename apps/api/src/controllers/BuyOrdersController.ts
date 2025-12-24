@@ -14,7 +14,7 @@ import {
 } from 'tsoa'
 import type { Currency, OrderType, PricingMode } from '@kawakawa/types'
 import { db, buyOrders, fioCommodities, fioLocations, orderReservations } from '../db/index.js'
-import { eq, and, inArray, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { BadRequest, NotFound, Forbidden } from '../utils/errors.js'
 import { hasPermission } from '../utils/permissionService.js'
@@ -83,50 +83,57 @@ export class BuyOrdersController extends Controller {
   public async getBuyOrders(@Request() request: { user: JwtPayload }): Promise<BuyOrderResponse[]> {
     const userId = request.user.userId
 
-    const orders = await db.select().from(buyOrders).where(eq(buyOrders.userId, userId))
+    // Build reservation stats subquery - aggregates in single pass with the main query
+    // Use SQL now() instead of JavaScript Date to avoid serialization issues
+    const reservationStats = db
+      .select({
+        buyOrderId: orderReservations.buyOrderId,
+        activeCount:
+          sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))`.as(
+            'active_count'
+          ),
+        activeQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'active_quantity'
+          ),
+        fulfilledQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'fulfilled_quantity'
+          ),
+      })
+      .from(orderReservations)
+      .groupBy(orderReservations.buyOrderId)
+      .as('reservation_stats')
 
-    // Get reservation counts for all buy orders
-    const orderIds = orders.map(o => o.id)
-    const reservationMap = new Map<
-      number,
-      { count: number; quantity: number; fulfilledQuantity: number }
-    >()
+    // Get all buy orders for user with reservation stats in a single query
+    const orders = await db
+      .select({
+        id: buyOrders.id,
+        commodityTicker: buyOrders.commodityTicker,
+        locationId: buyOrders.locationId,
+        quantity: buyOrders.quantity,
+        price: buyOrders.price,
+        currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
+        orderType: buyOrders.orderType,
+        activeReservationCount: reservationStats.activeCount,
+        reservedQuantity: reservationStats.activeQuantity,
+        fulfilledQuantity: reservationStats.fulfilledQuantity,
+      })
+      .from(buyOrders)
+      .leftJoin(reservationStats, eq(buyOrders.id, reservationStats.buyOrderId))
+      .where(eq(buyOrders.userId, userId))
 
-    if (orderIds.length > 0) {
-      // Get active reservations (pending/confirmed) and fulfilled in one query
-      const reservationStats = await db
-        .select({
-          buyOrderId: orderReservations.buyOrderId,
-          count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-          quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-          fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
-        })
-        .from(orderReservations)
-        .where(inArray(orderReservations.buyOrderId, orderIds))
-        .groupBy(orderReservations.buyOrderId)
-
-      for (const stat of reservationStats) {
-        if (stat.buyOrderId !== null) {
-          reservationMap.set(stat.buyOrderId, {
-            count: stat.count,
-            quantity: stat.quantity,
-            fulfilledQuantity: stat.fulfilledQuantity,
-          })
-        }
-      }
+    if (orders.length === 0) {
+      return []
     }
 
     return Promise.all(
       orders.map(async order => {
-        const reservationData = reservationMap.get(order.id) ?? {
-          count: 0,
-          quantity: 0,
-          fulfilledQuantity: 0,
-        }
-        const remainingQuantity = Math.max(
-          0,
-          order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
-        )
+        const activeCount = order.activeReservationCount ?? 0
+        const reservedQty = order.reservedQuantity ?? 0
+        const fulfilledQty = order.fulfilledQuantity ?? 0
+        const remainingQuantity = Math.max(0, order.quantity - reservedQty - fulfilledQty)
 
         // Calculate effective price for dynamic pricing orders
         const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
@@ -157,9 +164,9 @@ export class BuyOrdersController extends Controller {
           currency: order.currency,
           priceListCode: order.priceListCode,
           orderType: order.orderType,
-          activeReservationCount: reservationData.count,
-          reservedQuantity: reservationData.quantity,
-          fulfilledQuantity: reservationData.fulfilledQuantity,
+          activeReservationCount: activeCount,
+          reservedQuantity: reservedQty,
+          fulfilledQuantity: fulfilledQty,
           remainingQuantity,
           pricingMode,
           effectivePrice,
@@ -180,9 +187,43 @@ export class BuyOrdersController extends Controller {
   ): Promise<BuyOrderResponse> {
     const userId = request.user.userId
 
+    // Build reservation stats subquery
+    const reservationStats = db
+      .select({
+        buyOrderId: orderReservations.buyOrderId,
+        activeCount:
+          sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))`.as(
+            'active_count'
+          ),
+        activeQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'active_quantity'
+          ),
+        fulfilledQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'fulfilled_quantity'
+          ),
+      })
+      .from(orderReservations)
+      .groupBy(orderReservations.buyOrderId)
+      .as('reservation_stats')
+
     const [order] = await db
-      .select()
+      .select({
+        id: buyOrders.id,
+        commodityTicker: buyOrders.commodityTicker,
+        locationId: buyOrders.locationId,
+        quantity: buyOrders.quantity,
+        price: buyOrders.price,
+        currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
+        orderType: buyOrders.orderType,
+        activeReservationCount: reservationStats.activeCount,
+        reservedQuantity: reservationStats.activeQuantity,
+        fulfilledQuantity: reservationStats.fulfilledQuantity,
+      })
       .from(buyOrders)
+      .leftJoin(reservationStats, eq(buyOrders.id, reservationStats.buyOrderId))
       .where(and(eq(buyOrders.id, id), eq(buyOrders.userId, userId)))
 
     if (!order) {
@@ -190,12 +231,10 @@ export class BuyOrdersController extends Controller {
       throw NotFound('Buy order not found')
     }
 
-    // Get reservation counts
-    const reservationData = await this.getReservationCounts(order.id)
-    const remainingQuantity = Math.max(
-      0,
-      order.quantity - reservationData.quantity - reservationData.fulfilledQuantity
-    )
+    const activeCount = order.activeReservationCount ?? 0
+    const reservedQty = order.reservedQuantity ?? 0
+    const fulfilledQty = order.fulfilledQuantity ?? 0
+    const remainingQuantity = Math.max(0, order.quantity - reservedQty - fulfilledQty)
 
     // Calculate effective price for dynamic pricing orders
     const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
@@ -226,33 +265,15 @@ export class BuyOrdersController extends Controller {
       currency: order.currency,
       priceListCode: order.priceListCode,
       orderType: order.orderType,
-      activeReservationCount: reservationData.count,
-      reservedQuantity: reservationData.quantity,
-      fulfilledQuantity: reservationData.fulfilledQuantity,
+      activeReservationCount: activeCount,
+      reservedQuantity: reservedQty,
+      fulfilledQuantity: fulfilledQty,
       remainingQuantity,
       pricingMode,
       effectivePrice,
       isFallback,
       priceLocationId,
     }
-  }
-
-  /**
-   * Helper to get reservation counts for a buy order
-   */
-  private async getReservationCounts(
-    buyOrderId: number
-  ): Promise<{ count: number; quantity: number; fulfilledQuantity: number }> {
-    const result = await db
-      .select({
-        count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-        quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-        fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
-      })
-      .from(orderReservations)
-      .where(eq(orderReservations.buyOrderId, buyOrderId))
-
-    return result[0] ?? { count: 0, quantity: 0, fulfilledQuantity: 0 }
   }
 
   /**
@@ -473,18 +494,51 @@ export class BuyOrdersController extends Controller {
     if (body.orderType !== undefined) updateData.orderType = body.orderType
 
     // Update
-    const [updated] = await db
-      .update(buyOrders)
-      .set(updateData)
-      .where(eq(buyOrders.id, id))
-      .returning()
+    await db.update(buyOrders).set(updateData).where(eq(buyOrders.id, id))
 
-    // Get reservation counts
-    const reservationData = await this.getReservationCounts(updated.id)
-    const remainingQuantity = Math.max(
-      0,
-      updated.quantity - reservationData.quantity - reservationData.fulfilledQuantity
-    )
+    // Fetch updated order with reservation stats via JOIN
+    const reservationStats = db
+      .select({
+        buyOrderId: orderReservations.buyOrderId,
+        activeCount:
+          sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))`.as(
+            'active_count'
+          ),
+        activeQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'active_quantity'
+          ),
+        fulfilledQuantity:
+          sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)`.as(
+            'fulfilled_quantity'
+          ),
+      })
+      .from(orderReservations)
+      .groupBy(orderReservations.buyOrderId)
+      .as('reservation_stats')
+
+    const [updated] = await db
+      .select({
+        id: buyOrders.id,
+        commodityTicker: buyOrders.commodityTicker,
+        locationId: buyOrders.locationId,
+        quantity: buyOrders.quantity,
+        price: buyOrders.price,
+        currency: buyOrders.currency,
+        priceListCode: buyOrders.priceListCode,
+        orderType: buyOrders.orderType,
+        activeReservationCount: reservationStats.activeCount,
+        reservedQuantity: reservationStats.activeQuantity,
+        fulfilledQuantity: reservationStats.fulfilledQuantity,
+      })
+      .from(buyOrders)
+      .leftJoin(reservationStats, eq(buyOrders.id, reservationStats.buyOrderId))
+      .where(eq(buyOrders.id, id))
+
+    const activeCount = updated.activeReservationCount ?? 0
+    const reservedQty = updated.reservedQuantity ?? 0
+    const fulfilledQty = updated.fulfilledQuantity ?? 0
+    const remainingQuantity = Math.max(0, updated.quantity - reservedQty - fulfilledQty)
 
     // Calculate effective price for dynamic pricing orders
     const pricingMode: PricingMode = updated.priceListCode ? 'dynamic' : 'fixed'
@@ -515,9 +569,9 @@ export class BuyOrdersController extends Controller {
       currency: updated.currency,
       priceListCode: updated.priceListCode,
       orderType: updated.orderType,
-      activeReservationCount: reservationData.count,
-      reservedQuantity: reservationData.quantity,
-      fulfilledQuantity: reservationData.fulfilledQuantity,
+      activeReservationCount: activeCount,
+      reservedQuantity: reservedQty,
+      fulfilledQuantity: fulfilledQty,
       remainingQuantity,
       pricingMode,
       effectivePrice,

@@ -23,8 +23,9 @@ import {
   rolePermissions,
   fioUserStorage,
   userDiscordProfiles,
+  userSettings,
 } from '../db/index.js'
-import { eq, ilike, or, sql, desc, max, and } from 'drizzle-orm'
+import { eq, ilike, or, sql, desc, max, and, inArray } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'
@@ -148,7 +149,41 @@ export class AdminController extends Controller {
 
     const total = countResult?.count ?? 0
 
-    // Get paginated users
+    // Subquery for aggregated roles per user
+    const userRolesSubquery = db
+      .select({
+        userId: userRoles.userId,
+        rolesJson:
+          sql<string>`coalesce(json_agg(json_build_object('id', ${roles.id}, 'name', ${roles.name}, 'color', ${roles.color})), '[]')`.as(
+            'roles_json'
+          ),
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .groupBy(userRoles.userId)
+      .as('user_roles_agg')
+
+    // Subquery for FIO last sync per user
+    const fioSyncSubquery = db
+      .select({
+        userId: fioUserStorage.userId,
+        lastSyncedAt: max(fioUserStorage.lastSyncedAt).as('last_synced_at'),
+      })
+      .from(fioUserStorage)
+      .groupBy(fioUserStorage.userId)
+      .as('fio_sync')
+
+    // Subquery for FIO username from settings
+    const fioUsernameSubquery = db
+      .select({
+        userId: userSettings.userId,
+        fioUsername: userSettings.value,
+      })
+      .from(userSettings)
+      .where(eq(userSettings.settingKey, 'fio.username'))
+      .as('fio_username')
+
+    // Get paginated users with all related data in a single query
     const userList = await db
       .select({
         id: users.id,
@@ -157,65 +192,65 @@ export class AdminController extends Controller {
         displayName: users.displayName,
         isActive: users.isActive,
         createdAt: users.createdAt,
+        rolesJson: userRolesSubquery.rolesJson,
+        lastSyncedAt: fioSyncSubquery.lastSyncedAt,
+        fioUsernameRaw: fioUsernameSubquery.fioUsername,
+        discordId: userDiscordProfiles.discordId,
+        discordUsername: userDiscordProfiles.discordUsername,
+        discordConnectedAt: userDiscordProfiles.connectedAt,
       })
       .from(users)
+      .leftJoin(userRolesSubquery, eq(users.id, userRolesSubquery.userId))
+      .leftJoin(fioSyncSubquery, eq(users.id, fioSyncSubquery.userId))
+      .leftJoin(fioUsernameSubquery, eq(users.id, fioUsernameSubquery.userId))
+      .leftJoin(userDiscordProfiles, eq(users.id, userDiscordProfiles.userId))
       .where(searchCondition)
       .orderBy(desc(users.createdAt))
       .limit(pageSize)
       .offset(offset)
 
-    // Get roles, FIO sync info, and Discord info for each user
-    const usersWithDetails: AdminUser[] = await Promise.all(
-      userList.map(async user => {
-        // Get user roles
-        const userRolesData = await db
-          .select({
-            roleId: roles.id,
-            roleName: roles.name,
-            roleColor: roles.color,
-          })
-          .from(userRoles)
-          .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, user.id))
+    // Transform results to AdminUser format
+    const usersWithDetails: AdminUser[] = userList.map(user => {
+      // Parse roles from JSON aggregation (may already be parsed by Drizzle)
+      const rolesData: Role[] = user.rolesJson
+        ? typeof user.rolesJson === 'string'
+          ? JSON.parse(user.rolesJson)
+          : user.rolesJson
+        : []
 
-        // Get FIO sync info from settings service
-        const { fioUsername } = await userSettingsService.getFioCredentials(user.id)
-
-        const [lastSync] = await db
-          .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
-          .from(fioUserStorage)
-          .where(eq(fioUserStorage.userId, user.id))
-
-        // Get Discord info
-        const [discordProfile] = await db
-          .select({
-            discordId: userDiscordProfiles.discordId,
-            discordUsername: userDiscordProfiles.discordUsername,
-            connectedAt: userDiscordProfiles.connectedAt,
-          })
-          .from(userDiscordProfiles)
-          .where(eq(userDiscordProfiles.userId, user.id))
-
-        return {
-          ...user,
-          roles: userRolesData.map(r => ({
-            id: r.roleId,
-            name: r.roleName,
-            color: r.roleColor,
-          })),
-          fioSync: {
-            fioUsername: fioUsername || null,
-            lastSyncedAt: lastSync?.lastSyncedAt || null,
-          },
-          discord: {
-            connected: !!discordProfile,
-            discordUsername: discordProfile?.discordUsername || null,
-            discordId: discordProfile?.discordId || null,
-            connectedAt: discordProfile?.connectedAt || null,
-          },
+      // Parse FIO username from JSON string (stored as JSON in userSettings)
+      let fioUsername: string | null = null
+      if (user.fioUsernameRaw) {
+        try {
+          fioUsername =
+            typeof user.fioUsernameRaw === 'string'
+              ? JSON.parse(user.fioUsernameRaw)
+              : user.fioUsernameRaw
+        } catch {
+          fioUsername = null
         }
-      })
-    )
+      }
+
+      return {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        roles: rolesData,
+        fioSync: {
+          fioUsername,
+          lastSyncedAt: user.lastSyncedAt || null,
+        },
+        discord: {
+          connected: !!user.discordId,
+          discordUsername: user.discordUsername || null,
+          discordId: user.discordId || null,
+          connectedAt: user.discordConnectedAt || null,
+        },
+      }
+    })
 
     return {
       users: usersWithDetails,
@@ -245,8 +280,42 @@ export class AdminController extends Controller {
    */
   @Get('pending-approvals')
   public async listPendingApprovals(): Promise<AdminUser[]> {
-    // Get users who have the 'unverified' role
-    const unverifiedUsers = await db
+    // Subquery for aggregated roles per user
+    const userRolesSubquery = db
+      .select({
+        userId: userRoles.userId,
+        rolesJson:
+          sql<string>`coalesce(json_agg(json_build_object('id', ${roles.id}, 'name', ${roles.name}, 'color', ${roles.color})), '[]')`.as(
+            'roles_json'
+          ),
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .groupBy(userRoles.userId)
+      .as('user_roles_agg')
+
+    // Subquery for FIO last sync per user
+    const fioSyncSubquery = db
+      .select({
+        userId: fioUserStorage.userId,
+        lastSyncedAt: max(fioUserStorage.lastSyncedAt).as('last_synced_at'),
+      })
+      .from(fioUserStorage)
+      .groupBy(fioUserStorage.userId)
+      .as('fio_sync')
+
+    // Subquery for FIO username from settings
+    const fioUsernameSubquery = db
+      .select({
+        userId: userSettings.userId,
+        fioUsername: userSettings.value,
+      })
+      .from(userSettings)
+      .where(eq(userSettings.settingKey, 'fio.username'))
+      .as('fio_username')
+
+    // Get unverified users with all related data in a single query
+    const userList = await db
       .select({
         id: users.id,
         username: users.username,
@@ -254,65 +323,64 @@ export class AdminController extends Controller {
         displayName: users.displayName,
         isActive: users.isActive,
         createdAt: users.createdAt,
+        rolesJson: userRolesSubquery.rolesJson,
+        lastSyncedAt: fioSyncSubquery.lastSyncedAt,
+        fioUsernameRaw: fioUsernameSubquery.fioUsername,
+        discordId: userDiscordProfiles.discordId,
+        discordUsername: userDiscordProfiles.discordUsername,
+        discordConnectedAt: userDiscordProfiles.connectedAt,
       })
       .from(users)
       .innerJoin(userRoles, eq(users.id, userRoles.userId))
+      .leftJoin(userRolesSubquery, eq(users.id, userRolesSubquery.userId))
+      .leftJoin(fioSyncSubquery, eq(users.id, fioSyncSubquery.userId))
+      .leftJoin(fioUsernameSubquery, eq(users.id, fioUsernameSubquery.userId))
+      .leftJoin(userDiscordProfiles, eq(users.id, userDiscordProfiles.userId))
       .where(eq(userRoles.roleId, 'unverified'))
       .orderBy(desc(users.createdAt))
 
-    // Get roles, FIO sync info, and Discord info for each user
-    const usersWithDetails: AdminUser[] = await Promise.all(
-      unverifiedUsers.map(async user => {
-        const userRolesData = await db
-          .select({
-            roleId: roles.id,
-            roleName: roles.name,
-            roleColor: roles.color,
-          })
-          .from(userRoles)
-          .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, user.id))
+    // Transform results to AdminUser format
+    return userList.map(user => {
+      // Parse roles from JSON aggregation (may already be parsed by Drizzle)
+      const rolesData: Role[] = user.rolesJson
+        ? typeof user.rolesJson === 'string'
+          ? JSON.parse(user.rolesJson)
+          : user.rolesJson
+        : []
 
-        // Get FIO sync info from settings service
-        const { fioUsername } = await userSettingsService.getFioCredentials(user.id)
-
-        const [lastSync] = await db
-          .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
-          .from(fioUserStorage)
-          .where(eq(fioUserStorage.userId, user.id))
-
-        // Get Discord info
-        const [discordProfile] = await db
-          .select({
-            discordId: userDiscordProfiles.discordId,
-            discordUsername: userDiscordProfiles.discordUsername,
-            connectedAt: userDiscordProfiles.connectedAt,
-          })
-          .from(userDiscordProfiles)
-          .where(eq(userDiscordProfiles.userId, user.id))
-
-        return {
-          ...user,
-          roles: userRolesData.map(r => ({
-            id: r.roleId,
-            name: r.roleName,
-            color: r.roleColor,
-          })),
-          fioSync: {
-            fioUsername: fioUsername || null,
-            lastSyncedAt: lastSync?.lastSyncedAt || null,
-          },
-          discord: {
-            connected: !!discordProfile,
-            discordUsername: discordProfile?.discordUsername || null,
-            discordId: discordProfile?.discordId || null,
-            connectedAt: discordProfile?.connectedAt || null,
-          },
+      // Parse FIO username from JSON string (stored as JSON in userSettings)
+      let fioUsername: string | null = null
+      if (user.fioUsernameRaw) {
+        try {
+          fioUsername =
+            typeof user.fioUsernameRaw === 'string'
+              ? JSON.parse(user.fioUsernameRaw)
+              : user.fioUsernameRaw
+        } catch {
+          fioUsername = null
         }
-      })
-    )
+      }
 
-    return usersWithDetails
+      return {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        roles: rolesData,
+        fioSync: {
+          fioUsername,
+          lastSyncedAt: user.lastSyncedAt || null,
+        },
+        discord: {
+          connected: !!user.discordId,
+          discordUsername: user.discordUsername || null,
+          discordId: user.discordId || null,
+          connectedAt: user.discordConnectedAt || null,
+        },
+      }
+    })
   }
 
   /**
@@ -392,6 +460,41 @@ export class AdminController extends Controller {
    */
   @Get('users/{userId}')
   public async getUser(@Path() userId: number): Promise<AdminUser> {
+    // Subquery for aggregated roles for this user
+    const userRolesSubquery = db
+      .select({
+        userId: userRoles.userId,
+        rolesJson:
+          sql<string>`coalesce(json_agg(json_build_object('id', ${roles.id}, 'name', ${roles.name}, 'color', ${roles.color})), '[]')`.as(
+            'roles_json'
+          ),
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .groupBy(userRoles.userId)
+      .as('user_roles_agg')
+
+    // Subquery for FIO last sync
+    const fioSyncSubquery = db
+      .select({
+        userId: fioUserStorage.userId,
+        lastSyncedAt: max(fioUserStorage.lastSyncedAt).as('last_synced_at'),
+      })
+      .from(fioUserStorage)
+      .groupBy(fioUserStorage.userId)
+      .as('fio_sync')
+
+    // Subquery for FIO username from settings
+    const fioUsernameSubquery = db
+      .select({
+        userId: userSettings.userId,
+        fioUsername: userSettings.value,
+      })
+      .from(userSettings)
+      .where(eq(userSettings.settingKey, 'fio.username'))
+      .as('fio_username')
+
+    // Get user with all related data in a single query
     const [user] = await db
       .select({
         id: users.id,
@@ -400,8 +503,18 @@ export class AdminController extends Controller {
         displayName: users.displayName,
         isActive: users.isActive,
         createdAt: users.createdAt,
+        rolesJson: userRolesSubquery.rolesJson,
+        lastSyncedAt: fioSyncSubquery.lastSyncedAt,
+        fioUsernameRaw: fioUsernameSubquery.fioUsername,
+        discordId: userDiscordProfiles.discordId,
+        discordUsername: userDiscordProfiles.discordUsername,
+        discordConnectedAt: userDiscordProfiles.connectedAt,
       })
       .from(users)
+      .leftJoin(userRolesSubquery, eq(users.id, userRolesSubquery.userId))
+      .leftJoin(fioSyncSubquery, eq(users.id, fioSyncSubquery.userId))
+      .leftJoin(fioUsernameSubquery, eq(users.id, fioUsernameSubquery.userId))
+      .leftJoin(userDiscordProfiles, eq(users.id, userDiscordProfiles.userId))
       .where(eq(users.id, userId))
 
     if (!user) {
@@ -409,51 +522,43 @@ export class AdminController extends Controller {
       throw NotFound('User not found')
     }
 
-    // Get user roles
-    const userRolesData = await db
-      .select({
-        roleId: roles.id,
-        roleName: roles.name,
-        roleColor: roles.color,
-      })
-      .from(userRoles)
-      .innerJoin(roles, eq(userRoles.roleId, roles.id))
-      .where(eq(userRoles.userId, userId))
+    // Parse roles from JSON aggregation (may already be parsed by Drizzle)
+    const rolesData: Role[] = user.rolesJson
+      ? typeof user.rolesJson === 'string'
+        ? JSON.parse(user.rolesJson)
+        : user.rolesJson
+      : []
 
-    // Get FIO sync info from settings service
-    const { fioUsername } = await userSettingsService.getFioCredentials(userId)
-
-    const [lastSync] = await db
-      .select({ lastSyncedAt: max(fioUserStorage.lastSyncedAt) })
-      .from(fioUserStorage)
-      .where(eq(fioUserStorage.userId, userId))
-
-    // Get Discord info
-    const [discordProfile] = await db
-      .select({
-        discordId: userDiscordProfiles.discordId,
-        discordUsername: userDiscordProfiles.discordUsername,
-        connectedAt: userDiscordProfiles.connectedAt,
-      })
-      .from(userDiscordProfiles)
-      .where(eq(userDiscordProfiles.userId, userId))
+    // Parse FIO username from JSON string (stored as JSON in userSettings)
+    let fioUsername: string | null = null
+    if (user.fioUsernameRaw) {
+      try {
+        fioUsername =
+          typeof user.fioUsernameRaw === 'string'
+            ? JSON.parse(user.fioUsernameRaw)
+            : user.fioUsernameRaw
+      } catch {
+        fioUsername = null
+      }
+    }
 
     return {
-      ...user,
-      roles: userRolesData.map(r => ({
-        id: r.roleId,
-        name: r.roleName,
-        color: r.roleColor,
-      })),
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      displayName: user.displayName,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      roles: rolesData,
       fioSync: {
-        fioUsername: fioUsername || null,
-        lastSyncedAt: lastSync?.lastSyncedAt || null,
+        fioUsername,
+        lastSyncedAt: user.lastSyncedAt || null,
       },
       discord: {
-        connected: !!discordProfile,
-        discordUsername: discordProfile?.discordUsername || null,
-        discordId: discordProfile?.discordId || null,
-        connectedAt: discordProfile?.connectedAt || null,
+        connected: !!user.discordId,
+        discordUsername: user.discordUsername || null,
+        discordId: user.discordId || null,
+        connectedAt: user.discordConnectedAt || null,
       },
     }
   }

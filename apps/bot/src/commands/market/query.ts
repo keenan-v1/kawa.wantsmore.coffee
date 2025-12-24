@@ -25,7 +25,6 @@ import {
   formatGroupedOrdersMulti,
   buildFilterDescription,
   type MultiResolvedFilters,
-  type FormattedOrdersResult,
 } from '../../services/orderFormatter.js'
 
 const ORDERS_PER_PAGE = 10

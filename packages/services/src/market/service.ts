@@ -1,5 +1,5 @@
 import { db, fioInventory, fioUserStorage, orderReservations } from '@kawakawa/db'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, or, gt, isNull, sql } from 'drizzle-orm'
 import type { SellOrderLimitMode } from '@kawakawa/types'
 
 /**
@@ -107,9 +107,151 @@ export async function getInventoryForUsers(userIds: number[]): Promise<Map<strin
 }
 
 /**
- * Get reservation statistics for multiple sell orders.
- * Returns counts and quantities for active (pending/confirmed) and fulfilled reservations.
+ * Individual fulfilled reservation with timestamp for FIO-aware calculation
+ */
+interface FulfilledReservation {
+  orderId: number
+  quantity: number
+  updatedAt: Date
+  expiresAt: Date | null
+}
+
+/**
+ * Get active (pending/confirmed) reservation statistics for sell orders.
+ * Only counts reservations that are not expired.
  *
+ * @param sellOrderIds - Array of sell order IDs to fetch stats for
+ * @returns Map with sellOrderId -> { count, quantity }
+ */
+async function getActiveReservationStatsForSellOrders(
+  sellOrderIds: number[]
+): Promise<Map<number, { count: number; quantity: number }>> {
+  if (sellOrderIds.length === 0) {
+    return new Map()
+  }
+
+  const now = new Date()
+
+  const reservationStats = await db
+    .select({
+      sellOrderId: orderReservations.sellOrderId,
+      count: sql<number>`count(*)::int`.as('count'),
+      quantity: sql<number>`coalesce(sum(${orderReservations.quantity}), 0)::int`.as('quantity'),
+    })
+    .from(orderReservations)
+    .where(
+      and(
+        inArray(orderReservations.sellOrderId, sellOrderIds),
+        inArray(orderReservations.status, ['pending', 'confirmed']),
+        // Only count non-expired reservations
+        or(isNull(orderReservations.expiresAt), gt(orderReservations.expiresAt, now))
+      )
+    )
+    .groupBy(orderReservations.sellOrderId)
+
+  const statsMap = new Map<number, { count: number; quantity: number }>()
+
+  for (const stat of reservationStats) {
+    if (stat.sellOrderId !== null) {
+      statsMap.set(stat.sellOrderId, {
+        count: stat.count,
+        quantity: stat.quantity,
+      })
+    }
+  }
+
+  return statsMap
+}
+
+/**
+ * Get fulfilled reservations for sell orders with their timestamps.
+ * Used for FIO-aware fulfilled quantity calculation.
+ *
+ * @param sellOrderIds - Array of sell order IDs to fetch fulfilled reservations for
+ * @returns Map with sellOrderId -> array of fulfilled reservations
+ */
+async function getFulfilledReservationsForSellOrders(
+  sellOrderIds: number[]
+): Promise<Map<number, FulfilledReservation[]>> {
+  if (sellOrderIds.length === 0) {
+    return new Map()
+  }
+
+  const fulfilledReservations = await db
+    .select({
+      sellOrderId: orderReservations.sellOrderId,
+      quantity: orderReservations.quantity,
+      updatedAt: orderReservations.updatedAt,
+      expiresAt: orderReservations.expiresAt,
+    })
+    .from(orderReservations)
+    .where(
+      and(
+        inArray(orderReservations.sellOrderId, sellOrderIds),
+        eq(orderReservations.status, 'fulfilled')
+      )
+    )
+
+  const resultMap = new Map<number, FulfilledReservation[]>()
+
+  for (const r of fulfilledReservations) {
+    if (r.sellOrderId !== null) {
+      const list = resultMap.get(r.sellOrderId) ?? []
+      list.push({
+        orderId: r.sellOrderId,
+        quantity: r.quantity,
+        updatedAt: r.updatedAt,
+        expiresAt: r.expiresAt,
+      })
+      resultMap.set(r.sellOrderId, list)
+    }
+  }
+
+  return resultMap
+}
+
+/**
+ * Calculate fulfilled quantity that should still count against available.
+ * Fulfilled reservations stop counting when:
+ * 1. FIO upload date > reservation updatedAt (FIO already reflects the sale)
+ * 2. OR if no FIO date, when expiresAt < now (expired)
+ *
+ * @param reservations - Array of fulfilled reservations
+ * @param fioUploadedAt - When FIO last synced from game for this order's location
+ * @returns Quantity that should still count against available
+ */
+export function calculateEffectiveFulfilledQuantity(
+  reservations: FulfilledReservation[],
+  fioUploadedAt: Date | null
+): number {
+  const now = new Date()
+  let quantity = 0
+
+  for (const r of reservations) {
+    // Check if this reservation should still count
+    if (fioUploadedAt && fioUploadedAt > r.updatedAt) {
+      // FIO synced after this reservation was fulfilled - FIO already reflects it
+      continue
+    }
+
+    // No FIO sync after fulfillment - check expiration as fallback
+    if (r.expiresAt && r.expiresAt < now) {
+      // Expired - don't count
+      continue
+    }
+
+    // Still counts against available
+    quantity += r.quantity
+  }
+
+  return quantity
+}
+
+/**
+ * Get reservation statistics for multiple sell orders (DEPRECATED - use enrichSellOrdersWithQuantities).
+ * This function is kept for backwards compatibility but doesn't include expiration logic.
+ *
+ * @deprecated Use enrichSellOrdersWithQuantities instead for proper expiration handling
  * @param sellOrderIds - Array of sell order IDs to fetch stats for
  * @returns Map with sellOrderId -> ReservationStats
  */
@@ -120,12 +262,22 @@ export async function getReservationStatsForOrders(
     return new Map()
   }
 
+  // Use SQL now() instead of JavaScript Date to avoid serialization issues
   const reservationStats = await db
     .select({
       sellOrderId: orderReservations.sellOrderId,
-      count: sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed'))::int`,
-      quantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed')), 0)::int`,
-      fulfilledQuantity: sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`,
+      count:
+        sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))::int`.as(
+          'count'
+        ),
+      quantity:
+        sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)::int`.as(
+          'quantity'
+        ),
+      fulfilledQuantity:
+        sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled'), 0)::int`.as(
+          'fulfilled_quantity'
+        ),
     })
     .from(orderReservations)
     .where(inArray(orderReservations.sellOrderId, sellOrderIds))
@@ -136,6 +288,56 @@ export async function getReservationStatsForOrders(
   for (const stat of reservationStats) {
     if (stat.sellOrderId !== null) {
       statsMap.set(stat.sellOrderId, {
+        count: stat.count,
+        quantity: stat.quantity,
+        fulfilledQuantity: stat.fulfilledQuantity,
+      })
+    }
+  }
+
+  return statsMap
+}
+
+/**
+ * Get reservation statistics for buy orders with expiration check.
+ * Buy orders don't need FIO-aware logic since they're not inventory-backed.
+ *
+ * @param buyOrderIds - Array of buy order IDs to fetch stats for
+ * @returns Map with buyOrderId -> ReservationStats
+ */
+export async function getReservationStatsForBuyOrders(
+  buyOrderIds: number[]
+): Promise<Map<number, ReservationStats>> {
+  if (buyOrderIds.length === 0) {
+    return new Map()
+  }
+
+  // Use SQL now() instead of JavaScript Date to avoid serialization issues
+  const reservationStats = await db
+    .select({
+      buyOrderId: orderReservations.buyOrderId,
+      count:
+        sql<number>`count(*) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now()))::int`.as(
+          'count'
+        ),
+      quantity:
+        sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} in ('pending', 'confirmed') and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)::int`.as(
+          'quantity'
+        ),
+      fulfilledQuantity:
+        sql<number>`coalesce(sum(${orderReservations.quantity}) filter (where ${orderReservations.status} = 'fulfilled' and (${orderReservations.expiresAt} is null or ${orderReservations.expiresAt} > now())), 0)::int`.as(
+          'fulfilled_quantity'
+        ),
+    })
+    .from(orderReservations)
+    .where(inArray(orderReservations.buyOrderId, buyOrderIds))
+    .groupBy(orderReservations.buyOrderId)
+
+  const statsMap = new Map<number, ReservationStats>()
+
+  for (const stat of reservationStats) {
+    if (stat.buyOrderId !== null) {
+      statsMap.set(stat.buyOrderId, {
         count: stat.count,
         quantity: stat.quantity,
         fulfilledQuantity: stat.fulfilledQuantity,
@@ -160,7 +362,12 @@ interface SellOrderForEnrichment {
 
 /**
  * Enrich sell orders with full quantity information.
- * This is a convenience function that combines inventory and reservation lookups.
+ * This is the primary function for calculating availability with proper expiration logic.
+ *
+ * Expiration rules:
+ * - Pending/confirmed reservations: Excluded if expiresAt < now
+ * - Fulfilled reservations: Excluded if fioUploadedAt > updatedAt (FIO reflects the sale)
+ *   OR if fioUploadedAt is unavailable and expiresAt < now
  *
  * @param orders - Array of sell orders with minimal required fields
  * @returns Map with orderId -> SellOrderQuantityInfo
@@ -176,10 +383,11 @@ export async function enrichSellOrdersWithQuantities(
   const userIds = [...new Set(orders.map(o => o.userId))]
   const orderIds = orders.map(o => o.id)
 
-  // Fetch inventory and reservations in parallel
-  const [inventoryMap, reservationMap] = await Promise.all([
+  // Fetch inventory, active reservations, and fulfilled reservations in parallel
+  const [inventoryMap, activeReservationMap, fulfilledReservationsMap] = await Promise.all([
     getInventoryForUsers(userIds),
-    getReservationStatsForOrders(orderIds),
+    getActiveReservationStatsForSellOrders(orderIds),
+    getFulfilledReservationsForSellOrders(orderIds),
   ])
 
   // Build quantity info for each order
@@ -188,11 +396,14 @@ export async function enrichSellOrdersWithQuantities(
   for (const order of orders) {
     const inventoryKey = `${order.userId}:${order.commodityTicker}:${order.locationId}`
     const inventoryInfo = inventoryMap.get(inventoryKey) ?? { quantity: 0, fioUploadedAt: null }
-    const reservationStats = reservationMap.get(order.id) ?? {
-      count: 0,
-      quantity: 0,
-      fulfilledQuantity: 0,
-    }
+    const activeStats = activeReservationMap.get(order.id) ?? { count: 0, quantity: 0 }
+    const fulfilledReservations = fulfilledReservationsMap.get(order.id) ?? []
+
+    // Calculate FIO-aware fulfilled quantity
+    const fulfilledQuantity = calculateEffectiveFulfilledQuantity(
+      fulfilledReservations,
+      inventoryInfo.fioUploadedAt
+    )
 
     const fioQuantity = inventoryInfo.quantity
     const availableQuantity = calculateAvailableQuantity(
@@ -202,16 +413,16 @@ export async function enrichSellOrdersWithQuantities(
     )
     const remainingQuantity = Math.max(
       0,
-      availableQuantity - reservationStats.quantity - reservationStats.fulfilledQuantity
+      availableQuantity - activeStats.quantity - fulfilledQuantity
     )
 
     quantityMap.set(order.id, {
       fioQuantity,
       availableQuantity,
-      reservedQuantity: reservationStats.quantity,
-      fulfilledQuantity: reservationStats.fulfilledQuantity,
+      reservedQuantity: activeStats.quantity,
+      fulfilledQuantity,
       remainingQuantity,
-      activeReservationCount: reservationStats.count,
+      activeReservationCount: activeStats.count,
       fioUploadedAt: inventoryInfo.fioUploadedAt,
     })
   }
