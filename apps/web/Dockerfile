@@ -1,10 +1,6 @@
 # Build stage
 FROM node:20-slim AS builder
 
-# Build argument for version tracking (passed from CI/CD)
-ARG COMMIT_SHA=dev
-ENV COMMIT_SHA=${COMMIT_SHA}
-
 # Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 
@@ -32,8 +28,12 @@ COPY packages/db/ ./packages/db/
 COPY packages/services/ ./packages/services/
 COPY packages/client/ ./packages/client/
 
+# Build argument for version tracking (passed from CI/CD)
+# Placed here to maximize Docker layer cache hits - only invalidates build layer
+ARG COMMIT_SHA=dev
+ENV COMMIT_SHA=${COMMIT_SHA}
+
 # Build web and its dependencies (Turborepo handles dependency order)
-# COMMIT_SHA is available as env var during build for Vite to inject into the bundle
 RUN pnpm turbo run build --filter=@kawakawa/web...
 
 # Production stage - nginx for static serving
