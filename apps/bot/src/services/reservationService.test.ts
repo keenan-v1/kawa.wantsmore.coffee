@@ -206,7 +206,7 @@ describe('reservationService', () => {
       })
     })
 
-    it('filters out orders with zero remaining quantity', async () => {
+    it('includes orders with zero remaining quantity', async () => {
       const mockOrder = {
         id: 1,
         userId: 2,
@@ -225,7 +225,11 @@ describe('reservationService', () => {
 
       const result = await getAvailableSellOrders('COF', null, 1)
 
-      expect(result).toEqual([])
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        id: 1,
+        quantity: 0,
+      })
     })
 
     it('filters by location when provided', async () => {

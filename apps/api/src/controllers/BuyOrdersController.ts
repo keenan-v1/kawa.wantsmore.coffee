@@ -133,7 +133,7 @@ export class BuyOrdersController extends Controller {
         const activeCount = order.activeReservationCount ?? 0
         const reservedQty = order.reservedQuantity ?? 0
         const fulfilledQty = order.fulfilledQuantity ?? 0
-        const remainingQuantity = Math.max(0, order.quantity - reservedQty - fulfilledQty)
+        const remainingQuantity = order.quantity - reservedQty - fulfilledQty
 
         // Calculate effective price for dynamic pricing orders
         const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
@@ -234,7 +234,7 @@ export class BuyOrdersController extends Controller {
     const activeCount = order.activeReservationCount ?? 0
     const reservedQty = order.reservedQuantity ?? 0
     const fulfilledQty = order.fulfilledQuantity ?? 0
-    const remainingQuantity = Math.max(0, order.quantity - reservedQty - fulfilledQty)
+    const remainingQuantity = order.quantity - reservedQty - fulfilledQty
 
     // Calculate effective price for dynamic pricing orders
     const pricingMode: PricingMode = order.priceListCode ? 'dynamic' : 'fixed'
@@ -538,7 +538,7 @@ export class BuyOrdersController extends Controller {
     const activeCount = updated.activeReservationCount ?? 0
     const reservedQty = updated.reservedQuantity ?? 0
     const fulfilledQty = updated.fulfilledQuantity ?? 0
-    const remainingQuantity = Math.max(0, updated.quantity - reservedQty - fulfilledQty)
+    const remainingQuantity = updated.quantity - reservedQty - fulfilledQty
 
     // Calculate effective price for dynamic pricing orders
     const pricingMode: PricingMode = updated.priceListCode ? 'dynamic' : 'fixed'

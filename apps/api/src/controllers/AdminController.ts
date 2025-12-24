@@ -25,7 +25,7 @@ import {
   userDiscordProfiles,
   userSettings,
 } from '../db/index.js'
-import { eq, ilike, or, sql, desc, max, and, inArray } from 'drizzle-orm'
+import { eq, ilike, or, sql, desc, max, and } from 'drizzle-orm'
 import type { JwtPayload } from '../utils/jwt.js'
 import { NotFound, BadRequest, Conflict } from '../utils/errors.js'
 import { invalidateCachedRoles } from '../utils/roleCache.js'

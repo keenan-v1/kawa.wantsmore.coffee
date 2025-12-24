@@ -411,10 +411,7 @@ export async function enrichSellOrdersWithQuantities(
       order.limitMode,
       order.limitQuantity
     )
-    const remainingQuantity = Math.max(
-      0,
-      availableQuantity - activeStats.quantity - fulfilledQuantity
-    )
+    const remainingQuantity = availableQuantity - activeStats.quantity - fulfilledQuantity
 
     quantityMap.set(order.id, {
       fioQuantity,

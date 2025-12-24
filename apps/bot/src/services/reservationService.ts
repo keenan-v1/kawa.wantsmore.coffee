@@ -52,8 +52,8 @@ export interface PriceListFilter {
 }
 
 /**
- * Get available sell orders for a commodity (excluding user's own orders)
- * Returns orders with remaining quantity > 0
+ * Get sell orders for a commodity (excluding user's own orders)
+ * Returns all orders with their remaining quantity (can be negative)
  */
 export async function getAvailableSellOrders(
   commodityTicker: string,
@@ -113,16 +113,12 @@ export async function getAvailableSellOrders(
   const userIds = [...new Set(ordersData.map(o => o.userId))]
   const fioUsernameMap = await getFioUsernames(userIds)
 
-  // Filter to orders with remaining quantity and format
-  const result: SelectableOrder[] = []
-
-  for (const order of ordersData) {
+  // Format orders with remaining quantity
+  const result: SelectableOrder[] = ordersData.map(order => {
     const qty = quantityInfo.get(order.id)
-    if (!qty || qty.remainingQuantity <= 0) continue
-
-    result.push({
+    return {
       id: order.id,
-      type: 'sell',
+      type: 'sell' as const,
       commodityTicker: order.commodityTicker,
       locationId: order.locationId,
       price: order.price,
@@ -133,16 +129,16 @@ export async function getAvailableSellOrders(
       ownerUsername: order.user.username,
       ownerDisplayName: order.user.displayName,
       ownerFioUsername: fioUsernameMap.get(order.userId) ?? null,
-      quantity: qty.remainingQuantity,
-    })
-  }
+      quantity: qty?.remainingQuantity ?? 0,
+    }
+  })
 
   return result
 }
 
 /**
- * Get available buy orders for a commodity (excluding user's own orders)
- * Returns orders with unfilled quantity > 0
+ * Get buy orders for a commodity (excluding user's own orders)
+ * Returns all orders with their remaining quantity (can be negative)
  */
 export async function getAvailableBuyOrders(
   commodityTicker: string,
@@ -189,17 +185,13 @@ export async function getAvailableBuyOrders(
   const userIds = [...new Set(ordersData.map(o => o.userId))]
   const fioUsernameMap = await getFioUsernames(userIds)
 
-  // Filter to orders with remaining quantity and format
-  const result: SelectableOrder[] = []
-
-  for (const order of ordersData) {
+  // Format orders with remaining quantity
+  const result: SelectableOrder[] = ordersData.map(order => {
     const stats = reservationStats.get(order.id) ?? { count: 0, quantity: 0, fulfilledQuantity: 0 }
-    const remainingQuantity = Math.max(0, order.quantity - stats.quantity - stats.fulfilledQuantity)
-    if (remainingQuantity <= 0) continue
-
-    result.push({
+    const remainingQuantity = order.quantity - stats.quantity - stats.fulfilledQuantity
+    return {
       id: order.id,
-      type: 'buy',
+      type: 'buy' as const,
       commodityTicker: order.commodityTicker,
       locationId: order.locationId,
       price: order.price,
@@ -211,8 +203,8 @@ export async function getAvailableBuyOrders(
       ownerDisplayName: order.user.displayName,
       ownerFioUsername: fioUsernameMap.get(order.userId) ?? null,
       quantity: remainingQuantity,
-    })
-  }
+    }
+  })
 
   return result
 }

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AdminController } from './AdminController.js'
 import { db } from '../db/index.js'
-import * as userSettingsService from '../services/userSettingsService.js'
 
 /**
  * Create a chainable mock that supports subquery patterns.
@@ -27,7 +26,11 @@ function createQueryChain(finalResult: unknown, subqueryFields?: Record<string, 
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     offset: vi.fn().mockImplementation(() => finalResult),
-    as: vi.fn().mockImplementation((alias: string) => createSubqueryMock(subqueryFields || { [alias]: alias })),
+    as: vi
+      .fn()
+      .mockImplementation((alias: string) =>
+        createSubqueryMock(subqueryFields || { [alias]: alias })
+      ),
     then: vi.fn().mockImplementation(cb => Promise.resolve(finalResult).then(cb)),
   }
   // Make it thenable for await

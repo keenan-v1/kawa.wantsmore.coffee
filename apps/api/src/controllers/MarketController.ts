@@ -263,54 +263,50 @@ export class MarketController extends Controller {
         order.limitQuantity
       )
 
-      // Only include if there's available quantity (always show user's own orders even if 0)
-      if (availableQuantity > 0 || isOwn) {
-        // Determine pricing mode and effective price
-        const orderPrice = parseFloat(order.price)
-        const pricingMode: PricingMode =
-          order.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
-        let effectivePrice: number | null = null
-        let isFallback = false
-        let priceLocationId: string | null = null
+      // Determine pricing mode and effective price
+      const orderPrice = parseFloat(order.price)
+      const pricingMode: PricingMode = order.priceListCode && orderPrice === 0 ? 'dynamic' : 'fixed'
+      let effectivePrice: number | null = null
+      let isFallback = false
+      let priceLocationId: string | null = null
 
-        if (pricingMode === 'dynamic' && order.priceListCode) {
-          // Calculate effective price from price list
-          const effPrice = await calculateEffectivePriceWithFallback(
-            order.priceListCode,
-            order.commodityTicker,
-            order.locationId,
-            order.currency
-          )
-          effectivePrice = effPrice?.finalPrice ?? null
-          isFallback = effPrice?.isFallback ?? false
-          priceLocationId = effPrice?.locationId ?? null
-        }
-
-        filteredOrders.push({
-          id: order.id,
-          userId: order.userId,
-          commodityTicker: order.commodityTicker,
-          locationId: order.locationId,
-          price: order.price,
-          currency: order.currency,
-          priceListCode: order.priceListCode,
-          orderType: order.orderType,
-          limitMode: order.limitMode,
-          limitQuantity: order.limitQuantity,
-          sellerName: order.sellerName,
-          fioQuantity: inventoryInfo.quantity,
-          availableQuantity,
-          isOwn,
-          fioUploadedAt: inventoryInfo.fioUploadedAt,
-          effectivePrice,
-          isFallback,
-          priceLocationId,
-          pricingMode,
-          activeReservationCount: order.activeReservationCount ?? 0,
-          reservedQuantity: order.reservedQuantity ?? 0,
-          fulfilledQuantity: order.fulfilledQuantity ?? 0,
-        })
+      if (pricingMode === 'dynamic' && order.priceListCode) {
+        // Calculate effective price from price list
+        const effPrice = await calculateEffectivePriceWithFallback(
+          order.priceListCode,
+          order.commodityTicker,
+          order.locationId,
+          order.currency
+        )
+        effectivePrice = effPrice?.finalPrice ?? null
+        isFallback = effPrice?.isFallback ?? false
+        priceLocationId = effPrice?.locationId ?? null
       }
+
+      filteredOrders.push({
+        id: order.id,
+        userId: order.userId,
+        commodityTicker: order.commodityTicker,
+        locationId: order.locationId,
+        price: order.price,
+        currency: order.currency,
+        priceListCode: order.priceListCode,
+        orderType: order.orderType,
+        limitMode: order.limitMode,
+        limitQuantity: order.limitQuantity,
+        sellerName: order.sellerName,
+        fioQuantity: inventoryInfo.quantity,
+        availableQuantity,
+        isOwn,
+        fioUploadedAt: inventoryInfo.fioUploadedAt,
+        effectivePrice,
+        isFallback,
+        priceLocationId,
+        pricingMode,
+        activeReservationCount: order.activeReservationCount ?? 0,
+        reservedQuantity: order.reservedQuantity ?? 0,
+        fulfilledQuantity: order.fulfilledQuantity ?? 0,
+      })
     }
 
     // Calculate jump counts if destination is provided
@@ -328,10 +324,8 @@ export class MarketController extends Controller {
     // Build final listings - reservation stats already included from query
     const listings: MarketListing[] = filteredOrders.map(order => {
       // Subtract both active reservations AND fulfilled from remaining quantity
-      const remainingQuantity = Math.max(
-        0,
+      const remainingQuantity =
         order.availableQuantity - order.reservedQuantity - order.fulfilledQuantity
-      )
 
       return {
         id: order.id,
@@ -525,10 +519,7 @@ export class MarketController extends Controller {
     // Build final requests - reservation stats already included from query
     const requests: MarketBuyRequest[] = filteredBuyOrders.map(order => {
       // Subtract both active reservations AND fulfilled from remaining quantity
-      const remainingQuantity = Math.max(
-        0,
-        order.quantity - order.reservedQuantity - order.fulfilledQuantity
-      )
+      const remainingQuantity = order.quantity - order.reservedQuantity - order.fulfilledQuantity
 
       return {
         id: order.id,
