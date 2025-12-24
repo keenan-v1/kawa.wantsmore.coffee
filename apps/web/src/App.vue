@@ -41,6 +41,14 @@
         </v-tooltip>
         <v-tooltip location="bottom">
           <template #activator="{ props }">
+            <v-btn v-bind="props" to="/calculator" icon size="small" class="mx-1">
+              <v-icon>mdi-calculator</v-icon>
+            </v-btn>
+          </template>
+          Calculator
+        </v-tooltip>
+        <v-tooltip location="bottom">
+          <template #activator="{ props }">
             <v-btn v-bind="props" to="/account" icon size="small" class="mx-1">
               <v-icon>mdi-account-cog</v-icon>
             </v-btn>

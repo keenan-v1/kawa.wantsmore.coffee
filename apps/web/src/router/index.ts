@@ -14,6 +14,7 @@ import AdminView from '../views/AdminView.vue'
 import NotificationsView from '../views/NotificationsView.vue'
 import PriceListView from '../views/PriceListView.vue'
 import PriceAdjustmentsView from '../views/PriceAdjustmentsView.vue'
+import PricingCalculatorView from '../views/PricingCalculatorView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -104,6 +105,12 @@ const router = createRouter({
       path: '/prices/adjustments',
       name: 'price-adjustments',
       component: PriceAdjustmentsView,
+      meta: { requiresAuth: true, requiresVerified: true },
+    },
+    {
+      path: '/calculator',
+      name: 'calculator',
+      component: PricingCalculatorView,
       meta: { requiresAuth: true, requiresVerified: true },
     },
     {
